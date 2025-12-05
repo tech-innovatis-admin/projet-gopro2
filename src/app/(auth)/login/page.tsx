@@ -73,7 +73,7 @@ export default function LoginPage() {
 
         {/* 2. Conteúdo Original (posicionado acima da imagem/overlay) */}
         <div className="relative z-10 flex flex-col justify-between text-white p-12 w-full h-full">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <img src="/Logos/logo_innovatis.svg" alt="Logo Innovatis" className="h-6 w-6" />
             <span className="text-2xl font-semibold tracking-tight">GoPro</span>
           </div>

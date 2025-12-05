@@ -28,6 +28,13 @@ const data = [
   { month: "Dez/25", contratos: 3 },
 ];
 
+// Paleta institucional - Azul para séries temporais (neutro)
+const COLORS = {
+  line: "#3B82F6",       // Azul - séries temporais
+  gradient: "#3B82F6",
+  neutral: "#6B7280",    // Cinza - contexto
+};
+
 export function ContractsLineChart() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 h-full">
@@ -43,8 +50,8 @@ export function ContractsLineChart() {
           >
             <defs>
               <linearGradient id="colorContratos" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                <stop offset="5%" stopColor={COLORS.gradient} stopOpacity={0.2} />
+                <stop offset="95%" stopColor={COLORS.gradient} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
@@ -52,13 +59,13 @@ export function ContractsLineChart() {
               dataKey="month"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 11, fill: "#71717a" }}
+              tick={{ fontSize: 11, fill: COLORS.neutral }}
               dy={10}
             />
             <YAxis
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: "#71717a" }}
+              tick={{ fontSize: 12, fill: COLORS.neutral }}
               dx={-10}
             />
             <Tooltip
@@ -74,12 +81,12 @@ export function ContractsLineChart() {
             <Area
               type="monotone"
               dataKey="contratos"
-              stroke="#3B82F6"
+              stroke={COLORS.line}
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorContratos)"
-              dot={{ fill: "#3B82F6", strokeWidth: 2, r: 4 }}
-              activeDot={{ r: 6, stroke: "#3B82F6", strokeWidth: 2 }}
+              dot={{ fill: COLORS.line, strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 6, stroke: COLORS.line, strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>

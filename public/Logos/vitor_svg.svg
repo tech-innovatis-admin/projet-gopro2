@@ -1,0 +1,10 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1366 768" width="1366" height="768">
+	<style>
+		tspan { white-space:pre } 
+		.t0 { font-size: 270px;fill: #000000;font-weight: 700;font-family: "Poppins-Bold", "Poppins" } 
+	</style>
+	<text id="GoPro" style="transform: matrix(1,0,0,1,266.12,456.57)" >
+		<tspan x="0" y="0" class="t0">GoPro
+</tspan>
+	</text>
+</svg>

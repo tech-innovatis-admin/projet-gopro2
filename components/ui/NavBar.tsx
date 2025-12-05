@@ -42,13 +42,13 @@ const navigationItems: NavItem[] = [
     icon: Home,
   },
   {
-    label: "Projetos",
-    href: "/projetos",
+    label: "Contratos",
+    href: "/contratos",
     icon: FolderOpen,
     children: [
-      { label: "Todos os Projetos", href: "/projetos", icon: FolderOpen },
-      { label: "Novo Projeto", href: "/projetos/novo", icon: FileText },
-      { label: "Relatórios", href: "/projetos/relatorios", icon: BarChart3 },
+      { label: "Todos os Contratos", href: "/contratos", icon: FolderOpen },
+      { label: "Novo Contrato", href: "/contratos/novo", icon: FileText },
+      { label: "Relatórios", href: "/contratos/relatorios", icon: BarChart3 },
     ],
   },
   {
@@ -57,8 +57,8 @@ const navigationItems: NavItem[] = [
     icon: Users,
     children: [
       { label: "Todos os Parceiros", href: "/parceiros", icon: Users },
-      { label: "Fundações", href: "/fundacoes/novo", icon: FileText },
-      { label: "IFES", href: "/ifes/novo", icon: BarChart3 },
+      { label: "Fundações", href: "/parceiros/fundacoes", icon: FileText },
+      { label: "IFES", href: "/parceiros/ifes", icon: BarChart3 },
     ],
   },
   {
@@ -210,12 +210,10 @@ export function NavBar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/home" className="flex items-center gap-3 group">
-            <div className="p-2 bg-gradient-to-br from-[#004225] to-[#0B7A4B] rounded-xl shadow-sm group-hover:shadow-md transition-shadow duration-200">
-              <Command className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-[#004225] to-[#00B894] bg-clip-text text-transparent">
-              GoPro
-            </span>
+          <div className="flex items-center gap-2">
+            <img src="/Logos/logo_innovatis_preta.svg" alt="Logo Innovatis" className="h-6 w-6" />
+            <span className="text-2xl font-semibold tracking-tight">GoPro2</span>
+          </div>
           </Link>
 
           {/* Desktop Navigation */}

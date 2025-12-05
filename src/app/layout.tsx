@@ -103,6 +103,9 @@ const poppins = localFont({
 export const metadata: Metadata = {
   title: "GoPro - Plataforma de Gestão de Contratos",
   description: "Plataforma de gestão de contratos, projetos e produtos da Innovatis",
+  icons: {
+    icon: '/Logos/logo_innovatis_preta.svg',
+  },
 };
 
 export default function RootLayout({

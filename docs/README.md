@@ -1,93 +1,177 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GoPro 2.0 - Plataforma de Gestão de Contratos
 
-## Getting Started
+Este é um projeto [Next.js](https://nextjs.org) criado com [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-First, run the development server:
+## 🚀 Getting Started
+
+Para iniciar o servidor de desenvolvimento:
+
+```bash
+npm run dev
+# ou
+yarn dev
+# ou
+pnpm dev
+```
+
+Acesse [http://localhost:3000](http://localhost:3000) no navegador.
+
+---
+
+## 📁 Estrutura de Pastas do Projeto
+
 ```
 gopro-2/
+├── .cursor/                 # Configurações do Cursor IDE
+├── .env                     # Variáveis de ambiente (não versionado)
 ├── .git/                    # Controle de versão Git
-├── .gitignore              # Arquivos ignorados pelo Git
-├── .next/                  # Arquivos de build do Next.js
-├── node_modules/           # Dependências instaladas
-├── components/             # Componentes UI (raiz) - shadcn/ui + customizados
-│   └── ui/                 # Componentes UI (button, input, card, NavBar...)
-├── components.json         # Configuração do shadcn/ui
-├── docs/                   # Documentação do projeto
-│   └── README.md           # Este arquivo
-├── lib/                    # Utilitários criados pelo shadcn (`lib/utils.ts`)
-├── public/                 # Arquivos estáticos públicos
-│   ├── epitacio.png        # Imagem do fundador
-│   ├── epitacio_brito_foto_oficial.jpeg # Foto oficial do fundador
+├── .gitignore               # Arquivos ignorados pelo Git
+├── .next/                   # Arquivos de build do Next.js (gerado)
+├── node_modules/            # Dependências instaladas (gerado)
+│
+├── components/              # Componentes UI compartilhados (shadcn/ui)
+│   └── ui/
+│       ├── button.tsx       # Componente de botão
+│       ├── card.tsx         # Componente de card
+│       ├── checkbox.tsx     # Componente de checkbox
+│       ├── input.tsx        # Componente de input
+│       ├── label.tsx        # Componente de label
+│       ├── NavBar.tsx       # Barra de navegação principal
+│       ├── select.tsx       # Componente de select
+│       └── separator.tsx    # Componente separador
+│
+├── components.json          # Configuração do shadcn/ui
+│
+├── docs/                    # Documentação do projeto
+│   └── README.md            # Este arquivo
+│
+├── EXEMPLO_CSS_LETRAS_BREAK/ # Exemplo de efeito CSS (animação de letras)
+│   ├── exemplo1.html
+│   ├── exemplo2.css
+│   └── exemplo3.js
+│
+├── lib/                     # Utilitários do shadcn/ui
+│   └── utils.ts             # Função cn() para classes condicionais
+│
+├── prisma/                  # Configuração do Prisma ORM
+│   └── schema.prisma        # Schema do banco de dados
+│
+├── public/                  # Arquivos estáticos públicos
+│   ├── Logos/               # Logos da aplicação
+│   │   ├── GoPro2_SVG.svg           # Logo GoPro2 SVG
+│   │   ├── GoPro2_SVG (2).svg       # Logo GoPro2 SVG (variação)
+│   │   ├── logo_innovatis.svg       # Logo Innovatis
+│   │   ├── logo_innovatis_oficial.svg # Logo Innovatis oficial
+│   │   └── logo_innovatis_preta.svg # Logo Innovatis preta
+│   ├── Poppins/             # Fonte Poppins (todas as variações)
+│   │   ├── OFL.txt          # Licença da fonte
+│   │   ├── Poppins-Regular.ttf
+│   │   ├── Poppins-Bold.ttf
+│   │   ├── Poppins-Medium.ttf
+│   │   ├── Poppins-SemiBold.ttf
+│   │   └── ... (demais variações)
+│   ├── epitacio.png         # Imagem do fundador
+│   ├── epitacio_brito_foto_oficial.jpeg
 │   ├── file.svg
 │   ├── globe.svg
 │   ├── next.svg
 │   ├── vercel.svg
 │   └── window.svg
-├── src/                    # Código fonte da aplicação
-│   ├── app/                # App Router do Next.js (route groups usados)
-│   │   ├── api/            # API Routes do Next.js
-│   │   │   └── auth/       # Endpoints de autenticação
-│   │   │       ├── login/  # POST /api/auth/login
-│   │   │       └── logout/ # POST /api/auth/logout
+│
+├── src/                     # Código fonte principal
+│   ├── .env                 # Variáveis de ambiente do src
+│   │
+│   ├── app/                 # App Router do Next.js
 │   │   ├── favicon.ico
-│   │   ├── globals.css     # Estilos globais (Tailwind)
-│   │   ├── layout.tsx      # Layout global da aplicação
-│   │   ├── not-found.tsx   # Página 404
-│   │   ├── page.tsx        # Página inicial (rota /)
-│   │   ├── (auth)/         # Route group para rotas públicas (não aparece na URL)
+│   │   ├── globals.css      # Estilos globais (Tailwind CSS)
+│   │   ├── layout.tsx       # Layout raiz da aplicação
+│   │   ├── page.tsx         # Página inicial (rota /)
+│   │   ├── not-found.tsx/   # Página 404 customizada
+│   │   │
+│   │   ├── api/             # API Routes (Backend)
+│   │   │   └── auth/
+│   │   │       ├── login/
+│   │   │       │   └── route.ts   # POST /api/auth/login
+│   │   │       ├── logout/
+│   │   │       │   └── route.ts   # POST /api/auth/logout
+│   │   │       └── me/
+│   │   │           └── route.ts   # GET /api/auth/me
+│   │   │
+│   │   ├── (auth)/          # Route Group: Rotas públicas (não autenticadas)
 │   │   │   └── login/
-│   │   │       ├── _components/ # Componentes específicos da página login
-│   │   │       └── page.tsx    # Página de login (rota /login)
-│   │   └── (dashboard)/    # Route group para rotas autenticadas (não aparece na URL)
-│   │       ├── home/
-│   │       │   ├── _components/ # Componentes da dashboard (gráficos, mapas)
-│   │       │   │   ├── CategoryPieChart.tsx   # Gráfico de pizza
-│   │       │   │   ├── ContractsLineChart.tsx  # Gráfico de linhas
-│   │       │   │   ├── ContractsMap.tsx       # Mapa de contratos
-│   │       │   │   ├── MapComponent.tsx       # Componente base do mapa
-│   │       │   │   ├── PartnerBarChart.tsx    # Gráfico de barras
-│   │       │   │   └── index.ts               # Exportações
-│   │       │   └── page.tsx    # Dashboard home (rota /home)
-│   │       └── projetos/
-│   │           ├── _components/ # Componentes da página projetos
-│   │           ├── page.tsx    # Listagem de projetos (rota /projetos)
-│   │           └── [projectId]/ # Rotas dinâmicas por projeto
-│   │               ├── page.tsx          # Detalhes do projeto (/projetos/[id])
-│   │               ├── rubricas/
-│   │               │   └── page.tsx      # Rubricas e orçamento (/projetos/[id]/rubricas)
-│   │               ├── execucao/
-│   │               │   └── page.tsx      # Execução do projeto (/projetos/[id]/execucao)
-│   │               └── contratacoes/
-│   │                   └── page.tsx      # Contratações (/projetos/[id]/contratacoes)
-│   ├── components/         # Componentes React customizados
-│   ├── hooks/              # Hooks customizados React
-│   ├── middleware.ts       # Middleware para proteger rotas (auth JWT/cookies)
-│   └── utils/              # Utilitários da aplicação
-├── eslint.config.mjs       # Configuração do ESLint
-├── next-env.d.ts           # Tipos do Next.js
-├── next.config.ts          # Configuração do Next.js
-├── package.json            # Dependências e scripts
-├── package-lock.json       # Lockfile do npm
-├── postcss.config.mjs      # Configuração do PostCSS
-└── tsconfig.json           # Configuração do TypeScript
-```
-│   │   │   │   ├── page.tsx    # Página home (rota /home)
-│   │   │   │   └── _components/ # Componentes específicos da página home (vazio)
-│   │   │   └── projetos/
-│   │   │       ├── page.tsx    # Página de projetos (rota /projetos)
-│   │   │       └── _components/ # Componentes específicos da página projetos (vazio)
-│   ├── middleware.ts       # Middleware para proteger rotas (auth JWT/cookies)
-│   ├── components/         # Componentes reutilizáveis (vazio)
-│   ├── hooks/              # Hooks customizados (vazio)
-│   └── utils/              # Utilitários (vazio)
-├── eslint.config.mjs       # Configuração do ESLint
-├── next-env.d.ts           # Tipos do Next.js
-├── next.config.ts          # Configuração do Next.js
-├── package.json            # Dependências e scripts
-├── package-lock.json       # Lockfile do npm
-├── postcss.config.mjs      # Configuração do PostCSS
-├── README.md               # Este arquivo
-└── tsconfig.json           # Configuração do TypeScript
+│   │   │       ├── page.tsx       # Página de login (/login)
+│   │   │       └── _components/   # Componentes específicos do login (vazio)
+│   │   │
+│   │   └── (dashboard)/     # Route Group: Rotas protegidas (autenticadas)
+│   │       │
+│   │       ├── home/        # Dashboard principal
+│   │       │   ├── page.tsx       # Página home (/home)
+│   │       │   └── _components/   # Componentes da dashboard
+│   │       │       ├── CategoryPieChart.tsx    # Gráfico de pizza por categoria
+│   │       │       ├── ContractsLineChart.tsx  # Gráfico de linha temporal
+│   │       │       ├── ContractsMap.tsx        # Mapa geográfico de contratos
+│   │       │       ├── MapComponent.tsx        # Componente base do mapa
+│   │       │       ├── PartnerBarChart.tsx     # Gráfico de barras por parceiro
+│   │       │       └── index.ts                # Exportações centralizadas
+│   │       │
+│   │       ├── contratos/   # Gestão de contratos
+│   │       │   ├── page.tsx       # Listagem de contratos (/contratos)
+│   │       │   ├── _components/   # Componentes específicos (vazio)
+│   │       │   │
+│   │       │   └── [contratoId]/  # Rotas dinâmicas por contrato
+│   │       │       ├── page.tsx         # Detalhes do contrato (/contratos/[id])
+│   │       │       ├── contratacoes/
+│   │       │       │   └── page.tsx     # Contratações (/contratos/[id]/contratacoes)
+│   │       │       ├── execucao/
+│   │       │       │   └── page.tsx     # Execução (/contratos/[id]/execucao)
+│   │       │       └── rubricas/
+│   │       │           └── page.tsx     # Rubricas (/contratos/[id]/rubricas)
+│   │       │
+│   │       └── parceiros/   # Gestão de parceiros
+│   │           ├── page.tsx       # Listagem de parceiros (/parceiros)
+│   │           ├── fundacoes/
+│   │           │   └── page.tsx   # Fundações (/parceiros/fundacoes)
+│   │           └── ifes/
+│   │               └── page.tsx   # IFES (/parceiros/ifes)
+│   │
+│   ├── components/          # Componentes React reutilizáveis (vazio)
+│   │
+│   ├── generated/           # Código gerado automaticamente
+│   │   └── prisma/          # Cliente Prisma gerado
+│   │       ├── client.js
+│   │       ├── client.d.ts
+│   │       ├── index.js
+│   │       ├── index.d.ts
+│   │       ├── schema.prisma
+│   │       ├── runtime/     # Runtime do Prisma
+│   │       │   ├── client.js
+│   │       │   ├── client.d.ts
+│   │       │   ├── index-browser.js
+│   │       │   ├── index-browser.d.ts
+│   │       │   └── wasm-compiler-edge.js
+│   │       └── ... (demais arquivos gerados)
+│   │
+│   ├── hooks/               # Hooks customizados React (vazio)
+│   │
+│   ├── lib/                 # Bibliotecas e utilitários
+│   │   ├── auth.ts          # Funções de autenticação
+│   │   ├── jwt.ts           # Utilitários JWT
+│   │   └── prisma.ts        # Instância do Prisma Client
+│   │
+│   ├── middleware.ts        # Middleware de autenticação (proteção de rotas)
+│   │
+│   ├── public/              # Arquivos públicos do src (vazio)
+│   │
+│   └── utils/               # Utilitários gerais (vazio)
+│
+├── eslint.config.mjs        # Configuração do ESLint
+├── next-env.d.ts            # Tipos do Next.js
+├── next.config.ts           # Configuração do Next.js
+├── package.json             # Dependências e scripts npm
+├── package-lock.json        # Lockfile do npm
+├── postcss.config.mjs       # Configuração do PostCSS
+├── prisma.config.ts         # Configuração adicional do Prisma
+└── tsconfig.json            # Configuração do TypeScript
 ```
 
 ## 📋 Conceitos Fundamentais
@@ -287,11 +371,29 @@ _components/
 O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rotas públicas (autenticação) das protegidas (dashboard). Esses groups **não aparecem na URL** e servem apenas para organização:
 
 #### Rotas Públicas (auth)
-- **`/login`** - Página de login (`app/(auth)/login/page.tsx`)
+| Rota | Arquivo | Descrição |
+|------|---------|-----------|
+| `/login` | `app/(auth)/login/page.tsx` | Página de login |
 
 #### Rotas Protegidas (dashboard)
-- **`/home`** - Página home - requer autenticação (`app/(dashboard)/home/page.tsx`)
-- **`/projetos`** - Página de projetos - requer autenticação (`app/(dashboard)/projetos/page.tsx`)
+| Rota | Arquivo | Descrição |
+|------|---------|-----------|
+| `/home` | `app/(dashboard)/home/page.tsx` | Dashboard principal com gráficos |
+| `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos |
+| `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Detalhes do contrato |
+| `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Contratações do contrato |
+| `/contratos/[id]/execucao` | `app/(dashboard)/contratos/[contratoId]/execucao/page.tsx` | Execução do contrato |
+| `/contratos/[id]/rubricas` | `app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx` | Rubricas do contrato |
+| `/parceiros` | `app/(dashboard)/parceiros/page.tsx` | Listagem de parceiros |
+| `/parceiros/fundacoes` | `app/(dashboard)/parceiros/fundacoes/page.tsx` | Fundações parceiras |
+| `/parceiros/ifes` | `app/(dashboard)/parceiros/ifes/page.tsx` | IFES parceiras |
+
+#### API Routes
+| Endpoint | Método | Arquivo | Descrição |
+|----------|--------|---------|-----------|
+| `/api/auth/login` | POST | `app/api/auth/login/route.ts` | Autenticação de usuário |
+| `/api/auth/logout` | POST | `app/api/auth/logout/route.ts` | Logout do usuário |
+| `/api/auth/me` | GET | `app/api/auth/me/route.ts` | Dados do usuário autenticado |
 
 ### Proteção de Rotas (Middleware)
 
@@ -306,19 +408,36 @@ Para validar o token:
 2. Se não houver, redireciona para `/login`
 3. TODO: Implementar validação de JWT no middleware para verificar a validade do token
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🛠️ Tecnologias Utilizadas
 
-To learn more about Next.js, take a look at the following resources:
+| Tecnologia | Versão | Uso |
+|------------|--------|-----|
+| **Next.js** | 16.x | Framework React com App Router |
+| **React** | 19.x | Biblioteca UI |
+| **TypeScript** | 5.x | Tipagem estática |
+| **Tailwind CSS** | 4.x | Estilização utility-first |
+| **Prisma** | 6.x | ORM para banco de dados |
+| **shadcn/ui** | - | Componentes UI acessíveis |
+| **Recharts** | - | Gráficos e visualizações |
+| **React-Leaflet** | - | Mapas interativos |
+| **GSAP** | - | Animações avançadas |
+| **Lucide React** | - | Ícones |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📚 Learn More
 
-## Deploy on Vercel
+Para aprender mais sobre Next.js:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [Next.js Documentation](https://nextjs.org/docs) - recursos e API do Next.js
+- [Learn Next.js](https://nextjs.org/learn) - tutorial interativo
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 🚀 Deploy on Vercel
+
+A forma mais fácil de fazer deploy é usar a [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
+
+Veja a [documentação de deploy](https://nextjs.org/docs/app/building-your-application/deploying) para mais detalhes.
