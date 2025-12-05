@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ar_internal_metadata {
+  key        String   @id @db.VarChar
+  value      String?  @db.VarChar
+  created_at DateTime @db.Timestamp(6)
+  updated_at DateTime @db.Timestamp(6)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model municipio_acessos {
+  id           Int       @id @default(autoincrement())
+  user_id      Int
+  municipio_id Int?
+  uf           String?   @db.VarChar(2)
+  exclusive    Boolean   @default(false)
+  granted_at   DateTime? @default(now()) @db.Timestamptz(6)
+  valid_until  DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @db.Timestamptz(6)
+  uf_name      String?   @db.VarChar(50)
+}
+
+model municipio_acessos_audit {
+  id           Int       @id @default(autoincrement())
+  acesso_id    Int
+  action       String    @db.VarChar(20)
+  performed_by Int
+  details      Json?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([acesso_id])
+  @@index([performed_by])
+}
+
+model municipios {
+  id         Int      @id(map: "Municipio_pkey") @default(autoincrement())
+  municipio  String
+  name_state String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([municipio, name_state], map: "Municipio_municipio_name_state_key")
+}
+
+model municipios_com_relacionamento {
+  row_index              Int?
+  name_state             String?   @db.VarChar(255)
+  code_muni              String    @id @db.VarChar(10)
+  name_muni              String?   @db.VarChar(255)
+  relacionamento_ativo   Boolean?
+  relacionamento_criado  DateTime? @db.Timestamp(6)
+  relacionamento_editado DateTime? @db.Timestamp(6)
+}
+
+model schema_migrations {
+  version String @id @db.VarChar
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model users {
+  id         Int      @id(map: "User_pkey") @default(autoincrement())
+  email      String?  @unique(map: "User_email_key")
+  hash       String
+  role       String?
+  username   String?  @unique(map: "User_username_key")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  name       String   @default("") @db.VarChar(255)
+  photo      String?
+  platforms  String[] @default([])
+  cargo      String?  @default("Visitante")
+}
