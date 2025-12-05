@@ -82,9 +82,9 @@ gopro-2/
 │   ├── .env                 # Variáveis de ambiente do src
 │   │
 │   ├── app/                 # App Router do Next.js
-│   │   ├── favicon.ico
+│   │   ├── favicon.ico      # Favicon legado (substituído via metadata)
 │   │   ├── globals.css      # Estilos globais (Tailwind CSS)
-│   │   ├── layout.tsx       # Layout raiz da aplicação
+│   │   ├── layout.tsx       # Layout raiz (ícone: logo_innovatis_preta.svg)
 │   │   ├── page.tsx         # Página inicial (rota /)
 │   │   ├── not-found.tsx/   # Página 404 customizada
 │   │   │
@@ -119,7 +119,8 @@ gopro-2/
 │   │       │   ├── _components/   # Componentes específicos (vazio)
 │   │       │   │
 │   │       │   └── [contratoId]/  # Rotas dinâmicas por contrato
-│   │       │       ├── page.tsx         # Detalhes do contrato (/contratos/[id])
+│   │       │       ├── layout.tsx       # Layout compartilhado com tabs
+│   │       │       ├── page.tsx         # Visão Geral do contrato (/contratos/[id])
 │   │       │       ├── contratacoes/
 │   │       │       │   └── page.tsx     # Contratações (/contratos/[id]/contratacoes)
 │   │       │       ├── execucao/
@@ -366,6 +367,269 @@ _components/
 - **Interação**: Hover states e transições suaves
 - **Consistência**: Mesmas cores e tipografia do design system
 
+---
+
+## 📑 Módulo de Contratos (`/contratos`)
+
+O módulo de Contratos é o coração da plataforma, oferecendo uma gestão completa do ciclo de vida de todos os contratos (projetos e produtos).
+
+### 📐 Arquitetura de Navegação (3 Níveis)
+
+O módulo implementa uma navegação hierárquica em 3 níveis:
+
+```
+Nível 1: /contratos
+├── Listagem de todos os contratos
+├── Filtros avançados (tipo, status, parceiro, período)
+├── Busca textual
+└── Cards de métricas resumo
+
+Nível 2: /contratos/[contratoId]
+├── Layout compartilhado com header do contrato
+├── Tabs de navegação (Visão Geral, Contratações, Execução, Rubricas)
+└── Breadcrumb contextual
+
+Nível 3: Sub-páginas do contrato
+├── Visão Geral - Dashboard resumido
+├── Contratações - Aditivos, OS, subcontratos
+├── Execução - Cronograma e marcos
+└── Rubricas - Orçamento detalhado
+```
+
+### 📋 Listagem de Contratos (`/contratos`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/page.tsx`
+
+#### Funcionalidades:
+
+**Cards de Métricas:**
+- Total de Contratos
+- Contratos em Andamento
+- Valor Total Contratado
+- Valor Executado
+
+**Sistema de Filtros:**
+- **Tabs de Tipo**: Todos | Projetos | Produtos
+- **Filtros Expandíveis**: Status, Parceiro, Período
+- **Busca**: Campo de pesquisa por nome, código ou cliente
+
+**Tabela de Dados:**
+- Colunas: Código, Nome, Tipo, Cliente, Status, Valor, Progresso, Ações
+- **Ordenação**: Clique nas colunas para ordenar
+- **Paginação**: Navegação entre páginas de resultados
+- **Ações por linha**: Visualizar, Editar, Exportar
+
+**Badges de Status:**
+| Status | Cor | Descrição |
+|--------|-----|-----------|
+| EM_ANDAMENTO | Verde | Contrato ativo em execução |
+| CONCLUIDO | Azul | Contrato finalizado |
+| SUSPENSO | Amarelo | Contrato temporariamente pausado |
+| CANCELADO | Vermelho | Contrato cancelado |
+| DRAFT | Cinza | Em elaboração |
+| EM_NEGOCIACAO | Roxo | Em fase de negociação |
+
+**Badges de Tipo:**
+| Tipo | Cor | Ícone |
+|------|-----|-------|
+| PROJETO | Verde (#004225) | Ícone de engrenagem |
+| PRODUTO | Azul | Ícone de pacote |
+
+### 📄 Layout do Contrato (`/contratos/[contratoId]/layout.tsx`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/layout.tsx`
+
+Layout compartilhado para todas as sub-páginas de um contrato específico.
+
+**Componentes:**
+
+1. **Breadcrumb Contextual:**
+   - Home → Contratos → [Nome do Contrato] → [Aba Atual]
+
+2. **Header do Contrato:**
+   - Código e nome do contrato
+   - Badges de tipo e status
+   - Botões de ação (Editar, Exportar, Menu)
+
+3. **Grid de Informações:**
+   - Cliente/Fundação
+   - Responsável
+   - Período de Execução
+   - Valor Total e Executado (com barra de progresso)
+
+4. **Navegação por Tabs:**
+   - Visão Geral
+   - Contratações
+   - Execução
+   - Rubricas
+
+### 📊 Visão Geral (`/contratos/[contratoId]`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/page.tsx`
+
+Dashboard resumido do contrato com informações essenciais.
+
+**Cards Informativos:**
+
+1. **Resumo Financeiro:**
+   - Valor Contratado
+   - Valor Empenhado
+   - Valor Liquidado
+   - Valor Pago
+   - Barra de progresso de execução
+
+2. **Cronograma:**
+   - Percentual de execução
+   - Dias restantes
+   - Status de prazo (No prazo/Atrasado/Atrasado crítico)
+
+3. **Riscos Ativos:**
+   - Lista de riscos com severidade (Alta/Média/Baixa)
+   - Indicador visual por cores
+
+4. **Movimentações Recentes:**
+   - Timeline com últimas atividades
+   - Tipos: Contratação, Financeiro, Status, Documento
+   - Data, descrição e usuário responsável
+
+### 📝 Contratações (`/contratos/[contratoId]/contratacoes`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx`
+
+Gestão de aditivos, ordens de serviço, termos de referência e subcontratos.
+
+**Cards de Resumo:**
+- Total de Contratações
+- Valor Total
+- Contratações Ativas
+- Valor Ativo
+
+**Tipos de Contratação:**
+| Tipo | Código | Descrição |
+|------|--------|-----------|
+| ADITIVO | ADT-XXX | Aditivos de prazo ou valor |
+| ORDEM_SERVICO | OS-XXX | Ordens de serviço |
+| TERMO_REFERENCIA | TR-XXX | Termos de referência |
+| SUBCONTRATO | SUB-XXX | Subcontratos |
+
+**Status de Contratação:**
+| Status | Cor | Ícone |
+|--------|-----|-------|
+| ATIVA | Verde | CheckCircle |
+| ENCERRADA | Cinza | Clock |
+| PLANEJADA | Amarelo | AlertCircle |
+| CANCELADA | Vermelho | X |
+
+**Funcionalidades:**
+- Filtro por tipo e status
+- Ordenação por colunas
+- Visualização detalhada
+- Botão "Nova Contratação"
+
+### ⏱️ Execução (`/contratos/[contratoId]/execucao`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/execucao/page.tsx`
+
+Acompanhamento de cronograma, marcos e entregas do contrato.
+
+**Cards de Resumo:**
+- Total de Marcos
+- Marcos Concluídos
+- Marcos Atrasados
+- Progresso Geral (%)
+
+**Timeline Visual:**
+- Visualização horizontal de fases
+- Indicador de progresso por marco
+- Cores por status do marco
+
+**Status de Marco:**
+| Status | Cor | Descrição |
+|--------|-----|-----------|
+| PLANEJADO | Azul | Ainda não iniciado |
+| EM_ANDAMENTO | Amarelo | Em execução |
+| CONCLUIDO | Verde | Finalizado |
+| ATRASADO | Vermelho | Prazo ultrapassado |
+| CANCELADO | Cinza | Cancelado |
+
+**Tabela de Marcos:**
+- Nome e descrição
+- Responsável
+- Data planejada vs realizada
+- Percentual de conclusão
+- Status
+
+**Gestão de Riscos:**
+- Lista de riscos do contrato
+- Severidade (Alta/Média/Baixa)
+- Status (Aberto/Em Tratamento/Resolvido)
+- Responsável e prazo de mitigação
+
+### 💰 Rubricas (`/contratos/[contratoId]/rubricas`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx`
+
+Gestão orçamentária detalhada por natureza de despesa.
+
+**Cards de Resumo:**
+- Valor Total Previsto
+- Valor Empenhado
+- Valor Liquidado
+- Valor Pago
+- Saldo Disponível
+
+**Gráfico de Distribuição:**
+- Pizza mostrando distribuição por categoria
+- Categorias: Materiais, Serviços, Equipamentos, Tributos, Pessoal
+
+**Tabela de Rubricas:**
+- **Código**: Código da natureza de despesa (ex: 3.3.90.30)
+- **Descrição**: Nome da rubrica
+- **Natureza**: Custeio ou Capital
+- **Categoria**: Agrupamento por tipo
+- **Valores**: Previsto, Empenhado, Liquidado, Pago
+- **Percentual**: Execução vs Previsto
+
+**Funcionalidades:**
+- Linhas expansíveis para detalhes
+- Filtro por categoria
+- Indicadores visuais de execução
+- Alertas de sobrecusto ou subutilização
+
+### 🏗️ Arquitetura de Componentes do Módulo
+
+```
+contratos/
+├── page.tsx                          # Listagem principal
+├── _components/                      # Componentes reutilizáveis (futuro)
+│
+└── [contratoId]/
+    ├── layout.tsx                    # Layout com header e tabs
+    ├── page.tsx                      # Visão Geral
+    ├── contratacoes/
+    │   └── page.tsx                  # Gestão de contratações
+    ├── execucao/
+    │   └── page.tsx                  # Cronograma e marcos
+    └── rubricas/
+        └── page.tsx                  # Orçamento detalhado
+```
+
+**Padrões de Componentes:**
+- `StatusBadge`: Badge colorido por status
+- `TipoBadge`: Badge com ícone por tipo
+- `MetricCard`: Card de métrica com ícone e valor
+- `Th` / `Td`: Células de tabela padronizadas
+- Timeline: Componente de linha do tempo
+
+### 🎨 Consistência Visual
+
+O módulo segue rigorosamente o Design System da Innovatis:
+- **Cor primária**: `#004225` (verde institucional)
+- **Cards**: Fundo branco com borda sutil e sombra
+- **Tabelas**: Headers com fundo cinza claro, linhas alternadas
+- **Badges**: Cores semânticas por status/tipo
+- **Ícones**: Lucide React consistente em toda a interface
+
 ### Estrutura de Páginas (App Router com Route Groups)
 
 O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rotas públicas (autenticação) das protegidas (dashboard). Esses groups **não aparecem na URL** e servem apenas para organização:
@@ -379,11 +643,12 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 | Rota | Arquivo | Descrição |
 |------|---------|-----------|
 | `/home` | `app/(dashboard)/home/page.tsx` | Dashboard principal com gráficos |
-| `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos |
-| `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Detalhes do contrato |
-| `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Contratações do contrato |
-| `/contratos/[id]/execucao` | `app/(dashboard)/contratos/[contratoId]/execucao/page.tsx` | Execução do contrato |
-| `/contratos/[id]/rubricas` | `app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx` | Rubricas do contrato |
+| `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos com filtros e paginação |
+| `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Visão Geral do contrato (dashboard resumido) |
+| `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e tabs |
+| `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Gestão de aditivos, OS e subcontratos |
+| `/contratos/[id]/execucao` | `app/(dashboard)/contratos/[contratoId]/execucao/page.tsx` | Cronograma, marcos e gestão de riscos |
+| `/contratos/[id]/rubricas` | `app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx` | Orçamento e execução financeira por rubrica |
 | `/parceiros` | `app/(dashboard)/parceiros/page.tsx` | Listagem de parceiros |
 | `/parceiros/fundacoes` | `app/(dashboard)/parceiros/fundacoes/page.tsx` | Fundações parceiras |
 | `/parceiros/ifes` | `app/(dashboard)/parceiros/ifes/page.tsx` | IFES parceiras |
