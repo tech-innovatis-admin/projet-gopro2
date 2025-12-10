@@ -123,10 +123,13 @@ export default function ContratoLayout({
 
             {/* Ações */}
             <div className="flex items-center gap-2">
-              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              <Link
+                href={`/contratos/${contratoId}/editar`}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
                 <Edit className="h-4 w-4" />
                 Editar
-              </button>
+              </Link>
               <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 <Download className="h-4 w-4" />
                 Exportar
@@ -144,7 +147,7 @@ export default function ContratoLayout({
               <div className="flex items-start gap-3">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Cliente / Parceiro</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Parceiro</p>
                   <p className="text-sm font-medium text-gray-900">{mockContrato.cliente}</p>
                   <p className="text-xs text-gray-500">{mockContrato.parceiro}</p>
                 </div>
@@ -152,7 +155,7 @@ export default function ContratoLayout({
               <div className="flex items-start gap-3">
                 <User className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Responsável</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Coordenador</p>
                   <p className="text-sm font-medium text-gray-900">{mockContrato.responsavel}</p>
                 </div>
               </div>

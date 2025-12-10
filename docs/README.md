@@ -116,7 +116,16 @@ gopro-2/
 │   │       │
 │   │       ├── contratos/   # Gestão de contratos
 │   │       │   ├── page.tsx       # Listagem de contratos (/contratos)
-│   │       │   ├── _components/   # Componentes específicos (vazio)
+│   │       │   ├── _components/   # Componentes específicos
+│   │       │   │   ├── NovoContratoModal.tsx    # Modal de cadastro de contrato
+│   │       │   │   └── index.ts                 # Exportações
+│   │       │   │
+│   │       │   ├── pre-projetos/  # Pré-projetos e pré-contratos
+│   │       │   │   ├── page.tsx       # Listagem de pré-projetos (/contratos/pre-projetos)
+│   │       │   │   ├── README.md     # Documentação específica
+│   │       │   │   └── _components/   # Componentes específicos
+│   │       │   │       ├── NovoPreProjetoModal.tsx  # Modal de cadastro
+│   │       │   │       └── index.ts                 # Exportações
 │   │       │   │
 │   │       │   └── [contratoId]/  # Rotas dinâmicas por contrato
 │   │       │       ├── layout.tsx       # Layout compartilhado com tabs
@@ -135,7 +144,9 @@ gopro-2/
 │   │           └── ifes/
 │   │               └── page.tsx   # IFES (/parceiros/ifes)
 │   │
-│   ├── components/          # Componentes React reutilizáveis (vazio)
+│   ├── components/          # Componentes React reutilizáveis
+│   │   ├── ModalListener.tsx    # Sistema de modais globais
+│   │   └── ... (outros componentes)
 │   │
 │   ├── generated/           # Código gerado automaticamente
 │   │   └── prisma/          # Cliente Prisma gerado
@@ -601,7 +612,16 @@ Gestão orçamentária detalhada por natureza de despesa.
 ```
 contratos/
 ├── page.tsx                          # Listagem principal
-├── _components/                      # Componentes reutilizáveis (futuro)
+├── _components/                      # Componentes reutilizáveis
+│   ├── NovoContratoModal.tsx         # Modal de cadastro de contrato
+│   └── index.ts                      # Exportações
+│
+├── pre-projetos/                     # Submódulo de pré-projetos
+│   ├── page.tsx                      # Listagem de pré-projetos
+│   ├── README.md                     # Documentação específica
+│   └── _components/                  # Componentes específicos
+│       ├── NovoPreProjetoModal.tsx   # Modal de cadastro
+│       └── index.ts                  # Exportações
 │
 └── [contratoId]/
     ├── layout.tsx                    # Layout com header e tabs
@@ -615,6 +635,8 @@ contratos/
 ```
 
 **Padrões de Componentes:**
+- `NovoContratoModal`: Modal de cadastro de contrato
+- `NovoPreProjetoModal`: Modal de cadastro de pré-projeto
 - `StatusBadge`: Badge colorido por status
 - `TipoBadge`: Badge com ícone por tipo
 - `MetricCard`: Card de métrica com ícone e valor
@@ -630,6 +652,205 @@ O módulo segue rigorosamente o Design System da Innovatis:
 - **Badges**: Cores semânticas por status/tipo
 - **Ícones**: Lucide React consistente em toda a interface
 
+## 🎯 Sistema de Modais Globais
+
+A plataforma implementa um **sistema de modais globais** para centralizar a abertura de formulários e diálogos em qualquer lugar da aplicação.
+
+### 🏗️ Arquitetura do Sistema
+
+**Componente Principal:** `src/components/ModalListener.tsx`
+
+O sistema utiliza **Custom Events** do JavaScript para comunicação entre componentes:
+
+```typescript
+// Disparar abertura de modal
+window.dispatchEvent(new CustomEvent('open-modal', {
+  detail: { modalName: 'novo-contrato' }
+}));
+
+// Escutar criação de contrato
+window.addEventListener('contrato-criado', (event) => {
+  const data = event.detail;
+  // Atualizar lista de contratos
+});
+```
+
+### 📋 Modais Disponíveis
+
+| Modal | Evento | Descrição |
+|-------|--------|-----------|
+| **Novo Contrato** | `open-modal` → `modalName: 'novo-contrato'` | Cadastro de novo contrato |
+| **Novo Pré-Projeto** | `open-modal` → `modalName: 'novo-pre-projeto'` | Cadastro de pré-projeto |
+
+### 🔄 Fluxo de Funcionamento
+
+1. **Trigger**: Componente dispara evento `open-modal`
+2. **Listener**: `ModalListener` captura e abre modal correspondente
+3. **Submit**: Modal processa dados e dispara evento de confirmação
+4. **Update**: Páginas escutam eventos e atualizam suas listas
+5. **Redirect**: Opcionalmente redireciona para página específica
+
+### 🎯 Benefícios
+
+- **Centralização**: Um único componente gerencia todos os modais
+- **Reutilização**: Modais podem ser abertos de qualquer lugar
+- **Decoupling**: Componentes não precisam conhecer uns aos outros
+- **Escalabilidade**: Fácil adição de novos modais
+- **Consistência**: Mesmo comportamento em toda a aplicação
+
+## 📝 Modal de Cadastro de Contrato
+
+**Arquivo:** `src/app/(dashboard)/contratos/_components/NovoContratoModal.tsx`
+
+Modal completo para cadastro de novos contratos com validação avançada e UX polida.
+
+### 📋 Campos do Formulário
+
+**Informações Básicas:**
+- **Título** (obrigatório): Nome descritivo do contrato
+- **Status** (obrigatório): EM_ANDAMENTO, CONCLUIDO, SUSPENSO, CANCELADO, DRAFT, EM_NEGOCIACAO
+- **Coordenador** (obrigatório): Responsável pelo contrato
+- **Parceiro** (obrigatório): Cliente ou instituição parceira
+- **Tipo** (obrigatório): PROJETO ou PRODUTO
+- **Data Início** (obrigatório): Início da vigência
+- **Data Fim** (obrigatório): Término da vigência
+- **Localidade** (obrigatório): Cidade/Estado de execução
+
+### ✅ Validações Implementadas
+
+- **Campos obrigatórios**: Todos os campos marcados com `*`
+- **Datas**: Data fim deve ser posterior à data início
+- **Caracteres**: Limite de 200 caracteres no título
+- **Formato**: Validação de formato de datas
+- **Real-time**: Feedback imediato durante digitação
+
+### 🎨 UX/UI Features
+
+- **Auto-focus**: Cursor automaticamente no primeiro campo
+- **ESC para fechar**: Tecla ESC fecha o modal
+- **Click-outside**: Clique fora do modal fecha a janela
+- **Backdrop blur**: Fundo com efeito de desfoque
+- **Gradiente header**: Header com gradiente institucional
+- **Ícones Lucide**: Ícones consistentes em toda a interface
+- **Responsivo**: Layout adaptável para mobile e desktop
+
+### 🔗 Integração com NavBar
+
+O NavBar foi atualizado para suportar abertura de modais:
+
+```typescript
+// No NavBar.tsx
+const handleClick = (href: string) => {
+  if (href.startsWith('modal:')) {
+    const modalName = href.replace('modal:', '');
+    window.dispatchEvent(new CustomEvent('open-modal', {
+      detail: { modalName }
+    }));
+  }
+};
+```
+
+**Menu "Contratos":**
+```
+Contratos
+├── Todos os Contratos (/contratos)
+├── Novo Contrato (modal:novo-contrato) ← MODAL
+└── Relatórios (/contratos/relatorios)
+```
+
+## 📋 Página de Pré-Projetos/Pré-Contratos
+
+**Rota:** `/contratos/pre-projetos`
+
+Página completa para gestão de propostas antes da formalização oficial dos contratos.
+
+### 📊 Funcionalidades Principais
+
+**Cards de Métricas:**
+- Total de Pré-Projetos
+- Projetos (tipo PROJETO)
+- Produtos (tipo PRODUTO)
+- Valor Total Estimado
+
+**Sistema de Filtros:**
+- **Tabs por Tipo**: Todos / Projetos / Produtos
+- **Filtro por Parceiro**: Dropdown com lista de parceiros
+- **Busca Textual**: Por título, parceiro ou localidade
+- **Filtros Expandidos**: Interface colapsável para filtros avançados
+
+**Tabela de Dados:**
+- **Colunas**: Título, Tipo, Parceiro, Localidade, Valor Estimado, Documentos, Data Criação, Ações
+- **Ordenação**: Clique nos headers para ordenar qualquer coluna
+- **Paginação**: Navegação entre páginas (10 itens por página)
+- **Badges**: Tipo (PROJETO/PRODUTO) e quantidade de documentos
+
+### 📝 Modal de Cadastro de Pré-Projeto
+
+**Arquivo:** `src/app/(dashboard)/contratos/pre-projetos/_components/NovoPreProjetoModal.tsx`
+
+**Campos Obrigatórios:**
+- **Título do Projeto**: Nome descritivo (máx. 200 caracteres)
+- **Tipo de Contrato**: PROJETO ou PRODUTO
+- **Parceiro**: Seleção de parceiro cadastrado
+- **Localidade**: Cidade/Estado (ex: "Campina Grande - PB")
+- **Valor Total Estimado**: Formatação monetária automática
+
+**Uploads Opcionais (4 tipos):**
+- **Contrato**: Documento de contrato proposto
+- **TR**: Termo de Referência
+- **Plano de Trabalho**: Plano detalhado de execução
+- **Outro**: Documento adicional
+
+**Validações de Upload:**
+- **Tamanho máximo**: 10MB por arquivo
+- **Formatos aceitos**: PDF, DOC, DOCX, XLS, XLSX
+- **Feedback visual**: Nome do arquivo, botão de remoção
+- **Opcional**: Nenhum arquivo é obrigatório
+
+### 💰 Formatação Monetária Inteligente
+
+Campo de valor com formatação automática em tempo real:
+
+```typescript
+// Usuário digita: 100000
+// Sistema mostra: 1.000,00
+
+// Usuário digita: 250050
+// Sistema mostra: 2.500,50
+```
+
+**Características:**
+- Formato brasileiro (R$ + separadores)
+- Atualização conforme digitação
+- Validação numérica
+- Interface limpa e intuitiva
+
+### 📁 Estrutura de Arquivos
+
+```
+contratos/pre-projetos/
+├── page.tsx                          # Página principal
+├── README.md                         # Documentação específica
+└── _components/
+    ├── NovoPreProjetoModal.tsx       # Modal de cadastro
+    └── index.ts                      # Exportações
+```
+
+### 🎯 Integração com Sistema Global
+
+- **Modal Global**: Integrado ao `ModalListener`
+- **Eventos**: `pre-projeto-criado` para notificações
+- **NavBar**: Item "Pré-Projetos" no submenu de Contratos
+- **Redirecionamento**: Automático após criação
+
+### 📈 Dados Mock
+
+A página inclui dados de exemplo para demonstração:
+- Sistema de Gestão Acadêmica Integrado (Fapto)
+- Licença Software GoPro Enterprise Premium (Fadex)
+- Portal de Transparência e Controle Social (IFMA)
+- Modernização Infraestrutura TI (Fundação Araucária)
+
 ### Estrutura de Páginas (App Router com Route Groups)
 
 O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rotas públicas (autenticação) das protegidas (dashboard). Esses groups **não aparecem na URL** e servem apenas para organização:
@@ -644,6 +865,7 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 |------|---------|-----------|
 | `/home` | `app/(dashboard)/home/page.tsx` | Dashboard principal com gráficos |
 | `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos com filtros e paginação |
+| `/contratos/pre-projetos` | `app/(dashboard)/contratos/pre-projetos/page.tsx` | Gestão de pré-projetos e pré-contratos |
 | `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Visão Geral do contrato (dashboard resumido) |
 | `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e tabs |
 | `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Gestão de aditivos, OS e subcontratos |
@@ -689,6 +911,9 @@ Para validar o token:
 | **React-Leaflet** | - | Mapas interativos |
 | **GSAP** | - | Animações avançadas |
 | **Lucide React** | - | Ícones |
+| **Custom Events** | - | Sistema de comunicação entre componentes |
+| **File API** | - | Upload e validação de arquivos |
+| **Intl.NumberFormat** | - | Formatação monetária localizada |
 
 ---
 
@@ -706,3 +931,75 @@ Para aprender mais sobre Next.js:
 A forma mais fácil de fazer deploy é usar a [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
 
 Veja a [documentação de deploy](https://nextjs.org/docs/app/building-your-application/deploying) para mais detalhes.
+
+---
+
+## 📋 Changelog - Atualizações Recentes
+
+### 🎯 v2.1.0 - Sistema de Modais e Pré-Projetos (Dezembro 2025)
+
+#### ✨ Novas Funcionalidades
+
+**🎪 Sistema de Modais Globais**
+- Implementação de sistema de eventos customizados para comunicação entre componentes
+- Componente `ModalListener` centralizado para gerenciamento de modais
+- Suporte a abertura de modais de qualquer lugar da aplicação
+- Eventos: `open-modal`, `contrato-criado`, `pre-projeto-criado`
+
+**📝 Modal de Cadastro de Contrato**
+- Modal completo com 8 campos obrigatórios (título, status, coordenador, parceiro, tipo, datas, localidade)
+- Validações em tempo real e feedback visual
+- UX polida: auto-focus, ESC para fechar, click-outside
+- Design responsivo com gradiente institucional
+
+**📋 Página de Pré-Projetos/Pré-Contratos**
+- Nova rota `/contratos/pre-projetos` para gestão de propostas
+- Tabela completa com filtros, busca e ordenação
+- Cards de métricas (Total, Projetos, Produtos, Valor Estimado)
+- Modal de cadastro com formatação monetária automática
+- Upload opcional de 4 tipos de documento (Contrato, TR, Plano de Trabalho, Outro)
+- Validação de arquivos (tipo, tamanho máximo 10MB)
+
+**🧭 Integração com NavBar**
+- Suporte a links `modal:*` no menu de navegação
+- Item "Pré-Projetos" adicionado ao submenu de Contratos
+- Evento customizado para abertura de modais via navegação
+
+#### 🏗️ Arquitetura e Componentes
+
+**Novos Componentes Criados:**
+- `src/components/ModalListener.tsx` - Sistema global de modais
+- `src/app/(dashboard)/contratos/_components/NovoContratoModal.tsx` - Modal de contrato
+- `src/app/(dashboard)/contratos/pre-projetos/page.tsx` - Página de pré-projetos
+- `src/app/(dashboard)/contratos/pre-projetos/_components/NovoPreProjetoModal.tsx` - Modal de pré-projeto
+
+**Arquivos Atualizados:**
+- `components/ui/NavBar.tsx` - Suporte a modais e novo item de menu
+- `src/app/layout.tsx` - Integração do ModalListener global
+
+#### 🎨 Melhorias de UX/UI
+
+- Formatação monetária automática em tempo real (R$ 1.000,00)
+- Validação visual com cores e ícones de erro
+- Badges coloridos para tipos e status
+- Sistema de upload com preview e remoção de arquivos
+- Design responsivo mantendo consistência visual
+- Animações suaves e feedback imediato
+
+#### 🔧 Tecnologias Integradas
+
+- **Custom Events API** - Comunicação desacoplada entre componentes
+- **File API** - Upload e validação de arquivos
+- **Intl.NumberFormat** - Formatação monetária localizada
+- **Event-driven Architecture** - Arquitetura orientada a eventos
+
+#### 📚 Documentação
+
+- README específico para o módulo de pré-projetos
+- Atualização completa da documentação principal
+- Estrutura de pastas atualizada
+- Tabela de rotas protegidas expandida
+
+---
+
+Esta versão estabelece as bases para um sistema modular e escalável de gestão de contratos, com foco em usabilidade e manutenibilidade do código.

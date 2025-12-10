@@ -12,144 +12,112 @@ import {
   X,
   FileText,
   TrendingUp,
-  CheckCircle,
-  PauseCircle,
+  FolderOpen,
   ChevronDown,
   ArrowUpDown,
   Eye,
   Edit,
   Download,
   MoreHorizontal,
+  FileCheck,
 } from "lucide-react";
 
 // Tipos
-type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "DRAFT" | "CANCELADO" | "EM_NEGOCIACAO";
-type ContratoTipo = "PROJETO" | "PRODUTO";
+type PreProjetoTipo = "PROJETO" | "PRODUTO";
 
-type Contrato = {
+type PreProjeto = {
   id: string;
-  codigo: string;
-  nome: string;
-  tipo: ContratoTipo;
-  cliente: string;
+  titulo: string;
+  tipo: PreProjetoTipo;
   parceiro: string;
-  categoria: string;
-  status: ContratoStatus;
+  localidade: string;
   valorTotal: number;
-  dataInicio: string;
-  dataTermino?: string;
-  responsavel: string;
-  uf: string;
+  dataCriacao: string;
+  documentos?: {
+    contrato?: string;
+    tr?: string;
+    planoTrabalho?: string;
+    outro?: string;
+  };
 };
 
 type Filters = {
-  tipo: "TODOS" | ContratoTipo;
-  status: "TODOS" | ContratoStatus;
+  tipo: "TODOS" | PreProjetoTipo;
   parceiro: string;
-  periodoInicio: string;
-  periodoFim: string;
   q: string;
 };
 
 type SortConfig = {
-  key: keyof Contrato | null;
+  key: keyof PreProjeto | null;
   direction: "asc" | "desc";
 };
 
 // Mock de dados
-const mockContratos: Contrato[] = [
+const mockPreProjetos: PreProjeto[] = [
   {
     id: "1",
-    codigo: "PRJ-001",
-    nome: "Sistema de Gestão Integrada",
+    titulo: "Sistema de Gestão Acadêmica Integrado",
     tipo: "PROJETO",
-    cliente: "Universidade Federal de São Paulo",
-    parceiro: "Fundação de Apoio à Pesquisa",
-    categoria: "Desenvolvimento",
-    status: "EM_ANDAMENTO",
-    valorTotal: 1250000,
-    dataInicio: "2025-01-15",
-    dataTermino: "2025-12-31",
-    responsavel: "João Silva",
-    uf: "SP",
+    parceiro: "Fapto",
+    localidade: "Campina Grande - PB",
+    valorTotal: 850000,
+    dataCriacao: "2025-12-01",
+    documentos: {
+      tr: "tr_sistema_gestao.pdf",
+      planoTrabalho: "plano_trabalho_v1.pdf",
+    },
   },
   {
     id: "2",
-    codigo: "PRD-010",
-    nome: "Licença GoPro Enterprise",
+    titulo: "Licença Software GoPro Enterprise Premium",
     tipo: "PRODUTO",
-    cliente: "Org Y",
-    parceiro: "Fundação XYZ",
-    categoria: "Software",
-    status: "CONCLUIDO",
-    valorTotal: 240000,
-    dataInicio: "2025-03-01",
-    dataTermino: "2025-09-01",
-    responsavel: "Maria Santos",
-    uf: "RJ",
+    parceiro: "Fadex",
+    localidade: "Estado do Rio de Janeiro",
+    valorTotal: 320000,
+    dataCriacao: "2025-12-03",
+    documentos: {
+      contrato: "contrato_proposta.pdf",
+    },
   },
   {
     id: "3",
-    codigo: "PRJ-015",
-    nome: "Portal de Transparência",
+    titulo: "Portal de Transparência e Controle Social",
     tipo: "PROJETO",
-    cliente: "Fundação Z",
-    parceiro: "IFES-MG",
-    categoria: "Web",
-    status: "SUSPENSO",
-    valorTotal: 800000,
-    dataInicio: "2025-06-20",
-    responsavel: "Carlos Oliveira",
-    uf: "MG",
+    parceiro: "IFMA",
+    localidade: "São Luís - MA",
+    valorTotal: 1200000,
+    dataCriacao: "2025-12-05",
+    documentos: {
+      tr: "termo_referencia_portal.pdf",
+      planoTrabalho: "plano_trabalho_portal.pdf",
+      outro: "especificacoes_tecnicas.pdf",
+    },
   },
   {
     id: "4",
-    codigo: "PRJ-020",
-    nome: "Modernização de Infraestrutura",
+    titulo: "Modernização Infraestrutura TI",
     tipo: "PROJETO",
-    cliente: "Instituto Federal do Paraná",
     parceiro: "Fundação Araucária",
-    categoria: "Infraestrutura",
-    status: "EM_ANDAMENTO",
-    valorTotal: 2100000,
-    dataInicio: "2025-02-01",
-    dataTermino: "2026-06-30",
-    responsavel: "Ana Costa",
-    uf: "PR",
-  },
-  {
-    id: "5",
-    codigo: "PRD-025",
-    nome: "Suporte Premium Anual",
-    tipo: "PRODUTO",
-    cliente: "Universidade Federal do Rio Grande do Sul",
-    parceiro: "Fundação UFRGS",
-    categoria: "Serviços",
-    status: "EM_NEGOCIACAO",
-    valorTotal: 180000,
-    dataInicio: "2025-04-01",
-    responsavel: "Pedro Mendes",
-    uf: "RS",
+    localidade: "Curitiba - PR",
+    valorTotal: 2500000,
+    dataCriacao: "2025-12-07",
   },
 ];
 
-const parceiros = [...new Set(mockContratos.map((c) => c.parceiro))];
+const parceiros = ["Fapto", "Fadex", "IFMA", "Fundação Araucária", "Fundação UFRGS", "Fundação XYZ"];
 
-export default function ContratosPage() {
+export default function PreProjetosPage() {
   const [filters, setFilters] = useState<Filters>({
     tipo: "TODOS",
-    status: "TODOS",
     parceiro: "",
-    periodoInicio: "",
-    periodoFim: "",
     q: "",
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
-    key: "dataInicio",
+    key: "dataCriacao",
     direction: "desc",
   });
   const [loading, setLoading] = useState(false);
-  const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [preProjetos, setPreProjetos] = useState<PreProjeto[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
@@ -158,60 +126,45 @@ export default function ContratosPage() {
   useEffect(() => {
     setLoading(true);
     const timeout = setTimeout(() => {
-      setContratos(mockContratos);
+      setPreProjetos(mockPreProjetos);
       setLoading(false);
     }, 300);
     return () => clearTimeout(timeout);
   }, []);
 
-  // Listener para quando um contrato for criado (via modal global)
+  // Listener para quando um pré-projeto for criado (via modal global)
   useEffect(() => {
-    const handleContratoCriado = (event: CustomEvent) => {
+    const handlePreProjetoCriado = (event: CustomEvent) => {
       const data = event.detail;
-      
-      // Cria o novo contrato com os dados recebidos
-      const novoContrato: Contrato = {
+
+      const novoPreProjeto: PreProjeto = {
         id: String(Date.now()),
-        codigo: data.tipo === "PROJETO" ? `PRJ-${String(contratos.length + 1).padStart(3, "0")}` : `PRD-${String(contratos.length + 1).padStart(3, "0")}`,
-        nome: data.titulo,
-        tipo: data.tipo as ContratoTipo,
-        cliente: data.localidade,
+        titulo: data.titulo,
+        tipo: data.tipo,
         parceiro: data.parceiro,
-        categoria: "Geral",
-        status: data.status === "A_INICIAR" ? "EM_ANDAMENTO" : data.status === "PENDENCIA" ? "SUSPENSO" : data.status as ContratoStatus,
-        valorTotal: 0,
-        dataInicio: data.dataInicio,
-        dataTermino: data.dataFim || undefined,
-        responsavel: data.coordenador,
-        uf: data.localidade.split(" - ")[1] || "BR",
+        localidade: data.localidade,
+        valorTotal: data.valorTotal,
+        dataCriacao: new Date().toISOString().split("T")[0],
+        documentos: data.documentos,
       };
-      
-      setContratos((prev) => [novoContrato, ...prev]);
+
+      setPreProjetos((prev) => [novoPreProjeto, ...prev]);
     };
 
-    window.addEventListener('contrato-criado', handleContratoCriado as EventListener);
+    window.addEventListener("pre-projeto-criado", handlePreProjetoCriado as EventListener);
     return () => {
-      window.removeEventListener('contrato-criado', handleContratoCriado as EventListener);
+      window.removeEventListener("pre-projeto-criado", handlePreProjetoCriado as EventListener);
     };
-  }, [contratos.length]);
+  }, []);
 
   // Filtragem e ordenação
   const filtered = useMemo(() => {
-    let result = contratos
-      .filter((c) => (filters.tipo === "TODOS" ? true : c.tipo === filters.tipo))
-      .filter((c) => (filters.status === "TODOS" ? true : c.status === filters.status))
-      .filter((c) => (filters.parceiro ? c.parceiro === filters.parceiro : true))
-      .filter((c) => {
-        if (!filters.periodoInicio) return true;
-        return new Date(c.dataInicio) >= new Date(filters.periodoInicio);
-      })
-      .filter((c) => {
-        if (!filters.periodoFim || !c.dataTermino) return true;
-        return new Date(c.dataTermino) <= new Date(filters.periodoFim);
-      })
-      .filter((c) =>
+    let result = preProjetos
+      .filter((p) => (filters.tipo === "TODOS" ? true : p.tipo === filters.tipo))
+      .filter((p) => (filters.parceiro ? p.parceiro === filters.parceiro : true))
+      .filter((p) =>
         filters.q
-          ? `${c.codigo} ${c.nome} ${c.cliente} ${c.responsavel}`
+          ? `${p.titulo} ${p.parceiro} ${p.localidade}`
               .toLowerCase()
               .includes(filters.q.toLowerCase())
           : true
@@ -231,20 +184,16 @@ export default function ContratosPage() {
     }
 
     return result;
-  }, [contratos, filters, sortConfig]);
+  }, [preProjetos, filters, sortConfig]);
 
   // Métricas
   const counts = useMemo(() => {
-    const total = contratos.length;
-    const emExecucao = contratos.filter((c) => c.status === "EM_ANDAMENTO").length;
-    const concluidos = contratos.filter((c) => c.status === "CONCLUIDO").length;
-    const suspensos = contratos.filter((c) => c.status === "SUSPENSO").length;
-    const valorTotal = contratos.reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorEmExecucao = contratos
-      .filter((c) => c.status === "EM_ANDAMENTO")
-      .reduce((acc, c) => acc + c.valorTotal, 0);
-    return { total, emExecucao, concluidos, suspensos, valorTotal, valorEmExecucao };
-  }, [contratos]);
+    const total = preProjetos.length;
+    const projetos = preProjetos.filter((p) => p.tipo === "PROJETO").length;
+    const produtos = preProjetos.filter((p) => p.tipo === "PRODUTO").length;
+    const valorTotal = preProjetos.reduce((acc, p) => acc + p.valorTotal, 0);
+    return { total, projetos, produtos, valorTotal };
+  }, [preProjetos]);
 
   // Paginação
   const paginatedData = useMemo(() => {
@@ -255,7 +204,7 @@ export default function ContratosPage() {
   const totalPages = Math.ceil(filtered.length / pageSize);
 
   // Handlers
-  const handleSort = (key: keyof Contrato) => {
+  const handleSort = (key: keyof PreProjeto) => {
     setSortConfig((prev) => ({
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
@@ -265,22 +214,20 @@ export default function ContratosPage() {
   const clearFilters = () => {
     setFilters({
       tipo: "TODOS",
-      status: "TODOS",
       parceiro: "",
-      periodoInicio: "",
-      periodoFim: "",
       q: "",
     });
     setPage(1);
   };
 
   const hasActiveFilters =
-    filters.tipo !== "TODOS" ||
-    filters.status !== "TODOS" ||
-    filters.parceiro !== "" ||
-    filters.periodoInicio !== "" ||
-    filters.periodoFim !== "" ||
-    filters.q !== "";
+    filters.tipo !== "TODOS" || filters.parceiro !== "" || filters.q !== "";
+
+  const handleOpenModal = () => {
+    window.dispatchEvent(
+      new CustomEvent("open-modal", { detail: { modalName: "novo-pre-projeto" } })
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
@@ -294,50 +241,40 @@ export default function ContratosPage() {
             Home
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-900 font-medium">Contratos</span>
+          <Link href="/contratos" className="hover:text-gray-700">
+            Contratos
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="text-gray-900 font-medium">Pré-Projetos</span>
         </nav>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-            <p className="text-sm text-gray-500">Gestão unificada de Projetos e Produtos</p>
+            <h1 className="text-2xl font-bold text-gray-900">Pré-Projetos</h1>
+            <p className="text-sm text-gray-500">
+              Gerenciamento de propostas antes da formalização
+            </p>
           </div>
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName: 'novo-contrato' } }))}
+            onClick={handleOpenModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Novo Contrato
+            Novo Pré-Projeto
           </button>
         </div>
 
         {/* Cards de Métricas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <MetricCard title="Total de Pré-Projetos" value={counts.total} icon={FolderOpen} color="#004225" />
+          <MetricCard title="Projetos" value={counts.projetos} icon={FileText} color="#0B7A4B" />
+          <MetricCard title="Produtos" value={counts.produtos} icon={FileCheck} color="#00B894" />
           <MetricCard
-            title="Total de Contratos"
-            value={counts.total}
-            icon={FileText}
-            color="#004225"
-          />
-          <MetricCard
-            title="Em Execução"
-            value={counts.emExecucao}
+            title="Valor Total Estimado"
+            value={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
             icon={TrendingUp}
-            color="#0B7A4B"
-            subtitle={`R$ ${counts.valorEmExecucao.toLocaleString("pt-BR")}`}
-          />
-          <MetricCard
-            title="Concluídos"
-            value={counts.concluidos}
-            icon={CheckCircle}
             color="#6D28D9"
-          />
-          <MetricCard
-            title="Suspensos"
-            value={counts.suspensos}
-            icon={PauseCircle}
-            color="#F59E0B"
           />
         </div>
 
@@ -350,7 +287,7 @@ export default function ContratosPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por código, nome, cliente ou responsável..."
+                placeholder="Buscar por título, parceiro ou localidade..."
                 className="w-full h-10 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-transparent"
                 value={filters.q}
                 onChange={(e) => {
@@ -393,15 +330,7 @@ export default function ContratosPage() {
               Filtros
               {hasActiveFilters && (
                 <span className="ml-1 px-1.5 py-0.5 text-xs bg-white text-[#004225] rounded-full">
-                  {
-                    [
-                      filters.tipo !== "TODOS",
-                      filters.status !== "TODOS",
-                      filters.parceiro,
-                      filters.periodoInicio,
-                      filters.periodoFim,
-                    ].filter(Boolean).length
-                  }
+                  {[filters.tipo !== "TODOS", filters.parceiro].filter(Boolean).length}
                 </span>
               )}
               <ChevronDown
@@ -412,29 +341,7 @@ export default function ContratosPage() {
 
           {/* Filtros expandidos */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Status */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                <select
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                  value={filters.status}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, status: e.target.value as Filters["status"] }));
-                    setPage(1);
-                  }}
-                >
-                  <option value="TODOS">Todos os status</option>
-                  <option value="EM_ANDAMENTO">Em Andamento</option>
-                  <option value="CONCLUIDO">Concluído</option>
-                  <option value="SUSPENSO">Suspenso</option>
-                  <option value="EM_NEGOCIACAO">Em Negociação</option>
-                  <option value="DRAFT">Rascunho</option>
-                  <option value="CANCELADO">Cancelado</option>
-                </select>
-              </div>
-
-              {/* Parceiro */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Parceiro</label>
                 <select
@@ -452,38 +359,6 @@ export default function ContratosPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              {/* Período Início */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Data início (de)
-                </label>
-                <input
-                  type="date"
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                  value={filters.periodoInicio}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, periodoInicio: e.target.value }));
-                    setPage(1);
-                  }}
-                />
-              </div>
-
-              {/* Período Fim */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Data término (até)
-                </label>
-                <input
-                  type="date"
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                  value={filters.periodoFim}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, periodoFim: e.target.value }));
-                    setPage(1);
-                  }}
-                />
               </div>
             </div>
           )}
@@ -512,57 +387,52 @@ export default function ContratosPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <Th onClick={() => handleSort("codigo")} sortable>
-                    Código
-                    <SortIcon column="codigo" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("nome")} sortable>
-                    Nome
-                    <SortIcon column="nome" sortConfig={sortConfig} />
+                  <Th onClick={() => handleSort("titulo")} sortable>
+                    Título
+                    <SortIcon column="titulo" sortConfig={sortConfig} />
                   </Th>
                   <Th>Tipo</Th>
-                  <Th onClick={() => handleSort("cliente")} sortable>
-                    Cliente / Parceiro
-                    <SortIcon column="cliente" sortConfig={sortConfig} />
+                  <Th onClick={() => handleSort("parceiro")} sortable>
+                    Parceiro
+                    <SortIcon column="parceiro" sortConfig={sortConfig} />
+                  </Th>
+                  <Th onClick={() => handleSort("localidade")} sortable>
+                    Localidade
+                    <SortIcon column="localidade" sortConfig={sortConfig} />
                   </Th>
                   <Th onClick={() => handleSort("valorTotal")} sortable className="text-right">
-                    Valor Total
+                    Valor Estimado
                     <SortIcon column="valorTotal" sortConfig={sortConfig} />
                   </Th>
-                  <Th>Status</Th>
-                  <Th onClick={() => handleSort("dataInicio")} sortable>
-                    Início
-                    <SortIcon column="dataInicio" sortConfig={sortConfig} />
+                  <Th>Documentos</Th>
+                  <Th onClick={() => handleSort("dataCriacao")} sortable>
+                    Data de Criação
+                    <SortIcon column="dataCriacao" sortConfig={sortConfig} />
                   </Th>
-                  <Th onClick={() => handleSort("dataTermino")} sortable>
-                    Término
-                    <SortIcon column="dataTermino" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Responsável</Th>
                   <Th className="text-center">Ações</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center">
+                    <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                        <span className="text-sm text-gray-500">Carregando contratos...</span>
+                        <span className="text-sm text-gray-500">Carregando pré-projetos...</span>
                       </div>
                     </td>
                   </tr>
                 ) : paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center">
+                    <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <FileText className="h-12 w-12 text-gray-300" />
+                        <FolderOpen className="h-12 w-12 text-gray-300" />
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            Nenhum contrato encontrado
+                            Nenhum pré-projeto encontrado
                           </p>
                           <p className="text-sm text-gray-500">
-                            Tente ajustar os filtros ou criar um novo contrato.
+                            Crie seu primeiro pré-projeto para começar.
                           </p>
                         </div>
                         <div className="flex gap-2 mt-2">
@@ -575,58 +445,47 @@ export default function ContratosPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName: 'novo-contrato' } }))}
+                            onClick={handleOpenModal}
                             className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
                           >
-                            Criar novo contrato
+                            Criar pré-projeto
                           </button>
                         </div>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((contrato) => (
-                    <tr
-                      key={contrato.id}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => (window.location.href = `/contratos/${contrato.id}`)}
-                    >
-                      <Td className="font-mono text-sm">{contrato.codigo}</Td>
-                      <Td className="font-medium text-gray-900 max-w-[200px] truncate">
-                        {contrato.nome}
+                  paginatedData.map((preProjeto) => (
+                    <tr key={preProjeto.id} className="hover:bg-gray-50 transition-colors">
+                      <Td className="font-medium text-gray-900 max-w-[250px]">
+                        <div className="truncate" title={preProjeto.titulo}>
+                          {preProjeto.titulo}
+                        </div>
                       </Td>
                       <Td>
-                        <TipoBadge tipo={contrato.tipo} />
+                        <TipoBadge tipo={preProjeto.tipo} />
                       </Td>
-                      <Td>
-                        <div className="max-w-[180px]">
-                          <p className="text-sm text-gray-900 truncate">{contrato.cliente}</p>
-                          <p className="text-xs text-gray-500 truncate">{contrato.parceiro}</p>
+                      <Td className="text-sm text-gray-600">{preProjeto.parceiro}</Td>
+                      <Td className="text-sm text-gray-600 max-w-[180px]">
+                        <div className="truncate" title={preProjeto.localidade}>
+                          {preProjeto.localidade}
                         </div>
                       </Td>
                       <Td className="text-right font-medium">
-                        R$ {contrato.valorTotal.toLocaleString("pt-BR")}
+                        R$ {preProjeto.valorTotal.toLocaleString("pt-BR")}
                       </Td>
                       <Td>
-                        <StatusBadge status={contrato.status} />
+                        <DocumentosBadge documentos={preProjeto.documentos} />
                       </Td>
-                      <Td className="text-sm text-gray-600">{formatDate(contrato.dataInicio)}</Td>
-                      <Td className="text-sm text-gray-600">
-                        {contrato.dataTermino ? formatDate(contrato.dataTermino) : "—"}
-                      </Td>
-                      <Td className="text-sm text-gray-600">{contrato.responsavel}</Td>
+                      <Td className="text-sm text-gray-600">{formatDate(preProjeto.dataCriacao)}</Td>
                       <Td>
-                        <div
-                          className="flex items-center justify-center gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link
-                            href={`/contratos/${contrato.id}`}
+                        <div className="flex items-center justify-center gap-1">
+                          <button
                             className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
                             title="Ver detalhes"
                           >
                             <Eye className="h-4 w-4" />
-                          </Link>
+                          </button>
                           <button
                             className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
                             title="Editar"
@@ -659,7 +518,7 @@ export default function ContratosPage() {
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
               <span className="text-sm text-gray-600">
                 Mostrando {(page - 1) * pageSize + 1} a{" "}
-                {Math.min(page * pageSize, filtered.length)} de {filtered.length} contratos
+                {Math.min(page * pageSize, filtered.length)} de {filtered.length} pré-projetos
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -718,13 +577,11 @@ function MetricCard({
   value,
   icon: Icon,
   color,
-  subtitle,
 }: {
   title: string;
   value: number | string;
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   color: string;
-  subtitle?: string;
 }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -732,12 +589,8 @@ function MetricCard({
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
         </div>
-        <div
-          className="p-3 rounded-xl"
-          style={{ backgroundColor: `${color}15` }}
-        >
+        <div className="p-3 rounded-xl" style={{ backgroundColor: `${color}15` }}>
           <Icon className="h-6 w-6" style={{ color }} />
         </div>
       </div>
@@ -783,28 +636,7 @@ function SortIcon({ column, sortConfig }: { column: string; sortConfig: SortConf
   );
 }
 
-function StatusBadge({ status }: { status: ContratoStatus }) {
-  const config: Record<ContratoStatus, { bg: string; text: string; label: string }> = {
-    EM_ANDAMENTO: { bg: "bg-blue-100", text: "text-blue-800", label: "Em Andamento" },
-    CONCLUIDO: { bg: "bg-green-100", text: "text-green-800", label: "Concluído" },
-    SUSPENSO: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Suspenso" },
-    DRAFT: { bg: "bg-gray-100", text: "text-gray-800", label: "Rascunho" },
-    CANCELADO: { bg: "bg-red-100", text: "text-red-800", label: "Cancelado" },
-    EM_NEGOCIACAO: { bg: "bg-purple-100", text: "text-purple-800", label: "Em Negociação" },
-  };
-
-  const { bg, text, label } = config[status];
-
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
-    >
-      {label}
-    </span>
-  );
-}
-
-function TipoBadge({ tipo }: { tipo: ContratoTipo }) {
+function TipoBadge({ tipo }: { tipo: PreProjetoTipo }) {
   const isProjeto = tipo === "PROJETO";
   return (
     <span
@@ -813,6 +645,25 @@ function TipoBadge({ tipo }: { tipo: ContratoTipo }) {
       }`}
     >
       {isProjeto ? "Projeto" : "Produto"}
+    </span>
+  );
+}
+
+function DocumentosBadge({ documentos }: { documentos?: PreProjeto["documentos"] }) {
+  if (!documentos) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+
+  const count = Object.values(documentos).filter(Boolean).length;
+
+  if (count === 0) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+      <FileText className="h-3 w-3" />
+      {count} doc{count !== 1 ? "s" : ""}
     </span>
   );
 }

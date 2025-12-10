@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ModalListener } from "../components/ModalListener";
 
 // Configuração da fonte Poppins com todos os pesos
 const poppins = localFont({
@@ -117,6 +118,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`${poppins.variable} font-sans antialiased`}>
         {children}
+        <ModalListener />
       </body>
     </html>
   );

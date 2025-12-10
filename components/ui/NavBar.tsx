@@ -25,6 +25,7 @@ import {
   LogOut,
   User,
   Shield,
+  FileCodeIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,8 @@ const navigationItems: NavItem[] = [
     icon: FolderOpen,
     children: [
       { label: "Todos os Contratos", href: "/contratos", icon: FolderOpen },
-      { label: "Novo Contrato", href: "/contratos/novo", icon: FileText },
+      { label: "Novo Contrato", href: "modal:novo-contrato", icon: FileText },
+      { label: "Pré-Projetos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
       { label: "Relatórios", href: "/contratos/relatorios", icon: BarChart3 },
     ],
   },
@@ -120,6 +122,16 @@ export function NavBar() {
     const hasChildren = item.children && item.children.length > 0;
     const isOpen = openDropdowns.includes(item.label);
 
+    const handleClick = (href: string) => {
+      if (href.startsWith('modal:')) {
+        const modalName = href.replace('modal:', '');
+        // Dispara evento customizado para abrir o modal
+        window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName } }));
+        setOpenDropdowns([]);
+        if (isMobile) setMobileMenuOpen(false);
+      }
+    };
+
     if (hasChildren) {
       return (
         <div className="relative">
@@ -151,38 +163,76 @@ export function NavBar() {
                   : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
               )}
             >
-              {item.children?.map((child, index) => (
-                <Link
-                  key={child.href}
-                  href={child.href || "#"}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
-                    index === 0 ? "pt-4" : "",
-                    index === item.children!.length - 1 ? "pb-4" : ""
-                  )}
-                  onClick={() => setOpenDropdowns([])}
-                >
-                  {child.icon && <child.icon className="h-4 w-4" />}
-                  <span>{child.label}</span>
-                </Link>
-              ))}
+              {item.children?.map((child, index) => {
+                const isModal = child.href?.startsWith('modal:');
+                
+                if (isModal) {
+                  return (
+                    <button
+                      key={child.href}
+                      onClick={() => handleClick(child.href!)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 w-full text-left",
+                        index === 0 ? "pt-4" : "",
+                        index === item.children!.length - 1 ? "pb-4" : ""
+                      )}
+                    >
+                      {child.icon && <child.icon className="h-4 w-4" />}
+                      <span>{child.label}</span>
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href || "#"}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
+                      index === 0 ? "pt-4" : "",
+                      index === item.children!.length - 1 ? "pb-4" : ""
+                    )}
+                    onClick={() => setOpenDropdowns([])}
+                  >
+                    {child.icon && <child.icon className="h-4 w-4" />}
+                    <span>{child.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           )}
 
           {/* Mobile Submenu */}
           {isMobile && isOpen && (
             <div className="ml-6 mt-2 space-y-1 border-l-2 border-zinc-200 pl-4 animate-in slide-in-from-top-2 duration-300">
-              {item.children?.map((child) => (
-                <Link
-                  key={child.href}
-                  href={child.href || "#"}
-                  className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {child.icon && <child.icon className="h-4 w-4" />}
-                  <span>{child.label}</span>
-                </Link>
-              ))}
+              {item.children?.map((child) => {
+                const isModal = child.href?.startsWith('modal:');
+                
+                if (isModal) {
+                  return (
+                    <button
+                      key={child.href}
+                      onClick={() => handleClick(child.href!)}
+                      className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150 w-full text-left"
+                    >
+                      {child.icon && <child.icon className="h-4 w-4" />}
+                      <span>{child.label}</span>
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href || "#"}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {child.icon && <child.icon className="h-4 w-4" />}
+                    <span>{child.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

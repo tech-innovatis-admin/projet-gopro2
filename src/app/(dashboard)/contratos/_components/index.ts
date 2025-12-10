@@ -1,0 +1,1 @@
+export { NovoContratoModal } from "./NovoContratoModal";
