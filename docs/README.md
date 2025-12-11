@@ -128,14 +128,37 @@ gopro-2/
 │   │       │   │       └── index.ts                 # Exportações
 │   │       │   │
 │   │       │   └── [contratoId]/  # Rotas dinâmicas por contrato
-│   │       │       ├── layout.tsx       # Layout compartilhado com tabs
+│   │       │       ├── layout.tsx       # Layout compartilhado com 10 tabs
 │   │       │       ├── page.tsx         # Visão Geral do contrato (/contratos/[id])
 │   │       │       ├── contratacoes/
 │   │       │       │   └── page.tsx     # Contratações (/contratos/[id]/contratacoes)
 │   │       │       ├── execucao/
 │   │       │       │   └── page.tsx     # Execução (/contratos/[id]/execucao)
-│   │       │       └── rubricas/
-│   │       │           └── page.tsx     # Rubricas (/contratos/[id]/rubricas)
+│   │       │       ├── rubricas/
+│   │       │       │   └── page.tsx     # Rubricas (/contratos/[id]/rubricas)
+│   │       │       ├── informacoes/
+│   │       │       │   └── page.tsx     # Informações (/contratos/[id]/informacoes)
+│   │       │       ├── meta-etapa-fase/
+│   │       │       │   └── page.tsx     # Metas, Etapas e Fases (/contratos/[id]/meta-etapa-fase)
+│   │       │       ├── equipe-tecnica/
+│   │       │       │   └── page.tsx     # Equipe Técnica (/contratos/[id]/equipe-tecnica)
+│   │       │       ├── incubadas/
+│   │       │       │   └── page.tsx     # Incubadas (/contratos/[id]/incubadas)
+│   │       │       ├── desembolso/
+│   │       │       │   └── page.tsx     # Desembolso (/contratos/[id]/desembolso)
+│   │       │       ├── arquivos/
+│   │       │       │   └── page.tsx     # Arquivos (/contratos/[id]/arquivos)
+│   │       │       └── editar/          # Página de edição centralizada
+│   │       │           ├── page.tsx     # Container com sidebar vertical
+│   │       │           └── _components/ # Componentes das abas de edição
+│   │       │               ├── InformacoesContratoTab.tsx
+│   │       │               ├── MetaEtapaFaseTab.tsx
+│   │       │               ├── EquipeTecnicaTab.tsx
+│   │       │               ├── IncubadasTab.tsx
+│   │       │               ├── RubricasTab.tsx
+│   │       │               ├── DesembolsoTab.tsx
+│   │       │               ├── ArquivosTab.tsx
+│   │       │               └── index.ts
 │   │       │
 │   │       └── parceiros/   # Gestão de parceiros
 │   │           ├── page.tsx       # Listagem de parceiros (/parceiros)
@@ -468,11 +491,17 @@ Layout compartilhado para todas as sub-páginas de um contrato específico.
    - Período de Execução
    - Valor Total e Executado (com barra de progresso)
 
-4. **Navegação por Tabs:**
-   - Visão Geral
-   - Contratações
-   - Execução
-   - Rubricas
+4. **Navegação por Tabs (10 tabs):**
+   - **Visão Geral** - Dashboard resumido com métricas e movimentações
+   - **Contratações** - Aditivos, OS, termos e subcontratos
+   - **Execução** - Cronograma, marcos e gestão de riscos
+   - **Rubricas** - Orçamento e execução financeira detalhada
+   - **Informações** - Dados básicos do contrato (visualização/edição)
+   - **Metas** - Estrutura hierárquica de metas, etapas e fases
+   - **Equipe** - Membros da equipe técnica e seus papéis
+   - **Incubadas** - Empresas incubadas vinculadas ao projeto
+   - **Desembolso** - Cronograma de pagamentos e parcelas
+   - **Arquivos** - Documentos e arquivos anexados ao contrato
 
 ### 📊 Visão Geral (`/contratos/[contratoId]`)
 
@@ -607,6 +636,166 @@ Gestão orçamentária detalhada por natureza de despesa.
 - Indicadores visuais de execução
 - Alertas de sobrecusto ou subutilização
 
+### 📋 Informações (`/contratos/[contratoId]/informacoes`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/informacoes/page.tsx`
+
+Visualização e edição dos dados básicos do contrato.
+
+**Campos Exibidos:**
+- Código, Título, Tipo, Status
+- Coordenador, Parceiro, Órgão Financiador
+- Segmentos (múltipla seleção)
+- Localidade, Valor Total
+- Datas de Início e Término
+- Descrição
+
+**Funcionalidades:**
+- Modo visualização (read-only)
+- Modo edição com validações
+- Botão "Editar" para alternar entre modos
+- Feedback visual de salvamento
+
+### 🎯 Metas, Etapas e Fases (`/contratos/[contratoId]/meta-etapa-fase`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/meta-etapa-fase/page.tsx`
+
+Estrutura hierárquica de organização do contrato em três níveis.
+
+**Estrutura:**
+- **Metas** → **Etapas** → **Fases**
+- Cada nível pode ter múltiplos itens
+- Datas de início e fim em cada nível
+- Interface expansível/colapsável
+
+**Funcionalidades:**
+- Adicionar/remover metas, etapas e fases
+- Edição inline de títulos
+- Visualização hierárquica aninhada
+- Modo edição com salvamento global
+
+### 👥 Equipe Técnica (`/contratos/[contratoId]/equipe-tecnica`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/equipe-tecnica/page.tsx`
+
+Gestão dos membros da equipe técnica vinculados ao contrato.
+
+**Campos do Membro:**
+- Nome completo, CPF
+- Papel (Coordenador, Vice-Coordenador, Pesquisador, Bolsista, Técnico, etc)
+- Email, Telefone
+- Vínculo institucional
+- Carga horária
+- Avatar (opcional)
+
+**Funcionalidades:**
+- Adicionar/remover membros
+- Modal de cadastro/edição
+- Tabela com informações completas
+- Resumo de carga horária total
+
+### 🏢 Incubadas (`/contratos/[contratoId]/incubadas`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/incubadas/page.tsx`
+
+Gestão de empresas incubadas que realizam serviços no projeto.
+
+**Campos da Empresa:**
+- Razão Social, Nome Fantasia, CNPJ
+- Tipo de Serviço
+- Contato, Email, Telefone
+- Endereço, Cidade, UF
+- Valor do Contrato
+- Datas de Início e Término
+
+**Funcionalidades:**
+- Cards visuais por empresa
+- Modal de cadastro/edição
+- Resumo de valor total contratado
+- Visualização em grid responsivo
+
+### 💸 Desembolso (`/contratos/[contratoId]/desembolso`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/desembolso/page.tsx`
+
+Cronograma de pagamentos e liberação de recursos do contrato.
+
+**Campos da Parcela:**
+- Número, Descrição
+- Rubrica Vinculada
+- Meta Vinculada
+- Data Prevista vs Data Efetiva
+- Valor Previsto vs Valor Liberado
+- Status (Pendente, Liberado, Atrasado, Cancelado)
+
+**Cards de Resumo:**
+- Total de Parcelas
+- Valor Previsto Total
+- Valor Liberado
+- Percentual Liberado (com barra de progresso)
+
+**Funcionalidades:**
+- Adicionar/editar/remover parcelas
+- Edição inline na tabela
+- Marcar como liberado
+- Filtros e ordenação
+
+### 📁 Arquivos (`/contratos/[contratoId]/arquivos`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/arquivos/page.tsx`
+
+Gestão de documentos e arquivos anexados ao contrato.
+
+**Tipos de Arquivo:**
+- Contrato Assinado
+- Plano de Trabalho
+- Termo de Referência
+- Ata de Reunião
+- Relatório Técnico
+- Relatório Financeiro
+- Comprovante de Despesa
+- Outros
+
+**Campos do Arquivo:**
+- Nome, Tipo, Formato
+- Tamanho, Data de Upload
+- Upload por (usuário)
+- Descrição
+
+**Funcionalidades:**
+- Upload de arquivos (máx. 10MB)
+- Filtro por tipo de documento
+- Visualizar e baixar arquivos
+- Remover arquivos (modo edição)
+- Cards de resumo (total, espaço utilizado, contagem por tipo)
+
+### ✏️ Página de Edição (`/contratos/[contratoId]/editar`)
+
+**Arquivo:** `src/app/(dashboard)/contratos/[contratoId]/editar/page.tsx`
+
+Página centralizada para edição completa do contrato com sidebar de navegação vertical.
+
+**Características:**
+- **Não usa o layout.tsx compartilhado** - possui seu próprio layout
+- Sidebar vertical com 7 abas de edição
+- Estado centralizado do contrato
+- Botão "Salvar Alterações" global
+- Rastreamento de mudanças (`hasChanges`)
+
+**Abas de Edição:**
+1. **Informações** - Dados básicos do contrato
+2. **Meta, Etapa e Fase** - Estrutura hierárquica
+3. **Equipe Técnica** - Membros da equipe
+4. **Incubadas** - Empresas vinculadas
+5. **Rubricas** - Orçamento detalhado
+6. **Desembolso** - Cronograma de pagamentos
+7. **Arquivos** - Documentos anexados
+
+**Componentes:**
+- Cada aba é um componente separado em `_components/`
+- Componentes recebem props (`contrato`, `onChange`, `contratoId`)
+- Salvamento unificado via botão global
+
 ### 🏗️ Arquitetura de Componentes do Módulo
 
 ```
@@ -624,14 +813,37 @@ contratos/
 │       └── index.ts                  # Exportações
 │
 └── [contratoId]/
-    ├── layout.tsx                    # Layout com header e tabs
-    ├── page.tsx                      # Visão Geral
+    ├── layout.tsx                    # Layout compartilhado com header e tabs (10 tabs)
+    ├── page.tsx                      # Visão Geral (dashboard resumido)
     ├── contratacoes/
-    │   └── page.tsx                  # Gestão de contratações
+    │   └── page.tsx                  # Gestão de aditivos, OS e subcontratos
     ├── execucao/
-    │   └── page.tsx                  # Cronograma e marcos
-    └── rubricas/
-        └── page.tsx                  # Orçamento detalhado
+    │   └── page.tsx                  # Cronograma, marcos e gestão de riscos
+    ├── rubricas/
+    │   └── page.tsx                  # Orçamento e execução financeira por rubrica
+    ├── informacoes/
+    │   └── page.tsx                  # Dados básicos do contrato (visualização/edição)
+    ├── meta-etapa-fase/
+    │   └── page.tsx                  # Estrutura hierárquica de metas, etapas e fases
+    ├── equipe-tecnica/
+    │   └── page.tsx                  # Membros da equipe técnica do contrato
+    ├── incubadas/
+    │   └── page.tsx                  # Empresas incubadas vinculadas
+    ├── desembolso/
+    │   └── page.tsx                  # Cronograma de pagamentos e parcelas
+    ├── arquivos/
+    │   └── page.tsx                  # Documentos e arquivos anexados
+    └── editar/                        # Página de edição centralizada (NÃO usa layout.tsx)
+        ├── page.tsx                  # Container com sidebar vertical de navegação
+        └── _components/              # Componentes de cada aba de edição
+            ├── InformacoesContratoTab.tsx
+            ├── MetaEtapaFaseTab.tsx
+            ├── EquipeTecnicaTab.tsx
+            ├── IncubadasTab.tsx
+            ├── RubricasTab.tsx
+            ├── DesembolsoTab.tsx
+            ├── ArquivosTab.tsx
+            └── index.ts              # Exportações centralizadas
 ```
 
 **Padrões de Componentes:**
@@ -642,6 +854,8 @@ contratos/
 - `MetricCard`: Card de métrica com ícone e valor
 - `Th` / `Td`: Células de tabela padronizadas
 - Timeline: Componente de linha do tempo
+- Componentes de Tab (`InformacoesContratoTab`, `MetaEtapaFaseTab`, etc): Abas reutilizáveis para página de edição
+- Modais de membro/incubada: Modais para cadastro de equipe e empresas
 
 ### 🎨 Consistência Visual
 
@@ -867,10 +1081,17 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 | `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos com filtros e paginação |
 | `/contratos/pre-projetos` | `app/(dashboard)/contratos/pre-projetos/page.tsx` | Gestão de pré-projetos e pré-contratos |
 | `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Visão Geral do contrato (dashboard resumido) |
-| `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e tabs |
+| `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e 10 tabs |
 | `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Gestão de aditivos, OS e subcontratos |
 | `/contratos/[id]/execucao` | `app/(dashboard)/contratos/[contratoId]/execucao/page.tsx` | Cronograma, marcos e gestão de riscos |
 | `/contratos/[id]/rubricas` | `app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx` | Orçamento e execução financeira por rubrica |
+| `/contratos/[id]/informacoes` | `app/(dashboard)/contratos/[contratoId]/informacoes/page.tsx` | Dados básicos do contrato |
+| `/contratos/[id]/meta-etapa-fase` | `app/(dashboard)/contratos/[contratoId]/meta-etapa-fase/page.tsx` | Estrutura de metas, etapas e fases |
+| `/contratos/[id]/equipe-tecnica` | `app/(dashboard)/contratos/[contratoId]/equipe-tecnica/page.tsx` | Membros da equipe técnica |
+| `/contratos/[id]/incubadas` | `app/(dashboard)/contratos/[contratoId]/incubadas/page.tsx` | Empresas incubadas vinculadas |
+| `/contratos/[id]/desembolso` | `app/(dashboard)/contratos/[contratoId]/desembolso/page.tsx` | Cronograma de pagamentos |
+| `/contratos/[id]/arquivos` | `app/(dashboard)/contratos/[contratoId]/arquivos/page.tsx` | Documentos anexados |
+| `/contratos/[id]/editar` | `app/(dashboard)/contratos/[contratoId]/editar/page.tsx` | Página de edição centralizada (sidebar vertical) |
 | `/parceiros` | `app/(dashboard)/parceiros/page.tsx` | Listagem de parceiros |
 | `/parceiros/fundacoes` | `app/(dashboard)/parceiros/fundacoes/page.tsx` | Fundações parceiras |
 | `/parceiros/ifes` | `app/(dashboard)/parceiros/ifes/page.tsx` | IFES parceiras |
@@ -894,6 +1115,37 @@ Para validar o token:
 1. O middleware verifica se existe um cookie `token` ou header `Authorization: Bearer <token>`
 2. Se não houver, redireciona para `/login`
 3. TODO: Implementar validação de JWT no middleware para verificar a validade do token
+
+---
+
+## 📊 Dados Fictícios (Mock Data)
+
+**⚠️ IMPORTANTE**: Todos os dados atualmente exibidos na plataforma são fictícios e utilizados apenas para fins de demonstração e desenvolvimento.
+
+### 🎯 Propósito dos Dados Mock
+- **Demonstração**: Apresentar funcionalidades da plataforma com dados realistas
+- **Desenvolvimento**: Facilitar testes de interface e fluxo de usuário
+- **Documentação**: Ilustrar casos de uso e cenários possíveis
+
+### 📋 Dados Incluídos
+- **Contratos**: 116 contratos fictícios com valores, status e tipos variados
+- **Pré-Projetos**: Propostas em elaboração com dados simulados
+- **Parceiros**: Instituições fictícias (IFES, Fundações) para demonstração
+- **Métricas**: Valores monetários, percentuais e contadores simulados
+- **Gráficos**: Dados estatísticos gerados para visualizações
+- **Geolocalização**: Marcadores fictícios no mapa
+
+### 🔄 Próximos Passos
+- **Integração com BD**: Substituir mocks por conexão com banco de dados real
+- **API Backend**: Implementar endpoints para CRUD de dados reais
+- **Seeds**: Criar seeds realistas baseados em dados históricos
+- **Validação**: Implementar regras de negócio e validações de dados
+
+### 💡 Como Identificar Dados Fictícios
+- Valores monetários seguem padrões previsíveis (ex: R$ 19.247.850,00)
+- Nomes de projetos seguem convenções fictícias
+- Datas são geradas para demonstração
+- Quantidades seguem padrões demonstrativos (116 contratos, 28 pré-projetos)
 
 ---
 

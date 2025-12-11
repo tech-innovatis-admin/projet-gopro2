@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Home,
   FileText,
-  Edit,
   Download,
   MoreHorizontal,
   Building2,
@@ -70,6 +69,36 @@ export default function ContratoLayout({
       href: `/contratos/${contratoId}/rubricas`,
       description: "Orçamento e execução financeira",
     },
+    {
+      label: "Informações",
+      href: `/contratos/${contratoId}/informacoes`,
+      description: "Dados básicos do contrato",
+    },
+    {
+      label: "Metas",
+      href: `/contratos/${contratoId}/meta-etapa-fase`,
+      description: "Estrutura de metas e entregas",
+    },
+    {
+      label: "Equipe",
+      href: `/contratos/${contratoId}/equipe-tecnica`,
+      description: "Membros e papéis",
+    },
+    {
+      label: "Incubadas",
+      href: `/contratos/${contratoId}/incubadas`,
+      description: "Empresas vinculadas",
+    },
+    {
+      label: "Desembolso",
+      href: `/contratos/${contratoId}/desembolso`,
+      description: "Cronograma de pagamentos",
+    },
+    {
+      label: "Arquivos",
+      href: `/contratos/${contratoId}/arquivos`,
+      description: "Documentos anexados",
+    },
   ];
 
   const isActiveTab = (href: string) => {
@@ -123,13 +152,6 @@ export default function ContratoLayout({
 
             {/* Ações */}
             <div className="flex items-center gap-2">
-              <Link
-                href={`/contratos/${contratoId}/editar`}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Edit className="h-4 w-4" />
-                Editar
-              </Link>
               <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 <Download className="h-4 w-4" />
                 Exportar

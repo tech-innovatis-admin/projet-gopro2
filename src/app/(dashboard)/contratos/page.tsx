@@ -21,6 +21,7 @@ import {
   Download,
   MoreHorizontal,
 } from "lucide-react";
+import { ResizableTable } from "@/components/ui/resizable-table";
 
 // Tipos
 type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "DRAFT" | "CANCELADO" | "EM_NEGOCIACAO";
@@ -508,40 +509,55 @@ export default function ContratosPage() {
 
         {/* Tabela */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <Th onClick={() => handleSort("codigo")} sortable>
-                    Código
-                    <SortIcon column="codigo" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("nome")} sortable>
-                    Nome
-                    <SortIcon column="nome" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Tipo</Th>
-                  <Th onClick={() => handleSort("cliente")} sortable>
-                    Cliente / Parceiro
-                    <SortIcon column="cliente" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("valorTotal")} sortable className="text-right">
-                    Valor Total
-                    <SortIcon column="valorTotal" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Status</Th>
-                  <Th onClick={() => handleSort("dataInicio")} sortable>
-                    Início
-                    <SortIcon column="dataInicio" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("dataTermino")} sortable>
-                    Término
-                    <SortIcon column="dataTermino" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Responsável</Th>
-                  <Th className="text-center">Ações</Th>
-                </tr>
-              </thead>
+          <ResizableTable
+            columnCount={10}
+            defaultWidths={[
+              120, // Código
+              200, // Nome
+              100, // Tipo
+              220, // Cliente / Parceiro
+              140, // Valor Total
+              130, // Status
+              110, // Início
+              110, // Término
+              150, // Responsável
+              140, // Ações
+            ]}
+            minColumnWidth={80}
+            className="divide-y divide-gray-200"
+          >
+            <thead className="bg-gray-50">
+              <tr>
+                <Th onClick={() => handleSort("codigo")} sortable className="text-center">
+                  Código
+                  <SortIcon column="codigo" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("nome")} sortable className="text-center">
+                  Nome
+                  <SortIcon column="nome" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Tipo</Th>
+                <Th onClick={() => handleSort("cliente")} sortable className="text-center">
+                  Cliente / Parceiro
+                  <SortIcon column="cliente" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("valorTotal")} sortable className="text-center">
+                  Valor Total
+                  <SortIcon column="valorTotal" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Status</Th>
+                <Th onClick={() => handleSort("dataInicio")} sortable className="text-center">
+                  Início
+                  <SortIcon column="dataInicio" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("dataTermino")} sortable className="text-center">
+                  Término
+                  <SortIcon column="dataTermino" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Responsável</Th>
+                <Th className="text-center">Ações</Th>
+              </tr>
+            </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {loading ? (
                   <tr>
@@ -651,8 +667,7 @@ export default function ContratosPage() {
                   ))
                 )}
               </tbody>
-            </table>
-          </div>
+          </ResizableTable>
 
           {/* Paginação */}
           {!loading && filtered.length > 0 && (
@@ -758,12 +773,12 @@ function Th({
 }) {
   return (
     <th
-      className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${
+      className={`px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider ${
         sortable ? "cursor-pointer hover:bg-gray-100 select-none" : ""
       } ${className}`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-1">{children}</div>
+      <div className="flex items-center justify-center gap-1">{children}</div>
     </th>
   );
 }

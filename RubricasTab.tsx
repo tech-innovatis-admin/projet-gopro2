@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle } from 'lucide-react';
 
+// Props
+interface RubricasTabProps {
+  contratoId?: string;
+}
+
 // Tipos
 interface ItemRubrica {
   id: string;
@@ -104,16 +109,16 @@ const rubricasMock: Rubrica[] = [
   },
 ];
 
-export default function RubricasPage() {
+export default function RubricasTab({ contratoId }: RubricasTabProps) {
   const [rubricas, setRubricas] = useState<Rubrica[]>(rubricasMock);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ItemRubrica | null>(null);
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>({
     descricao: '',
+    finalidade: '',
     cnpjDestinacao: '',
     quantidade: 1,
-    meses: 1,
     valorUnitario: 0,
   });
 
@@ -283,7 +288,7 @@ export default function RubricasPage() {
                       r.id === rubrica.id ? { ...r, expanded: true } : r
                     ));
                   }}
-                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319]"
+                  className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4" />
                   Novo Item
@@ -513,7 +518,7 @@ export default function RubricasPage() {
                   <div className="flex justify-center py-2">
                     <button
                       onClick={() => setAddingToRubrica(rubrica.id)}
-                      className="flex items-center gap-1 px-4 py-2 text-[#004225] hover:bg-emerald-50 rounded-md text-sm"
+                      className="flex items-center gap-1 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-md text-sm"
                     >
                       <Plus className="w-4 h-4" />
                       Adicionar primeiro item

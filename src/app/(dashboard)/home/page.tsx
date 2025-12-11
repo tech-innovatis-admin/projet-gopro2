@@ -14,7 +14,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-zinc-900 mb-2">
-                  Bem-vindo a GoPro2
+                  Bem-vindo à GoPro2
                 </h1>
                 <p className="text-zinc-600">
                   Gerenciar com eficiência e inteligência
