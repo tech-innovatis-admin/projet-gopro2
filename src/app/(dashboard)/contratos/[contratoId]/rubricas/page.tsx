@@ -119,6 +119,8 @@ export default function RubricasPage() {
     meses: 1,
     valorUnitario: 0,
   });
+  const [isAddingRubrica, setIsAddingRubrica] = useState(false);
+  const [newRubrica, setNewRubrica] = useState({ codigo: '', nome: '' });
 
   // Formatar moeda
   const formatCurrency = (value: number) => {
@@ -232,10 +234,40 @@ export default function RubricasPage() {
     }));
   };
 
+  // Adicionar nova rubrica
+  const handleAddRubrica = () => {
+    if (!newRubrica.codigo.trim() || !newRubrica.nome.trim()) return;
+
+    const novaRubrica: Rubrica = {
+      id: String(Date.now()),
+      codigo: newRubrica.codigo.toUpperCase(),
+      nome: newRubrica.nome,
+      itens: [],
+      expanded: true,
+    };
+
+    setRubricas([...rubricas, novaRubrica]);
+    setNewRubrica({ codigo: '', nome: '' });
+    setIsAddingRubrica(false);
+  };
+
+  // Cancelar adição de rubrica
+  const handleCancelAddRubrica = () => {
+    setNewRubrica({ codigo: '', nome: '' });
+    setIsAddingRubrica(false);
+  };
+
+  // Remover rubrica
+  const handleRemoveRubrica = (rubricaId: string) => {
+    if (confirm('Tem certeza que deseja remover esta rubrica? Todos os itens serão removidos.')) {
+      setRubricas(rubricas.filter(r => r.id !== rubricaId));
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header com total geral */}
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
           <p className="text-sm text-gray-500">
@@ -243,12 +275,73 @@ export default function RubricasPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-blue-50 px-4 py-2 rounded-lg">
-            <p className="text-sm text-blue-600 font-medium">Total Geral</p>
-            <p className="text-xl font-bold text-blue-700">{formatCurrency(calcularTotalGeral())}</p>
-          </div>
+          {!isAddingRubrica && (
+            <button
+              onClick={() => setIsAddingRubrica(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#004225] text-white text-sm font-medium rounded-lg hover:bg-[#003319] transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nova Rubrica
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Formulário para adicionar nova rubrica */}
+      {isAddingRubrica && (
+        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Plus className="w-5 h-5 text-emerald-700" />
+            <h4 className="font-medium text-emerald-900">Nova Rubrica</h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Código <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newRubrica.codigo}
+                onChange={(e) => setNewRubrica({ ...newRubrica, codigo: e.target.value.toUpperCase() })}
+                placeholder="Ex: MC, PP, OST-PJ"
+                className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                maxLength={20}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Nome <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newRubrica.nome}
+                onChange={(e) => setNewRubrica({ ...newRubrica, nome: e.target.value })}
+                placeholder="Ex: Material de Consumo"
+                className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                maxLength={100}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAddRubrica}
+              disabled={!newRubrica.codigo.trim() || !newRubrica.nome.trim()}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check className="w-4 h-4" />
+              Criar Rubrica
+            </button>
+            <button
+              onClick={handleCancelAddRubrica}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Lista de Rubricas */}
       <div className="space-y-4">
@@ -258,11 +351,11 @@ export default function RubricasPage() {
             className="border border-gray-200 rounded-lg overflow-hidden"
           >
             {/* Header da Rubrica */}
-            <div
-              className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
-              onClick={() => toggleExpand(rubrica.id)}
-            >
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100">
+              <div 
+                className="flex items-center gap-3 flex-1 cursor-pointer"
+                onClick={() => toggleExpand(rubrica.id)}
+              >
                 {rubrica.expanded ? (
                   <ChevronDown className="w-5 h-5 text-gray-500" />
                 ) : (
@@ -288,10 +381,20 @@ export default function RubricasPage() {
                       r.id === rubrica.id ? { ...r, expanded: true } : r
                     ));
                   }}
-                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319]"
+                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319] transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   Novo Item
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveRubrica(rubrica.id);
+                  }}
+                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  title="Remover rubrica"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>

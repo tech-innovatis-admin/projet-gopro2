@@ -15,7 +15,10 @@ import {
   File,
   FileSpreadsheet,
   Image,
+  Plus,
 } from "lucide-react";
+import { NovoArquivoModal } from "./_components/NovoArquivoModal";
+import { EditarArquivoModal } from "./_components/EditarArquivoModal";
 
 // Tipos
 type TipoArquivo =
@@ -28,7 +31,7 @@ type TipoArquivo =
   | "COMPROVANTE_DESPESA"
   | "OUTROS";
 
-interface Arquivo {
+export interface Arquivo {
   id: string;
   nome: string;
   tipo: TipoArquivo;
@@ -39,6 +42,8 @@ interface Arquivo {
   descricao: string;
   url: string;
 }
+
+export type { TipoArquivo };
 
 // Labels dos tipos
 const tipoLabels: Record<TipoArquivo, string> = {
@@ -125,7 +130,7 @@ const arquivosMock: Arquivo[] = [
 
 // Formatos aceitos
 const formatosAceitos = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
-const tamanhoMaximo = 10 * 1024 * 1024; // 10MB
+const tamanhoMaximo = 100 * 1024 * 1024; // 100MB
 
 // Formatar tamanho
 const formatFileSize = (bytes: number) => {
@@ -169,19 +174,11 @@ export default function ArquivosPage() {
   const [arquivos, setArquivos] = useState<Arquivo[]>(arquivosMock);
   const [editArquivos, setEditArquivos] = useState<Arquivo[]>(arquivosMock);
   const [filtroTipo, setFiltroTipo] = useState<TipoArquivo | "TODOS">("TODOS");
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadForm, setUploadForm] = useState<{
-    tipo: TipoArquivo;
-    descricao: string;
-    file: File | null;
-  }>({
-    tipo: "OUTROS",
-    descricao: "",
-    file: null,
-  });
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isNovoArquivoModalOpen, setIsNovoArquivoModalOpen] = useState(false);
+  const [arquivoParaEditar, setArquivoParaEditar] = useState<Arquivo | null>(null);
+  const [isEditarArquivoModalOpen, setIsEditarArquivoModalOpen] = useState(false);
 
   const handleEdit = () => {
     setEditArquivos(JSON.parse(JSON.stringify(arquivos)));
@@ -191,8 +188,6 @@ export default function ArquivosPage() {
   const handleCancel = () => {
     setEditArquivos(JSON.parse(JSON.stringify(arquivos)));
     setIsEditing(false);
-    setIsUploading(false);
-    setUploadForm({ tipo: "OUTROS", descricao: "", file: null });
   };
 
   const handleSave = async () => {
@@ -201,45 +196,8 @@ export default function ArquivosPage() {
     setArquivos(JSON.parse(JSON.stringify(editArquivos)));
     setIsSaving(false);
     setIsEditing(false);
-    setIsUploading(false);
     setSavedMessage(true);
     setTimeout(() => setSavedMessage(false), 3000);
-  };
-
-  // Handle file selection
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > tamanhoMaximo) {
-        alert("Arquivo muito grande. Tamanho máximo: 10MB");
-        return;
-      }
-      setUploadForm({ ...uploadForm, file });
-    }
-  };
-
-  // Handle upload
-  const handleUpload = () => {
-    if (!uploadForm.file) return;
-
-    const novoArquivo: Arquivo = {
-      id: Date.now().toString(),
-      nome: uploadForm.file.name,
-      tipo: uploadForm.tipo,
-      tamanho: uploadForm.file.size,
-      formato: uploadForm.file.name.split(".").pop() || "",
-      dataUpload: new Date().toISOString().split("T")[0],
-      uploadPor: "Usuário Atual",
-      descricao: uploadForm.descricao,
-      url: "#",
-    };
-
-    setEditArquivos([novoArquivo, ...editArquivos]);
-    setUploadForm({ tipo: "OUTROS", descricao: "", file: null });
-    setIsUploading(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   };
 
   // Handle delete
@@ -249,6 +207,57 @@ export default function ArquivosPage() {
     }
   };
 
+  // Handle novo arquivo
+  const handleNovoArquivo = async (formData: { tipo: TipoArquivo; arquivo: File | null; descricao: string }) => {
+    if (!formData.arquivo) return;
+
+    const novoArquivo: Arquivo = {
+      id: Date.now().toString(),
+      nome: formData.arquivo.name,
+      tipo: formData.tipo,
+      tamanho: formData.arquivo.size,
+      formato: formData.arquivo.name.split(".").pop() || "",
+      dataUpload: new Date().toISOString().split("T")[0],
+      uploadPor: "Usuário Atual",
+      descricao: formData.descricao,
+      url: "#",
+    };
+
+    if (isEditing) {
+      setEditArquivos([novoArquivo, ...editArquivos]);
+    } else {
+      setArquivos([novoArquivo, ...arquivos]);
+    }
+    setIsNovoArquivoModalOpen(false);
+  };
+
+  // Handle editar arquivo
+  const handleEditarArquivo = async (data: { id: string; tipo: TipoArquivo; arquivo: File | null; descricao: string }) => {
+    const arquivoAtualizado = editArquivos.find(a => a.id === data.id);
+    if (!arquivoAtualizado) return;
+
+    const arquivoEditado: Arquivo = {
+      ...arquivoAtualizado,
+      tipo: data.tipo,
+      descricao: data.descricao,
+      ...(data.arquivo && {
+        nome: data.arquivo.name,
+        tamanho: data.arquivo.size,
+        formato: data.arquivo.name.split(".").pop() || "",
+      }),
+    };
+
+    setEditArquivos(editArquivos.map(a => a.id === data.id ? arquivoEditado : a));
+    setIsEditarArquivoModalOpen(false);
+    setArquivoParaEditar(null);
+  };
+
+  // Abrir modal de edição
+  const handleOpenEditarArquivo = (arquivo: Arquivo) => {
+    setArquivoParaEditar(arquivo);
+    setIsEditarArquivoModalOpen(true);
+  };
+
   // Dados a exibir
   const currentArquivos = isEditing ? editArquivos : arquivos;
   const arquivosFiltrados =
@@ -256,14 +265,6 @@ export default function ArquivosPage() {
       ? currentArquivos
       : currentArquivos.filter((a) => a.tipo === filtroTipo);
 
-  // Contagem por tipo
-  const contagemPorTipo = currentArquivos.reduce((acc, a) => {
-    acc[a.tipo] = (acc[a.tipo] || 0) + 1;
-    return acc;
-  }, {} as Record<TipoArquivo, number>);
-
-  // Tamanho total
-  const tamanhoTotal = currentArquivos.reduce((acc, a) => acc + a.tamanho, 0);
 
   return (
     <div className="space-y-6">
@@ -277,234 +278,53 @@ export default function ArquivosPage() {
             Arquivos e documentos vinculados a este contrato
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           {savedMessage && (
             <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
               <CheckCircle className="h-4 w-4" />
               Salvo com sucesso!
             </div>
           )}
-          {!isEditing ? (
-            <button
-              onClick={handleEdit}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-            >
-              <Edit className="h-4 w-4" />
-              Editar
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={handleCancel}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <X className="h-4 w-4" />
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {isSaving ? "Salvando..." : "Salvar"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Cards de resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-500">Total de Arquivos</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {currentArquivos.length}
-          </p>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-500">Espaço Utilizado</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatFileSize(tamanhoTotal)}
-          </p>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-500">Contratos</p>
-          <p className="text-2xl font-bold text-purple-600">
-            {contagemPorTipo["CONTRATO_ASSINADO"] || 0}
-          </p>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-500">Relatórios</p>
-          <p className="text-2xl font-bold text-blue-600">
-            {(contagemPorTipo["RELATORIO_TECNICO"] || 0) +
-              (contagemPorTipo["RELATORIO_FINANCEIRO"] || 0)}
-          </p>
-        </div>
-      </div>
-
-      {/* Filtros por tipo (cards) */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <button
-          onClick={() => setFiltroTipo("TODOS")}
-          className={`p-3 rounded-lg border text-left transition-colors ${
-            filtroTipo === "TODOS"
-              ? "bg-blue-50 border-blue-300"
-              : "bg-white border-gray-200 hover:bg-gray-50"
-          }`}
-        >
-          <p className="text-xl font-bold text-gray-900">
-            {currentArquivos.length}
-          </p>
-          <p className="text-xs text-gray-600">Todos</p>
-        </button>
-        {Object.entries(tipoLabels)
-          .slice(0, 4)
-          .map(([tipo, label]) => (
-            <button
-              key={tipo}
-              onClick={() => setFiltroTipo(tipo as TipoArquivo)}
-              className={`p-3 rounded-lg border text-left transition-colors ${
-                filtroTipo === tipo
-                  ? "bg-blue-50 border-blue-300"
-                  : "bg-white border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              <p className="text-xl font-bold text-gray-900">
-                {contagemPorTipo[tipo as TipoArquivo] || 0}
-              </p>
-              <p className="text-xs text-gray-600 truncate">{label}</p>
-            </button>
-          ))}
-      </div>
-
-      {/* Botão Upload (só em modo edição) */}
-      {isEditing && !isUploading && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => setIsUploading(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-          >
-            <Upload className="h-4 w-4" />
-            Upload de Arquivo
-          </button>
-        </div>
-      )}
-
-      {/* Form de upload */}
-      {isEditing && isUploading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="font-medium text-blue-900">Novo Upload</h4>
-            <button
-              onClick={() => {
-                setIsUploading(false);
-                setUploadForm({ tipo: "OUTROS", descricao: "", file: null });
-              }}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipo de Documento *
-              </label>
-              <select
-                value={uploadForm.tipo}
-                onChange={(e) =>
-                  setUploadForm({
-                    ...uploadForm,
-                    tipo: e.target.value as TipoArquivo,
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                {Object.entries(tipoLabels).map(([tipo, label]) => (
-                  <option key={tipo} value={tipo}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Arquivo *
-              </label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={formatosAceitos}
-                onChange={handleFileSelect}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Formatos: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG. Máx: 10MB
-              </p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descrição
-              </label>
-              <input
-                type="text"
-                value={uploadForm.descricao}
-                onChange={(e) =>
-                  setUploadForm({ ...uploadForm, descricao: e.target.value })
-                }
-                placeholder="Breve descrição do documento (opcional)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
-          </div>
-
-          {uploadForm.file && (
-            <div className="mt-4 p-3 bg-white rounded-lg border border-gray-200">
-              <div className="flex items-center gap-3">
-                {getFileIcon(uploadForm.file.name.split(".").pop() || "")}
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">
-                    {uploadForm.file.name}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {formatFileSize(uploadForm.file.size)}
-                  </p>
-                </div>
+          <div className="flex items-center gap-3">
+            {!isEditing ? (
+              <>
                 <button
-                  onClick={() => {
-                    setUploadForm({ ...uploadForm, file: null });
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  className="text-red-500 hover:text-red-700"
+                  onClick={() => setIsNovoArquivoModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <Plus className="h-4 w-4" />
+                  Arquivo
                 </button>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              onClick={() => {
-                setIsUploading(false);
-                setUploadForm({ tipo: "OUTROS", descricao: "", file: null });
-              }}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleUpload}
-              disabled={!uploadForm.file}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Adicionar Arquivo
-            </button>
+                <button
+                  onClick={handleEdit}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Editar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSaving ? "Salvando..." : "Salvar"}
+                </button>
+              </>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Filtro dropdown adicional */}
       <div className="flex items-center gap-4">
@@ -539,14 +359,6 @@ export default function ArquivosPage() {
               className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
             >
               Limpar filtro
-            </button>
-          )}
-          {isEditing && filtroTipo === "TODOS" && (
-            <button
-              onClick={() => setIsUploading(true)}
-              className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
-            >
-              + Fazer upload do primeiro arquivo
             </button>
           )}
         </div>
@@ -608,19 +420,46 @@ export default function ArquivosPage() {
                   <Download className="w-5 h-5" />
                 </button>
                 {isEditing && (
-                  <button
-                    onClick={() => handleDelete(arquivo.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleOpenEditarArquivo(arquivo)}
+                      className="p-2 text-[#004225] hover:bg-emerald-50 rounded-lg"
+                      title="Editar"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(arquivo.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Modal Novo Arquivo */}
+      <NovoArquivoModal
+        isOpen={isNovoArquivoModalOpen}
+        onClose={() => setIsNovoArquivoModalOpen(false)}
+        onSubmit={handleNovoArquivo}
+      />
+
+      {/* Modal Editar Arquivo */}
+      <EditarArquivoModal
+        isOpen={isEditarArquivoModalOpen}
+        onClose={() => {
+          setIsEditarArquivoModalOpen(false);
+          setArquivoParaEditar(null);
+        }}
+        arquivo={arquivoParaEditar}
+        onSubmit={handleEditarArquivo}
+      />
     </div>
   );
 }

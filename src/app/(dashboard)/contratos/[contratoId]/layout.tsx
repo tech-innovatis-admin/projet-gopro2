@@ -69,14 +69,14 @@ export default function ContratoLayout({
       description: "Resumo e informações principais",
     },
     {
-      label: "Contratações",
-      href: `/contratos/${contratoId}/contratacoes`,
-      description: "Aditivos, OS e contratos vinculados",
-    },
-    {
       label: "Execução",
       href: `/contratos/${contratoId}/execucao`,
       description: "Cronograma, marcos e entregas",
+    },
+    {
+      label: "Metas",
+      href: `/contratos/${contratoId}/meta-etapa-fase`,
+      description: "Estrutura de metas e entregas",
     },
     {
       label: "Rubricas",
@@ -84,14 +84,14 @@ export default function ContratoLayout({
       description: "Orçamento e execução financeira",
     },
     {
-      label: "Informações",
-      href: `/contratos/${contratoId}/informacoes`,
-      description: "Dados básicos do contrato",
+      label: "Desembolso",
+      href: `/contratos/${contratoId}/desembolso`,
+      description: "Cronograma de pagamentos",
     },
     {
-      label: "Metas",
-      href: `/contratos/${contratoId}/meta-etapa-fase`,
-      description: "Estrutura de metas e entregas",
+      label: "Contratações",
+      href: `/contratos/${contratoId}/contratacoes`,
+      description: "Aditivos, OS e contratos vinculados",
     },
     {
       label: "Equipe",
@@ -102,11 +102,6 @@ export default function ContratoLayout({
       label: "Incubadas",
       href: `/contratos/${contratoId}/incubadas`,
       description: "Empresas vinculadas",
-    },
-    {
-      label: "Desembolso",
-      href: `/contratos/${contratoId}/desembolso`,
-      description: "Cronograma de pagamentos",
     },
     {
       label: "Arquivos",
