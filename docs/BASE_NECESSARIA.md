@@ -1,0 +1,1 @@
+# Esse arquivo serve para indicar todas as variáveis que o projeto está pronto para receber, pois atualmente ela está usando um muck de variáveis e valores fictícios

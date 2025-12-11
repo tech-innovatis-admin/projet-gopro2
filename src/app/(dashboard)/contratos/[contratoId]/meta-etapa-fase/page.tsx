@@ -110,6 +110,8 @@ export default function MetaEtapaFasePage() {
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set(["1-1"]));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editingDate, setEditingDate] = useState<{ id: string; type: "meta" | "etapa" | "fase"; field: "dataInicio" | "dataFim"; ids: string[] } | null>(null);
+  const [editDateValue, setEditDateValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
 
@@ -122,6 +124,8 @@ export default function MetaEtapaFasePage() {
     setEditMetas(JSON.parse(JSON.stringify(metas)));
     setEditingId(null);
     setEditValue("");
+    setEditingDate(null);
+    setEditDateValue("");
     setIsEditing(false);
   };
 
@@ -287,6 +291,71 @@ export default function MetaEtapaFasePage() {
     setEditValue("");
   };
 
+  // Funções para editar datas
+  const startEditDate = (type: "meta" | "etapa" | "fase", field: "dataInicio" | "dataFim", ids: string[], currentValue?: string) => {
+    setEditingDate({ id: ids[ids.length - 1], type, field, ids });
+    // Converter data ISO para formato do input (YYYY-MM-DD)
+    if (currentValue) {
+      setEditDateValue(currentValue);
+    } else {
+      setEditDateValue("");
+    }
+  };
+
+  const saveEditDate = () => {
+    if (!editingDate) return;
+
+    const { type, field, ids } = editingDate;
+    const newValue = editDateValue || undefined;
+
+    if (type === "meta") {
+      setEditMetas((prev) =>
+        prev.map((m) => (m.id === ids[0] ? { ...m, [field]: newValue } : m))
+      );
+    } else if (type === "etapa") {
+      setEditMetas((prev) =>
+        prev.map((m) =>
+          m.id === ids[0]
+            ? {
+                ...m,
+                etapas: m.etapas.map((e) =>
+                  e.id === ids[1] ? { ...e, [field]: newValue } : e
+                ),
+              }
+            : m
+        )
+      );
+    } else if (type === "fase") {
+      setEditMetas((prev) =>
+        prev.map((m) =>
+          m.id === ids[0]
+            ? {
+                ...m,
+                etapas: m.etapas.map((e) =>
+                  e.id === ids[1]
+                    ? {
+                        ...e,
+                        fases: e.fases.map((f) =>
+                          f.id === ids[2] ? { ...f, [field]: newValue } : f
+                        ),
+                      }
+                    : e
+                ),
+              }
+            : m
+        )
+      );
+    }
+
+    setEditingDate(null);
+    setEditDateValue("");
+  };
+
+  const cancelEditDate = () => {
+    setEditingDate(null);
+    setEditDateValue("");
+  };
+
   // Modo de visualização (read-only)
   const currentMetas = isEditing ? editMetas : metas;
 
@@ -440,10 +509,86 @@ export default function MetaEtapaFasePage() {
                     )}
                   </>
                 )}
-                {meta.dataInicio && meta.dataFim && (
-                  <span className="text-xs text-gray-500">
-                    {formatDate(meta.dataInicio)} - {formatDate(meta.dataFim)}
-                  </span>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    {editingDate?.id === meta.id && editingDate?.field === "dataInicio" ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          value={editDateValue}
+                          onChange={(e) => setEditDateValue(e.target.value)}
+                          className="px-2 py-1 text-xs border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditDate();
+                            if (e.key === "Escape") cancelEditDate();
+                          }}
+                        />
+                        <button
+                          onClick={saveEditDate}
+                          className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                        >
+                          <Check className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={cancelEditDate}
+                          className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditDate("meta", "dataInicio", [meta.id], meta.dataInicio)}
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-emerald-100 px-2 py-1 rounded"
+                        title="Editar data de início"
+                      >
+                        {meta.dataInicio ? formatDate(meta.dataInicio) : "Sem data"}
+                      </button>
+                    )}
+                    <span className="text-xs text-gray-400">-</span>
+                    {editingDate?.id === meta.id && editingDate?.field === "dataFim" ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          value={editDateValue}
+                          onChange={(e) => setEditDateValue(e.target.value)}
+                          className="px-2 py-1 text-xs border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditDate();
+                            if (e.key === "Escape") cancelEditDate();
+                          }}
+                        />
+                        <button
+                          onClick={saveEditDate}
+                          className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                        >
+                          <Check className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={cancelEditDate}
+                          className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditDate("meta", "dataFim", [meta.id], meta.dataFim)}
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-emerald-100 px-2 py-1 rounded"
+                        title="Editar data de fim"
+                      >
+                        {meta.dataFim ? formatDate(meta.dataFim) : "Sem data"}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  meta.dataInicio && meta.dataFim && (
+                    <span className="text-xs text-gray-500">
+                      {formatDate(meta.dataInicio)} - {formatDate(meta.dataFim)}
+                    </span>
+                  )
                 )}
                 {isEditing && (
                   <button
@@ -538,10 +683,86 @@ export default function MetaEtapaFasePage() {
                                 )}
                               </>
                             )}
-                            {etapa.dataInicio && etapa.dataFim && (
-                              <span className="text-xs text-gray-400">
-                                {formatDate(etapa.dataInicio)} - {formatDate(etapa.dataFim)}
-                              </span>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                {editingDate?.id === etapa.id && editingDate?.field === "dataInicio" ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="date"
+                                      value={editDateValue}
+                                      onChange={(e) => setEditDateValue(e.target.value)}
+                                      className="px-2 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEditDate();
+                                        if (e.key === "Escape") cancelEditDate();
+                                      }}
+                                    />
+                                    <button
+                                      onClick={saveEditDate}
+                                      className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={cancelEditDate}
+                                      className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => startEditDate("etapa", "dataInicio", [meta.id, etapa.id], etapa.dataInicio)}
+                                    className="text-xs text-gray-400 hover:text-gray-600 hover:bg-blue-50 px-2 py-0.5 rounded"
+                                    title="Editar data de início"
+                                  >
+                                    {etapa.dataInicio ? formatDate(etapa.dataInicio) : "Sem data"}
+                                  </button>
+                                )}
+                                <span className="text-xs text-gray-300">-</span>
+                                {editingDate?.id === etapa.id && editingDate?.field === "dataFim" ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="date"
+                                      value={editDateValue}
+                                      onChange={(e) => setEditDateValue(e.target.value)}
+                                      className="px-2 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEditDate();
+                                        if (e.key === "Escape") cancelEditDate();
+                                      }}
+                                    />
+                                    <button
+                                      onClick={saveEditDate}
+                                      className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={cancelEditDate}
+                                      className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => startEditDate("etapa", "dataFim", [meta.id, etapa.id], etapa.dataFim)}
+                                    className="text-xs text-gray-400 hover:text-gray-600 hover:bg-blue-50 px-2 py-0.5 rounded"
+                                    title="Editar data de fim"
+                                  >
+                                    {etapa.dataFim ? formatDate(etapa.dataFim) : "Sem data"}
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              etapa.dataInicio && etapa.dataFim && (
+                                <span className="text-xs text-gray-400">
+                                  {formatDate(etapa.dataInicio)} - {formatDate(etapa.dataFim)}
+                                </span>
+                              )
                             )}
                             {isEditing && (
                               <button
@@ -636,10 +857,86 @@ export default function MetaEtapaFasePage() {
                                           )}
                                         </>
                                       )}
-                                      {fase.dataInicio && fase.dataFim && (
-                                        <span className="text-xs text-gray-400">
-                                          {formatDate(fase.dataInicio)} - {formatDate(fase.dataFim)}
-                                        </span>
+                                      {isEditing ? (
+                                        <div className="flex items-center gap-2">
+                                          {editingDate?.id === fase.id && editingDate?.field === "dataInicio" ? (
+                                            <div className="flex items-center gap-1">
+                                              <input
+                                                type="date"
+                                                value={editDateValue}
+                                                onChange={(e) => setEditDateValue(e.target.value)}
+                                                className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") saveEditDate();
+                                                  if (e.key === "Escape") cancelEditDate();
+                                                }}
+                                              />
+                                              <button
+                                                onClick={saveEditDate}
+                                                className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                                              >
+                                                <Check className="h-2.5 w-2.5" />
+                                              </button>
+                                              <button
+                                                onClick={cancelEditDate}
+                                                className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                                              >
+                                                <X className="h-2.5 w-2.5" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => startEditDate("fase", "dataInicio", [meta.id, etapa.id, fase.id], fase.dataInicio)}
+                                              className="text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 px-1.5 py-0.5 rounded"
+                                              title="Editar data de início"
+                                            >
+                                              {fase.dataInicio ? formatDate(fase.dataInicio) : "Sem data"}
+                                            </button>
+                                          )}
+                                          <span className="text-xs text-gray-300">-</span>
+                                          {editingDate?.id === fase.id && editingDate?.field === "dataFim" ? (
+                                            <div className="flex items-center gap-1">
+                                              <input
+                                                type="date"
+                                                value={editDateValue}
+                                                onChange={(e) => setEditDateValue(e.target.value)}
+                                                className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") saveEditDate();
+                                                  if (e.key === "Escape") cancelEditDate();
+                                                }}
+                                              />
+                                              <button
+                                                onClick={saveEditDate}
+                                                className="p-0.5 text-green-600 hover:bg-green-100 rounded"
+                                              >
+                                                <Check className="h-2.5 w-2.5" />
+                                              </button>
+                                              <button
+                                                onClick={cancelEditDate}
+                                                className="p-0.5 text-red-600 hover:bg-red-100 rounded"
+                                              >
+                                                <X className="h-2.5 w-2.5" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => startEditDate("fase", "dataFim", [meta.id, etapa.id, fase.id], fase.dataFim)}
+                                              className="text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 px-1.5 py-0.5 rounded"
+                                              title="Editar data de fim"
+                                            >
+                                              {fase.dataFim ? formatDate(fase.dataFim) : "Sem data"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        fase.dataInicio && fase.dataFim && (
+                                          <span className="text-xs text-gray-400">
+                                            {formatDate(fase.dataInicio)} - {formatDate(fase.dataFim)}
+                                          </span>
+                                        )
                                       )}
                                       {isEditing && (
                                         <button

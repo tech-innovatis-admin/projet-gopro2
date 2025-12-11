@@ -9,12 +9,13 @@ type ContratoTipo = "PROJETO" | "PRODUTO";
 
 type NovoContratoForm = {
   titulo: string;
-  status: ContratoStatus;
+  govIf: "IF" | "Gov" | "";
+  status: ContratoStatus | "";
   coordenador: string;
   parceiro: string;
   orgaoFinanciador: string;
   segmentos: string[];
-  tipo: ContratoTipo;
+  tipo: ContratoTipo | "";
   dataInicio: string;
   dataFim: string;
   localidade: string;
@@ -72,12 +73,13 @@ const segmentoOptions = [
 
 const initialFormState: NovoContratoForm = {
   titulo: "",
-  status: "DRAFT",
+  govIf: "",
+  status: "",
   coordenador: "",
   parceiro: "",
   orgaoFinanciador: "",
   segmentos: [],
-  tipo: "PROJETO",
+  tipo: "",
   dataInicio: "",
   dataFim: "",
   localidade: "",
@@ -140,6 +142,9 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
       case "titulo":
         if (typeof value !== "string" || !value.trim()) return "O título do projeto é obrigatório";
         if (value.trim().length < 5) return "O título deve ter pelo menos 5 caracteres";
+        return "";
+      case "govIf":
+        if (typeof value !== "string" || !value || (value !== "IF" && value !== "Gov")) return "Selecione uma opção";
         return "";
       case "coordenador":
         if (typeof value !== "string" || !value.trim()) return "O nome do coordenador é obrigatório";
@@ -303,19 +308,24 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
               />
             </FormField>
 
-            {/* Status e Tipo - Grid 2 colunas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Status */}
+            {/* Gov/IF, Tipo e Status - Grid 3 colunas */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Gov/IF */}
               <FormField
-                label="Status"
+                label="Gov/IF"
                 required
-                error={errors.status}
+                error={errors.govIf}
                 icon={<Tag className="h-4 w-4" />}
               >
                 <select
-                  value={form.status}
-                  onChange={(e) => handleChange("status", e.target.value)}
-                  className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors appearance-none cursor-pointer"
+                  value={form.govIf}
+                  onChange={(e) => handleChange("govIf", e.target.value)}
+                  onBlur={() => handleBlur("govIf")}
+                  className={`w-full h-11 px-4 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 transition-colors appearance-none cursor-pointer ${
+                    errors.govIf
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
                   style={{
                     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                     backgroundPosition: "right 0.75rem center",
@@ -324,11 +334,9 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                     paddingRight: "2.5rem",
                   }}
                 >
-                  {statusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
+                  <option value="">Selecione...</option>
+                  <option value="IF">IF</option>
+                  <option value="Gov">Gov</option>
                 </select>
               </FormField>
 
@@ -342,7 +350,12 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                 <select
                   value={form.tipo}
                   onChange={(e) => handleChange("tipo", e.target.value)}
-                  className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors appearance-none cursor-pointer"
+                  onBlur={() => handleBlur("tipo")}
+                  className={`w-full h-11 px-4 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 transition-colors appearance-none cursor-pointer ${
+                    errors.tipo
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
                   style={{
                     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                     backgroundPosition: "right 0.75rem center",
@@ -351,7 +364,41 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                     paddingRight: "2.5rem",
                   }}
                 >
+                  <option value="">Selecione...</option>
                   {tipoOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              {/* Status */}
+              <FormField
+                label="Status"
+                required
+                error={errors.status}
+                icon={<Tag className="h-4 w-4" />}
+              >
+                <select
+                  value={form.status}
+                  onChange={(e) => handleChange("status", e.target.value)}
+                  onBlur={() => handleBlur("status")}
+                  className={`w-full h-11 px-4 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 transition-colors appearance-none cursor-pointer ${
+                    errors.status
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: "right 0.75rem center",
+                    backgroundRepeat: "no-repeat",
+                    backgroundSize: "1.25rem",
+                    paddingRight: "2.5rem",
+                  }}
+                >
+                  <option value="">Selecione...</option>
+                  {statusOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

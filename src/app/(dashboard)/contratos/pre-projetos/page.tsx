@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
+import { ResizableTable } from "@/components/ui/resizable-table";
 import {
   ChevronRight,
   Home,
@@ -28,6 +29,7 @@ type PreProjetoTipo = "PROJETO" | "PRODUTO";
 type PreProjeto = {
   id: string;
   titulo: string;
+  govIf: "IF" | "Gov";
   tipo: PreProjetoTipo;
   parceiro: string;
   localidade: string;
@@ -42,7 +44,7 @@ type PreProjeto = {
 };
 
 type Filters = {
-  tipo: "TODOS" | PreProjetoTipo;
+  govIf: "TODOS" | "IF" | "Gov";
   parceiro: string;
   q: string;
 };
@@ -57,6 +59,7 @@ const mockPreProjetos: PreProjeto[] = [
   {
     id: "1",
     titulo: "Sistema de Gestão Acadêmica Integrado",
+    govIf: "IF",
     tipo: "PROJETO",
     parceiro: "Fapto",
     localidade: "Campina Grande - PB",
@@ -70,6 +73,7 @@ const mockPreProjetos: PreProjeto[] = [
   {
     id: "2",
     titulo: "Licença Software GoPro Enterprise Premium",
+    govIf: "Gov",
     tipo: "PRODUTO",
     parceiro: "Fadex",
     localidade: "Estado do Rio de Janeiro",
@@ -82,6 +86,7 @@ const mockPreProjetos: PreProjeto[] = [
   {
     id: "3",
     titulo: "Portal de Transparência e Controle Social",
+    govIf: "IF",
     tipo: "PROJETO",
     parceiro: "IFMA",
     localidade: "São Luís - MA",
@@ -96,6 +101,7 @@ const mockPreProjetos: PreProjeto[] = [
   {
     id: "4",
     titulo: "Modernização Infraestrutura TI",
+    govIf: "Gov",
     tipo: "PROJETO",
     parceiro: "Fundação Araucária",
     localidade: "Curitiba - PR",
@@ -108,7 +114,7 @@ const parceiros = ["Fapto", "Fadex", "IFMA", "Fundação Araucária", "Fundaçã
 
 export default function PreProjetosPage() {
   const [filters, setFilters] = useState<Filters>({
-    tipo: "TODOS",
+    govIf: "TODOS",
     parceiro: "",
     q: "",
   });
@@ -137,13 +143,19 @@ export default function PreProjetosPage() {
     const handlePreProjetoCriado = (event: CustomEvent) => {
       const data = event.detail;
 
+      // Converter valorTotal de string formatada para número
+      const valorTotalNumero = typeof data.valorTotal === "string"
+        ? parseFloat(data.valorTotal.replace(/\./g, "").replace(",", ".")) || 0
+        : data.valorTotal || 0;
+
       const novoPreProjeto: PreProjeto = {
         id: String(Date.now()),
         titulo: data.titulo,
+        govIf: data.govIf || "IF",
         tipo: data.tipo,
         parceiro: data.parceiro,
         localidade: data.localidade,
-        valorTotal: data.valorTotal,
+        valorTotal: valorTotalNumero,
         dataCriacao: new Date().toISOString().split("T")[0],
         documentos: data.documentos,
       };
@@ -160,7 +172,7 @@ export default function PreProjetosPage() {
   // Filtragem e ordenação
   const filtered = useMemo(() => {
     let result = preProjetos
-      .filter((p) => (filters.tipo === "TODOS" ? true : p.tipo === filters.tipo))
+      .filter((p) => (filters.govIf === "TODOS" ? true : p.govIf === filters.govIf))
       .filter((p) => (filters.parceiro ? p.parceiro === filters.parceiro : true))
       .filter((p) =>
         filters.q
@@ -213,7 +225,7 @@ export default function PreProjetosPage() {
 
   const clearFilters = () => {
     setFilters({
-      tipo: "TODOS",
+      govIf: "TODOS",
       parceiro: "",
       q: "",
     });
@@ -221,7 +233,7 @@ export default function PreProjetosPage() {
   };
 
   const hasActiveFilters =
-    filters.tipo !== "TODOS" || filters.parceiro !== "" || filters.q !== "";
+    filters.govIf !== "TODOS" || filters.parceiro !== "" || filters.q !== "";
 
   const handleOpenModal = () => {
     window.dispatchEvent(
@@ -297,22 +309,22 @@ export default function PreProjetosPage() {
               />
             </div>
 
-            {/* Tabs de Tipo */}
+            {/* Tabs de Gov/IF */}
             <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
-              {(["TODOS", "PROJETO", "PRODUTO"] as const).map((tipo) => (
+              {(["TODOS", "IF", "Gov"] as const).map((govIf) => (
                 <button
-                  key={tipo}
+                  key={govIf}
                   onClick={() => {
-                    setFilters((f) => ({ ...f, tipo }));
+                    setFilters((f) => ({ ...f, govIf }));
                     setPage(1);
                   }}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    filters.tipo === tipo
+                    filters.govIf === govIf
                       ? "bg-[#004225] text-white"
                       : "text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  {tipo === "TODOS" ? "Todos" : tipo === "PROJETO" ? "Projetos" : "Produtos"}
+                  {govIf === "TODOS" ? "Todos" : govIf}
                 </button>
               ))}
             </div>
@@ -330,7 +342,7 @@ export default function PreProjetosPage() {
               Filtros
               {hasActiveFilters && (
                 <span className="ml-1 px-1.5 py-0.5 text-xs bg-white text-[#004225] rounded-full">
-                  {[filters.tipo !== "TODOS", filters.parceiro].filter(Boolean).length}
+                  {[filters.govIf !== "TODOS", filters.parceiro].filter(Boolean).length}
                 </span>
               )}
               <ChevronDown
@@ -383,135 +395,155 @@ export default function PreProjetosPage() {
 
         {/* Tabela */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <ResizableTable
+            columnCount={9}
+            defaultWidths={[
+              250, // Título
+              100, // Gov/IF
+              100, // Tipo
+              150, // Parceiro
+              180, // Localidade
+              140, // Valor Estimado
+              120, // Documentos
+              130, // Data de Criação
+              140, // Ações
+            ]}
+            minColumnWidth={80}
+            className="divide-y divide-gray-200"
+          >
+            <thead className="bg-gray-50">
+              <tr>
+                <Th onClick={() => handleSort("titulo")} sortable className="text-center">
+                  Título
+                  <SortIcon column="titulo" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("govIf")} sortable className="text-center">
+                  Gov/IF
+                  <SortIcon column="govIf" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Tipo</Th>
+                <Th onClick={() => handleSort("parceiro")} sortable className="text-center">
+                  Parceiro
+                  <SortIcon column="parceiro" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("localidade")} sortable className="text-center">
+                  Localidade
+                  <SortIcon column="localidade" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("valorTotal")} sortable className="text-center">
+                  Valor Estimado
+                  <SortIcon column="valorTotal" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Documentos</Th>
+                <Th onClick={() => handleSort("dataCriacao")} sortable className="text-center">
+                  Data de Criação
+                  <SortIcon column="dataCriacao" sortConfig={sortConfig} />
+                </Th>
+                <Th className="text-center">Ações</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {loading ? (
                 <tr>
-                  <Th onClick={() => handleSort("titulo")} sortable>
-                    Título
-                    <SortIcon column="titulo" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Tipo</Th>
-                  <Th onClick={() => handleSort("parceiro")} sortable>
-                    Parceiro
-                    <SortIcon column="parceiro" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("localidade")} sortable>
-                    Localidade
-                    <SortIcon column="localidade" sortConfig={sortConfig} />
-                  </Th>
-                  <Th onClick={() => handleSort("valorTotal")} sortable className="text-right">
-                    Valor Estimado
-                    <SortIcon column="valorTotal" sortConfig={sortConfig} />
-                  </Th>
-                  <Th>Documentos</Th>
-                  <Th onClick={() => handleSort("dataCriacao")} sortable>
-                    Data de Criação
-                    <SortIcon column="dataCriacao" sortConfig={sortConfig} />
-                  </Th>
-                  <Th className="text-center">Ações</Th>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
+                      <span className="text-sm text-gray-500">Carregando pré-projetos...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                        <span className="text-sm text-gray-500">Carregando pré-projetos...</span>
+              ) : paginatedData.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <FolderOpen className="h-12 w-12 text-gray-300" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          Nenhum pré-projeto encontrado
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Crie seu primeiro pré-projeto para começar.
+                        </p>
                       </div>
-                    </td>
-                  </tr>
-                ) : paginatedData.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <FolderOpen className="h-12 w-12 text-gray-300" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            Nenhum pré-projeto encontrado
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Crie seu primeiro pré-projeto para começar.
-                          </p>
-                        </div>
-                        <div className="flex gap-2 mt-2">
-                          {hasActiveFilters && (
-                            <button
-                              onClick={clearFilters}
-                              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                            >
-                              Limpar filtros
-                            </button>
-                          )}
+                      <div className="flex gap-2 mt-2">
+                        {hasActiveFilters && (
                           <button
-                            onClick={handleOpenModal}
-                            className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
+                            onClick={clearFilters}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                           >
-                            Criar pré-projeto
+                            Limpar filtros
                           </button>
-                        </div>
+                        )}
+                        <button
+                          onClick={handleOpenModal}
+                          className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
+                        >
+                          Criar pré-projeto
+                        </button>
                       </div>
-                    </td>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedData.map((preProjeto) => (
+                  <tr key={preProjeto.id} className="hover:bg-gray-50 transition-colors">
+                    <Td className="font-medium text-gray-900 max-w-[250px]">
+                      <div className="truncate" title={preProjeto.titulo}>
+                        {preProjeto.titulo}
+                      </div>
+                    </Td>
+                    <Td>
+                      <GovIfBadge govIf={preProjeto.govIf} />
+                    </Td>
+                    <Td>
+                      <TipoBadge tipo={preProjeto.tipo} />
+                    </Td>
+                    <Td className="text-sm text-gray-600">{preProjeto.parceiro}</Td>
+                    <Td className="text-sm text-gray-600 max-w-[180px]">
+                      <div className="truncate" title={preProjeto.localidade}>
+                        {preProjeto.localidade}
+                      </div>
+                    </Td>
+                    <Td className="text-right font-medium">
+                      R$ {preProjeto.valorTotal.toLocaleString("pt-BR")}
+                    </Td>
+                    <Td>
+                      <DocumentosBadge documentos={preProjeto.documentos} />
+                    </Td>
+                    <Td className="text-sm text-gray-600">{formatDate(preProjeto.dataCriacao)}</Td>
+                    <Td>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Ver detalhes"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Exportar"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button
+                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Mais opções"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </Td>
                   </tr>
-                ) : (
-                  paginatedData.map((preProjeto) => (
-                    <tr key={preProjeto.id} className="hover:bg-gray-50 transition-colors">
-                      <Td className="font-medium text-gray-900 max-w-[250px]">
-                        <div className="truncate" title={preProjeto.titulo}>
-                          {preProjeto.titulo}
-                        </div>
-                      </Td>
-                      <Td>
-                        <TipoBadge tipo={preProjeto.tipo} />
-                      </Td>
-                      <Td className="text-sm text-gray-600">{preProjeto.parceiro}</Td>
-                      <Td className="text-sm text-gray-600 max-w-[180px]">
-                        <div className="truncate" title={preProjeto.localidade}>
-                          {preProjeto.localidade}
-                        </div>
-                      </Td>
-                      <Td className="text-right font-medium">
-                        R$ {preProjeto.valorTotal.toLocaleString("pt-BR")}
-                      </Td>
-                      <Td>
-                        <DocumentosBadge documentos={preProjeto.documentos} />
-                      </Td>
-                      <Td className="text-sm text-gray-600">{formatDate(preProjeto.dataCriacao)}</Td>
-                      <Td>
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Ver detalhes"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Exportar"
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Mais opções"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </Td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </ResizableTable>
 
           {/* Paginação */}
           {!loading && filtered.length > 0 && (
@@ -611,12 +643,12 @@ function Th({
 }) {
   return (
     <th
-      className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${
+      className={`px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider ${
         sortable ? "cursor-pointer hover:bg-gray-100 select-none" : ""
       } ${className}`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-1">{children}</div>
+      <div className="flex items-center justify-center gap-1">{children}</div>
     </th>
   );
 }
@@ -633,6 +665,20 @@ function SortIcon({ column, sortConfig }: { column: string; sortConfig: SortConf
     <ArrowUpDown
       className={`h-3 w-3 text-[#004225] ${sortConfig.direction === "desc" ? "rotate-180" : ""}`}
     />
+  );
+}
+
+function GovIfBadge({ govIf }: { govIf: "IF" | "Gov" }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+        govIf === "IF"
+          ? "bg-blue-100 text-blue-800"
+          : "bg-purple-100 text-purple-800"
+      }`}
+    >
+      {govIf}
+    </span>
   );
 }
 

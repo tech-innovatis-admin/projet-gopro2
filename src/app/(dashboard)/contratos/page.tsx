@@ -16,10 +16,6 @@ import {
   PauseCircle,
   ChevronDown,
   ArrowUpDown,
-  Eye,
-  Edit,
-  Download,
-  MoreHorizontal,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
 
@@ -31,6 +27,7 @@ type Contrato = {
   id: string;
   codigo: string;
   nome: string;
+  govIf: "IF" | "Gov";
   tipo: ContratoTipo;
   cliente: string;
   parceiro: string;
@@ -44,7 +41,7 @@ type Contrato = {
 };
 
 type Filters = {
-  tipo: "TODOS" | ContratoTipo;
+  govIf: "TODOS" | "IF" | "Gov";
   status: "TODOS" | ContratoStatus;
   parceiro: string;
   periodoInicio: string;
@@ -63,6 +60,7 @@ const mockContratos: Contrato[] = [
     id: "1",
     codigo: "PRJ-001",
     nome: "Sistema de Gestão Integrada",
+    govIf: "IF",
     tipo: "PROJETO",
     cliente: "Universidade Federal de São Paulo",
     parceiro: "Fundação de Apoio à Pesquisa",
@@ -78,6 +76,7 @@ const mockContratos: Contrato[] = [
     id: "2",
     codigo: "PRD-010",
     nome: "Licença GoPro Enterprise",
+    govIf: "Gov",
     tipo: "PRODUTO",
     cliente: "Org Y",
     parceiro: "Fundação XYZ",
@@ -93,6 +92,7 @@ const mockContratos: Contrato[] = [
     id: "3",
     codigo: "PRJ-015",
     nome: "Portal de Transparência",
+    govIf: "IF",
     tipo: "PROJETO",
     cliente: "Fundação Z",
     parceiro: "IFES-MG",
@@ -107,6 +107,7 @@ const mockContratos: Contrato[] = [
     id: "4",
     codigo: "PRJ-020",
     nome: "Modernização de Infraestrutura",
+    govIf: "Gov",
     tipo: "PROJETO",
     cliente: "Instituto Federal do Paraná",
     parceiro: "Fundação Araucária",
@@ -122,6 +123,7 @@ const mockContratos: Contrato[] = [
     id: "5",
     codigo: "PRD-025",
     nome: "Suporte Premium Anual",
+    govIf: "IF",
     tipo: "PRODUTO",
     cliente: "Universidade Federal do Rio Grande do Sul",
     parceiro: "Fundação UFRGS",
@@ -138,7 +140,7 @@ const parceiros = [...new Set(mockContratos.map((c) => c.parceiro))];
 
 export default function ContratosPage() {
   const [filters, setFilters] = useState<Filters>({
-    tipo: "TODOS",
+    govIf: "TODOS",
     status: "TODOS",
     parceiro: "",
     periodoInicio: "",
@@ -175,6 +177,7 @@ export default function ContratosPage() {
         id: String(Date.now()),
         codigo: data.tipo === "PROJETO" ? `PRJ-${String(contratos.length + 1).padStart(3, "0")}` : `PRD-${String(contratos.length + 1).padStart(3, "0")}`,
         nome: data.titulo,
+        govIf: data.govIf || "IF",
         tipo: data.tipo as ContratoTipo,
         cliente: data.localidade,
         parceiro: data.parceiro,
@@ -199,7 +202,7 @@ export default function ContratosPage() {
   // Filtragem e ordenação
   const filtered = useMemo(() => {
     let result = contratos
-      .filter((c) => (filters.tipo === "TODOS" ? true : c.tipo === filters.tipo))
+      .filter((c) => (filters.govIf === "TODOS" ? true : c.govIf === filters.govIf))
       .filter((c) => (filters.status === "TODOS" ? true : c.status === filters.status))
       .filter((c) => (filters.parceiro ? c.parceiro === filters.parceiro : true))
       .filter((c) => {
@@ -265,7 +268,7 @@ export default function ContratosPage() {
 
   const clearFilters = () => {
     setFilters({
-      tipo: "TODOS",
+      govIf: "TODOS",
       status: "TODOS",
       parceiro: "",
       periodoInicio: "",
@@ -276,7 +279,7 @@ export default function ContratosPage() {
   };
 
   const hasActiveFilters =
-    filters.tipo !== "TODOS" ||
+    filters.govIf !== "TODOS" ||
     filters.status !== "TODOS" ||
     filters.parceiro !== "" ||
     filters.periodoInicio !== "" ||
@@ -361,22 +364,22 @@ export default function ContratosPage() {
               />
             </div>
 
-            {/* Tabs de Tipo */}
+            {/* Tabs de Gov/IF */}
             <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
-              {(["TODOS", "PROJETO", "PRODUTO"] as const).map((tipo) => (
+              {(["TODOS", "IF", "Gov"] as const).map((govIf) => (
                 <button
-                  key={tipo}
+                  key={govIf}
                   onClick={() => {
-                    setFilters((f) => ({ ...f, tipo }));
+                    setFilters((f) => ({ ...f, govIf }));
                     setPage(1);
                   }}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    filters.tipo === tipo
+                    filters.govIf === govIf
                       ? "bg-[#004225] text-white"
                       : "text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  {tipo === "TODOS" ? "Todos" : tipo === "PROJETO" ? "Projetos" : "Produtos"}
+                  {govIf === "TODOS" ? "Todos" : govIf}
                 </button>
               ))}
             </div>
@@ -396,7 +399,7 @@ export default function ContratosPage() {
                 <span className="ml-1 px-1.5 py-0.5 text-xs bg-white text-[#004225] rounded-full">
                   {
                     [
-                      filters.tipo !== "TODOS",
+                      filters.govIf !== "TODOS",
                       filters.status !== "TODOS",
                       filters.parceiro,
                       filters.periodoInicio,
@@ -514,6 +517,7 @@ export default function ContratosPage() {
             defaultWidths={[
               120, // Código
               200, // Nome
+              100, // Gov/IF
               100, // Tipo
               220, // Cliente / Parceiro
               140, // Valor Total
@@ -521,7 +525,6 @@ export default function ContratosPage() {
               110, // Início
               110, // Término
               150, // Responsável
-              140, // Ações
             ]}
             minColumnWidth={80}
             className="divide-y divide-gray-200"
@@ -535,6 +538,10 @@ export default function ContratosPage() {
                 <Th onClick={() => handleSort("nome")} sortable className="text-center">
                   Nome
                   <SortIcon column="nome" sortConfig={sortConfig} />
+                </Th>
+                <Th onClick={() => handleSort("govIf")} sortable className="text-center">
+                  Gov/IF
+                  <SortIcon column="govIf" sortConfig={sortConfig} />
                 </Th>
                 <Th className="text-center">Tipo</Th>
                 <Th onClick={() => handleSort("cliente")} sortable className="text-center">
@@ -555,7 +562,6 @@ export default function ContratosPage() {
                   <SortIcon column="dataTermino" sortConfig={sortConfig} />
                 </Th>
                 <Th className="text-center">Responsável</Th>
-                <Th className="text-center">Ações</Th>
               </tr>
             </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
@@ -612,6 +618,9 @@ export default function ContratosPage() {
                         {contrato.nome}
                       </Td>
                       <Td>
+                        <GovIfBadge govIf={contrato.govIf} />
+                      </Td>
+                      <Td>
                         <TipoBadge tipo={contrato.tipo} />
                       </Td>
                       <Td>
@@ -631,38 +640,6 @@ export default function ContratosPage() {
                         {contrato.dataTermino ? formatDate(contrato.dataTermino) : "—"}
                       </Td>
                       <Td className="text-sm text-gray-600">{contrato.responsavel}</Td>
-                      <Td>
-                        <div
-                          className="flex items-center justify-center gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link
-                            href={`/contratos/${contrato.id}`}
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Ver detalhes"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Exportar"
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Mais opções"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </Td>
                     </tr>
                   ))
                 )}
@@ -815,6 +792,20 @@ function StatusBadge({ status }: { status: ContratoStatus }) {
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
     >
       {label}
+    </span>
+  );
+}
+
+function GovIfBadge({ govIf }: { govIf: "IF" | "Gov" }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+        govIf === "IF"
+          ? "bg-blue-100 text-blue-800"
+          : "bg-purple-100 text-purple-800"
+      }`}
+    >
+      {govIf}
     </span>
   );
 }

@@ -28,10 +28,11 @@ const data = [
   { month: "Dez/25", contratos: 3 },
 ];
 
-// Paleta institucional - Azul para séries temporais (neutro)
+// Paleta institucional - Degradê verde Innovatis
 const COLORS = {
-  line: "#3B82F6",       // Azul - séries temporais
-  gradient: "#3B82F6",
+  line: "#0B7A4B",       // Verde médio - linha principal
+  gradient: "#00B894",   // Verde-água - início do degradê
+  gradientEnd: "#004225", // Verde escuro - fim do degradê
   neutral: "#6B7280",    // Cinza - contexto
 };
 
@@ -50,8 +51,9 @@ export function ContractsLineChart() {
           >
             <defs>
               <linearGradient id="colorContratos" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={COLORS.gradient} stopOpacity={0.2} />
-                <stop offset="95%" stopColor={COLORS.gradient} stopOpacity={0} />
+                <stop offset="5%" stopColor={COLORS.gradient} stopOpacity={0.3} />
+                <stop offset="50%" stopColor={COLORS.line} stopOpacity={0.15} />
+                <stop offset="95%" stopColor={COLORS.gradientEnd} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />

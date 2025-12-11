@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ModalListener } from "../components/ModalListener";
+import MiniFooter from "@/components/ui/MiniFooter";
 
 // Configuração da fonte Poppins com todos os pesos
 const poppins = localFont({
@@ -116,8 +117,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${poppins.variable} font-sans antialiased`}>
-        {children}
+      <body className={`${poppins.variable} font-sans antialiased flex flex-col min-h-screen`}>
+        <div className="flex-1">
+          {children}
+        </div>
+        <MiniFooter />
         <ModalListener />
       </body>
     </html>

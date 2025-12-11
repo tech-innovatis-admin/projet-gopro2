@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle } from 'lucide-react';
 
 // Tipos
@@ -105,6 +106,8 @@ const rubricasMock: Rubrica[] = [
 ];
 
 export default function RubricasPage() {
+  const params = useParams();
+  const contratoId = params.contratoId as string;
   const [rubricas, setRubricas] = useState<Rubrica[]>(rubricasMock);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ItemRubrica | null>(null);
@@ -239,9 +242,11 @@ export default function RubricasPage() {
             Gerencie os itens de despesa organizados por categoria orçamentária
           </p>
         </div>
-        <div className="bg-blue-50 px-4 py-2 rounded-lg">
-          <p className="text-sm text-blue-600 font-medium">Total Geral</p>
-          <p className="text-xl font-bold text-blue-700">{formatCurrency(calcularTotalGeral())}</p>
+        <div className="flex items-center gap-4">
+          <div className="bg-blue-50 px-4 py-2 rounded-lg">
+            <p className="text-sm text-blue-600 font-medium">Total Geral</p>
+            <p className="text-xl font-bold text-blue-700">{formatCurrency(calcularTotalGeral())}</p>
+          </div>
         </div>
       </div>
 

@@ -30,23 +30,7 @@ import {
   ArquivosTab,
 } from "./_components";
 
-// Tipos
-export type Contrato = {
-  id: string;
-  codigo: string;
-  titulo: string;
-  tipo: "PROJETO" | "PRODUTO";
-  status: string;
-  coordenador: string;
-  parceiro: string;
-  orgaoFinanciador: string;
-  segmentos: string[];
-  localidade: string;
-  dataInicio: string;
-  dataFim: string;
-  valorTotal: number;
-  descricao?: string;
-};
+import { mockContrato, type Contrato } from "../types";
 
 type TabItem = {
   id: string;
@@ -65,23 +49,8 @@ const tabs: TabItem[] = [
   { id: "arquivos", label: "Arquivos", icon: Folder, description: "Documentos anexados" },
 ];
 
-// Mock de dados do contrato
-const mockContrato: Contrato = {
-  id: "1",
-  codigo: "PRJ-001",
-  titulo: "Sistema de Gestão Integrada",
-  tipo: "PROJETO",
-  status: "EM_ANDAMENTO",
-  coordenador: "João Silva",
-  parceiro: "Fundação de Apoio à Pesquisa",
-  orgaoFinanciador: "Ministério da Educação",
-  segmentos: ["Educação", "Tecnologia"],
-  localidade: "São Paulo - SP",
-  dataInicio: "2025-01-15",
-  dataFim: "2025-12-31",
-  valorTotal: 1250000,
-  descricao: "Desenvolvimento de sistema integrado para gestão acadêmica e administrativa.",
-};
+// Re-exportar tipo para uso externo se necessário
+export type { Contrato };
 
 export default function EditarContratoPage() {
   const params = useParams();

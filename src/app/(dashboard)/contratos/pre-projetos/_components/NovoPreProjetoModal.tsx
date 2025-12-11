@@ -5,6 +5,7 @@ import { X, Upload, FileText, Trash2, AlertCircle } from "lucide-react";
 
 type PreProjetoFormData = {
   titulo: string;
+  govIf: "IF" | "Gov" | "";
   tipo: "PROJETO" | "PRODUTO" | "";
   parceiro: string;
   localidade: string;
@@ -59,6 +60,7 @@ export default function NovoPreProjetoModal({
 }: NovoPreProjetoModalProps) {
   const [formData, setFormData] = useState<PreProjetoFormData>({
     titulo: "",
+    govIf: "",
     tipo: "",
     parceiro: "",
     localidade: "",
@@ -166,6 +168,10 @@ export default function NovoPreProjetoModal({
       newErrors.titulo = "Título deve ter no máximo 200 caracteres";
     }
 
+    if (!formData.govIf || (formData.govIf !== "IF" && formData.govIf !== "Gov")) {
+      newErrors.govIf = "Selecione uma opção";
+    }
+
     if (!formData.tipo) {
       newErrors.tipo = "Selecione o tipo de contrato";
     }
@@ -205,6 +211,7 @@ export default function NovoPreProjetoModal({
   const handleReset = () => {
     setFormData({
       titulo: "",
+      govIf: "",
       tipo: "",
       parceiro: "",
       localidade: "",
@@ -267,8 +274,23 @@ export default function NovoPreProjetoModal({
               />
             </FormField>
 
-            {/* Grid: Tipo e Parceiro */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Grid: Gov/IF, Tipo e Parceiro */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField label="Gov/IF" required error={errors.govIf}>
+                <select
+                  value={formData.govIf}
+                  onChange={(e) => {
+                    setFormData({ ...formData, govIf: e.target.value as "IF" | "Gov" | "" });
+                    if (errors.govIf) setErrors({ ...errors, govIf: undefined });
+                  }}
+                  className={inputClassName(!!errors.govIf)}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="IF">IF</option>
+                  <option value="Gov">Gov</option>
+                </select>
+              </FormField>
+
               <FormField label="Tipo de Contrato" required error={errors.tipo}>
                 <select
                   value={formData.tipo}
@@ -309,7 +331,6 @@ export default function NovoPreProjetoModal({
                 label="Localidade"
                 required
                 error={errors.localidade}
-                description="Ex: Campina Grande - PB"
               >
                 <input
                   type="text"
@@ -327,7 +348,6 @@ export default function NovoPreProjetoModal({
                 label="Valor Total Estimado"
                 required
                 error={errors.valorTotal}
-                description="Digite apenas números"
               >
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
