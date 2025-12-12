@@ -50,7 +50,6 @@ const navigationItems: NavItem[] = [
       { label: "Todos os Contratos", href: "/contratos", icon: FolderOpen },
       { label: "Novo Contrato", href: "modal:novo-contrato", icon: FileText },
       { label: "Pré-Projetos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
-      { label: "Relatórios", href: "/contratos/relatorios", icon: BarChart3 },
     ],
   },
   {
@@ -70,13 +69,7 @@ const navigationItems: NavItem[] = [
     children: [
       { label: "Membros", href: "/equipe/membros", icon: Users },
       { label: "Permissões", href: "/equipe/permissoes", icon: Shield },
-      { label: "Convites", href: "/equipe/convites", icon: User },
     ],
-  },
-  {
-    label: "Configurações",
-    href: "/configuracoes",
-    icon: Settings,
   },
 ];
 
@@ -84,7 +77,13 @@ export function NavBar() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
+  const [mounted, setMounted] = useState(false);
   const navbarRef = useRef<HTMLElement>(null);
+
+  // Garantir que o componente só renderize após a hidratação no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -276,41 +275,55 @@ export function NavBar() {
           {/* User Menu & Mobile Toggle */}
           <div className="flex items-center gap-3">
             {/* User Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg transition-colors duration-200"
+            {mounted ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg transition-colors duration-200"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold text-sm">
+                      A
+                    </div>
+                    <span className="hidden sm:block">Admin</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 mt-2 bg-white border border-zinc-200 rounded-lg shadow-lg p-1 animate-in slide-in-from-top-2 duration-200"
                 >
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold text-sm">
-                    A
-                  </div>
-                  <span className="hidden sm:block">Admin</span>
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-56 mt-2 bg-white border border-zinc-200 rounded-lg shadow-lg p-1 animate-in slide-in-from-top-2 duration-200"
+                  <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
+                    <User className="h-4 w-4" />
+                    <span>Perfil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
+                    <Settings className="h-4 w-4" />
+                    <span>Configurações</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-1 h-px bg-zinc-200" />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md cursor-pointer transition-colors duration-150"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sair</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg transition-colors duration-200"
+                disabled
               >
-                <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
-                  <User className="h-4 w-4" />
-                  <span>Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
-                  <Settings className="h-4 w-4" />
-                  <span>Configurações</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 h-px bg-zinc-200" />
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md cursor-pointer transition-colors duration-150"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sair</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold text-sm">
+                  A
+                </div>
+                <span className="hidden sm:block">Admin</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            )}
 
             {/* Mobile Menu Toggle */}
             <Button

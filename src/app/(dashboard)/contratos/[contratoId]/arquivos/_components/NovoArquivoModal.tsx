@@ -12,6 +12,10 @@ type TipoArquivo =
   | "RELATORIO_TECNICO"
   | "RELATORIO_FINANCEIRO"
   | "COMPROVANTE_DESPESA"
+  | "PROPOSTA_COMERCIAL"
+  | "ETP"
+  | "RELATORIO_INCUBADAS"
+  | "NOTA_FISCAL"
   | "OUTROS";
 
 interface NovoArquivoForm {
@@ -37,6 +41,10 @@ const tipoLabels: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: "Relatório Técnico",
   RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
+  PROPOSTA_COMERCIAL: "Proposta comercial",
+  ETP: "ETP",
+  RELATORIO_INCUBADAS: "Relatórios de Incubadas",
+  NOTA_FISCAL: "Nota Fiscal",
   OUTROS: "Outros",
 };
 
@@ -280,11 +288,13 @@ export function NovoArquivoModal({
                   paddingRight: "2.5rem",
                 }}
               >
-                {Object.entries(tipoLabels).map(([tipo, label]) => (
-                  <option key={tipo} value={tipo}>
-                    {label}
-                  </option>
-                ))}
+                {Object.entries(tipoLabels)
+                  .sort(([, labelA], [, labelB]) => labelA.localeCompare(labelB, "pt-BR"))
+                  .map(([tipo, label]) => (
+                    <option key={tipo} value={tipo}>
+                      {label}
+                    </option>
+                  ))}
               </select>
             </FormField>
 

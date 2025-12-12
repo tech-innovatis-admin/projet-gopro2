@@ -2,14 +2,12 @@
 
 import {
   DollarSign,
-  TrendingUp,
   Calendar,
   AlertTriangle,
   Clock,
   CheckCircle,
   FileText,
   ArrowRight,
-  BarChart3,
 } from "lucide-react";
 
 // Mock de dados (substituir por fetch real baseado no contratoId)
@@ -287,51 +285,6 @@ export default function ContratoVisaoGeralPage() {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Cards de Atalhos para outras abas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a
-          href="#contratacoes"
-          className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm hover:border-[#004225] hover:shadow-md transition-all"
-        >
-          <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors">
-            <FileText className="h-6 w-6 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-gray-900">Contratações</h4>
-            <p className="text-sm text-gray-500">3 aditivos ativos</p>
-          </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-[#004225] transition-colors" />
-        </a>
-
-        <a
-          href="#execucao"
-          className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm hover:border-[#004225] hover:shadow-md transition-all"
-        >
-          <div className="p-3 bg-purple-50 rounded-lg group-hover:bg-purple-100 transition-colors">
-            <TrendingUp className="h-6 w-6 text-purple-600" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-gray-900">Execução</h4>
-            <p className="text-sm text-gray-500">12 marcos • 65% concluído</p>
-          </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-[#004225] transition-colors" />
-        </a>
-
-        <a
-          href="#rubricas"
-          className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm hover:border-[#004225] hover:shadow-md transition-all"
-        >
-          <div className="p-3 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors">
-            <BarChart3 className="h-6 w-6 text-emerald-600" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-gray-900">Rubricas</h4>
-            <p className="text-sm text-gray-500">8 rubricas • R$ 437k saldo</p>
-          </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-[#004225] transition-colors" />
-        </a>
       </div>
     </div>
   );

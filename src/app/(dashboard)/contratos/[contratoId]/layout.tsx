@@ -58,7 +58,6 @@ export default function ContratoLayout({
     setIsMounted(true);
   }, []);
   
-  // TODO: Substituir por fetch real do contrato
   const contratoBase: Contrato = { ...mockContrato, id: contratoId };
   const contrato: Contrato = isEditing ? editContrato : contratoBase;
 
@@ -79,24 +78,24 @@ export default function ContratoLayout({
       description: "Estrutura de metas e entregas",
     },
     {
+      label: "Desembolso",
+      href: `/contratos/${contratoId}/desembolso`,
+      description: "Cronograma de desembolsos",
+    },
+    {
       label: "Rubricas",
       href: `/contratos/${contratoId}/rubricas`,
       description: "Orçamento e execução financeira",
     },
     {
-      label: "Desembolso",
-      href: `/contratos/${contratoId}/desembolso`,
-      description: "Cronograma de pagamentos",
-    },
-    {
-      label: "Contratações",
-      href: `/contratos/${contratoId}/contratacoes`,
-      description: "Aditivos, OS e contratos vinculados",
+      label: "Pagamentos",
+      href: `/contratos/${contratoId}/pagamentos`,
+      description: "Histórico de pagamentos",
     },
     {
       label: "Equipe",
       href: `/contratos/${contratoId}/equipe-tecnica`,
-      description: "Membros e papéis",
+      description: "Membros",
     },
     {
       label: "Incubadas",
@@ -225,7 +224,7 @@ export default function ContratoLayout({
                     />
                   </div>
                 ) : (
-                  <h1 className="text-2xl font-bold text-gray-900">
+                  <h1 className="text-2xl font-bold text-[#003319]">
                     {contrato.codigo} – {contrato.titulo}
                   </h1>
                 )}
@@ -522,17 +521,27 @@ export default function ContratoLayout({
               <span className="text-xs font-medium text-gray-700">
                 Informações Complementares
               </span>
-              {isInfoComplementarExpanded ? (
-                <ChevronUp className="h-4 w-4 text-gray-400" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-gray-400" />
-              )}
+              <ChevronDown
+                className={`h-4 w-4 text-gray-400 transition-transform duration-500 ease-out ${
+                  isInfoComplementarExpanded ? "rotate-180" : ""
+                }`}
+                style={{
+                  transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              />
             </button>
 
-            {isInfoComplementarExpanded && (
-              <>
-                {/* Grid de 4 colunas */}
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+            <div
+              className={`overflow-hidden transition-all duration-700 ease-out ${
+                isInfoComplementarExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
+              }`}
+              style={{
+                transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
+              <div className="mt-3">
+                {/* Grid de 4 coluna na parte expandida */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
                   {/* Coluna 1 - Coordenador */}
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
@@ -553,7 +562,7 @@ export default function ContratoLayout({
                     </div>
                   </div>
 
-                  {/* Coluna 2 - Localidade */}
+                  {/* Coluna 2 - Localidade da parte expandida */}
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <MapPin className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
@@ -573,7 +582,7 @@ export default function ContratoLayout({
                     </div>
                   </div>
 
-                  {/* Coluna 3 - Segmentos */}
+                  {/* Coluna 3 - Segmentos da parte expandida */}
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
@@ -619,12 +628,12 @@ export default function ContratoLayout({
                     </div>
                   </div>
 
-                  {/* Coluna 4 - Vazia */}
+                  {/* Coluna 4 - Vazia (na parte expandida) */}
                   <div className="space-y-3">
                   </div>
                 </div>
 
-                {/* Objeto - abaixo do grid, ocupando toda a largura */}
+                {/* Objeto do Projeto - abaixo do grid, ocupando toda a largura */}
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <div className="flex items-start gap-3 group">
                     <FileText className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
@@ -668,12 +677,12 @@ export default function ContratoLayout({
                     </div>
                   </div>
                 </div>
-              </>
-            )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Tabs de navegação */}
+        {/* Tabs de navegação*/}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">

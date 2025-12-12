@@ -5,14 +5,30 @@ import { useParams } from 'next/navigation';
 import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle } from 'lucide-react';
 
 // Tipos
+type ID = string;
+
+type Lancamento = {
+  valor: number;    // valor pago daquele subitem na parcela
+  dataPag: string;  // data do pagamento (AAAA-MM-DD)
+};
+
+type Subitem = {
+  id: ID;
+  empresaRh: string; // "Empresa/RH" na planilha
+  lancamentos: Record<ID, Lancamento | undefined>; // chave = parcelaId
+};
+
 interface ItemRubrica {
   id: string;
+  codigo?: string; // ex: "2.4", "2.1", "3.1"
   descricao: string;
-  cnpjDestinacao: string;
   quantidade: number;
   meses: number;
   valorUnitario: number;
   valorTotal: number;
+  meta?: string; // meta vinculada ao item (texto livre ou ID da meta)
+  metaId?: string; // ID da meta selecionada da página de metas
+  subitens?: Subitem[]; // subitens com empresa/RH e lançamentos por parcela
 }
 
 interface Rubrica {
@@ -23,48 +39,102 @@ interface Rubrica {
   expanded: boolean;
 }
 
-// Dados mockados iniciais
-const rubricasMock: Rubrica[] = [
+// Dados mockados iniciais (compatível com ambas as páginas: rubricas e pagamentos)
+export const rubricasMock: Rubrica[] = [
   {
     id: '1',
     codigo: 'MC',
-    nome: 'Material de Consumo',
+    nome: 'Material de Consumo (33.90.30)',
     expanded: true,
     itens: [
       {
         id: '1-1',
+        codigo: '3.1',
         descricao: 'Reagentes químicos para laboratório',
-        cnpjDestinacao: '12.345.678/0001-00',
         quantidade: 50,
         meses: 12,
         valorUnitario: 150.00,
         valorTotal: 90000.00,
+        meta: '',
+        subitens: [],
       },
       {
         id: '1-2',
+        codigo: '3.2',
         descricao: 'Material de escritório',
-        cnpjDestinacao: '',
         quantidade: 1,
         meses: 12,
         valorUnitario: 500.00,
         valorTotal: 6000.00,
+        meta: '',
+        subitens: [],
       },
     ],
   },
   {
     id: '2',
     codigo: 'PP',
-    nome: 'Pagamento de Pessoal',
-    expanded: false,
+    nome: 'Pagamento de Pessoal (33.90.20)',
+    expanded: true,
     itens: [
       {
         id: '2-1',
+        codigo: '2.1',
+        descricao: 'Coordenador',
+        quantidade: 1,
+        meses: 34,
+        valorUnitario: 6000.00,
+        valorTotal: 204000.00,
+        meta: '',
+        subitens: [
+          {
+            id: 'sub-1',
+            empresaRh: 'Stefânia Cabral Pedra',
+            lancamentos: {
+              'parc-1': { valor: 18000, dataPag: '2025-05-30' },
+              'parc-2': { valor: 36000, dataPag: '2025-11-27' },
+            },
+          },
+        ],
+      },
+      {
+        id: '2-2',
+        codigo: '2.4',
+        descricao: 'Bolsa Ministério',
+        quantidade: 1,
+        meses: 1,
+        valorUnitario: 2499500.00,
+        valorTotal: 2499500.00,
+        meta: 'Ministério sugestão SV',
+        subitens: [
+          {
+            id: 'sub-2',
+            empresaRh: 'ARILSON CÂNDIDO',
+            lancamentos: {
+              'parc-1': { valor: 1400, dataPag: '2025-06-05' },
+              'parc-2': { valor: 21600, dataPag: '2025-12-04' },
+            },
+          },
+          {
+            id: 'sub-3',
+            empresaRh: 'ELIEZER CECE GREGORIO',
+            lancamentos: {
+              'parc-1': { valor: 1400, dataPag: '2025-06-05' },
+              'parc-2': { valor: 8400, dataPag: '2025-12-04' },
+            },
+          },
+        ],
+      },
+      {
+        id: '2-3',
+        codigo: '2.2',
         descricao: 'Bolsa de pesquisador júnior',
-        cnpjDestinacao: '',
         quantidade: 1,
         meses: 12,
         valorUnitario: 3500.00,
         valorTotal: 42000.00,
+        meta: '',
+        subitens: [],
       },
     ],
   },
@@ -105,6 +175,20 @@ const rubricasMock: Rubrica[] = [
   },
 ];
 
+// Mock de parcelas para a página de pagamentos
+export const parcelasMock = [
+  { id: 'parc-1', numero: 1, valorRecebido: 250000, dataRecebimento: '2025-02-10' },
+  { id: 'parc-2', numero: 2, valorRecebido: 250000, dataRecebimento: '2025-06-20' },
+];
+
+// Mock de metas para seleção na página de rubricas
+export const metasMock = [
+  { id: 'meta-1', numero: 1, titulo: ' Meta 1 - Levantamento de Requisitos' },
+  { id: 'meta-2', numero: 2, titulo: ' Meta 2 - Desenvolvimento do Sistema' },
+  { id: 'meta-3', numero: 3, titulo: ' Meta 3 - Testes e Validação' },
+  { id: 'meta-4', numero: 4, titulo: ' Meta 4 - Implementação e Deploy' },
+];
+
 export default function RubricasPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
@@ -114,7 +198,6 @@ export default function RubricasPage() {
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>({
     descricao: '',
-    cnpjDestinacao: '',
     quantidade: 1,
     meses: 1,
     valorUnitario: 0,
@@ -130,14 +213,6 @@ export default function RubricasPage() {
     }).format(value);
   };
 
-  // Formatar CNPJ
-  const formatCNPJ = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    return numbers.replace(
-      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
-      '$1.$2.$3/$4-$5'
-    );
-  };
 
   // Calcular total da rubrica
   const calcularTotalRubrica = (rubrica: Rubrica) => {
@@ -164,11 +239,11 @@ export default function RubricasPage() {
     const item: ItemRubrica = {
       id: `${rubricaId}-${Date.now()}`,
       descricao: newItem.descricao,
-      cnpjDestinacao: newItem.cnpjDestinacao || '',
       quantidade: newItem.quantidade || 1,
       meses: newItem.meses || 1,
       valorUnitario: newItem.valorUnitario || 0,
       valorTotal,
+      metaId: newItem.metaId,
     };
 
     setRubricas(rubricas.map(r => {
@@ -180,10 +255,10 @@ export default function RubricasPage() {
 
     setNewItem({
       descricao: '',
-      cnpjDestinacao: '',
       quantidade: 1,
       meses: 1,
       valorUnitario: 0,
+      metaId: undefined,
     });
     setAddingToRubrica(null);
   };
@@ -413,11 +488,11 @@ export default function RubricasPage() {
                       <thead>
                         <tr className="border-b border-gray-200">
                           <th className="text-left py-2 px-2 font-medium text-gray-600">Descrição</th>
-                          <th className="text-left py-2 px-2 font-medium text-gray-600 w-36">CNPJ Destinação</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">Qtd</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">Meses</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Unit.</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Total</th>
+                          <th className="text-left py-2 px-2 font-medium text-gray-600 min-w-[200px]">Meta</th>
                           <th className="text-center py-2 px-2 font-medium text-gray-600 w-20">Ações</th>
                         </tr>
                       </thead>
@@ -432,15 +507,6 @@ export default function RubricasPage() {
                                     type="text"
                                     value={editForm.descricao}
                                     onChange={(e) => setEditForm({ ...editForm, descricao: e.target.value })}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                  />
-                                </td>
-                                <td className="py-2 px-2">
-                                  <input
-                                    type="text"
-                                    value={editForm.cnpjDestinacao}
-                                    onChange={(e) => setEditForm({ ...editForm, cnpjDestinacao: e.target.value })}
-                                    placeholder="00.000.000/0000-00"
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                                   />
                                 </td>
@@ -476,6 +542,20 @@ export default function RubricasPage() {
                                   {formatCurrency(editForm.quantidade * editForm.meses * editForm.valorUnitario)}
                                 </td>
                                 <td className="py-2 px-2">
+                                  <select
+                                    value={editForm.metaId || ''}
+                                    onChange={(e) => setEditForm({ ...editForm, metaId: e.target.value || undefined })}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                  >
+                                    <option value="">Selecione uma meta</option>
+                                    {metasMock.map((meta) => (
+                                      <option key={meta.id} value={meta.id}>
+                                        {meta.numero} - {meta.titulo}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-2 px-2">
                                   <div className="flex items-center justify-center gap-1">
                                     <button
                                       onClick={() => handleSaveEdit(rubrica.id)}
@@ -498,13 +578,15 @@ export default function RubricasPage() {
                               // Modo visualização
                               <>
                                 <td className="py-2 px-2 text-gray-900">{item.descricao}</td>
-                                <td className="py-2 px-2 text-gray-600">
-                                  {item.cnpjDestinacao ? formatCNPJ(item.cnpjDestinacao) : '-'}
-                                </td>
                                 <td className="py-2 px-2 text-right text-gray-700">{item.quantidade}</td>
                                 <td className="py-2 px-2 text-right text-gray-700">{item.meses}</td>
                                 <td className="py-2 px-2 text-right text-gray-700">{formatCurrency(item.valorUnitario)}</td>
                                 <td className="py-2 px-2 text-right font-medium text-gray-900">{formatCurrency(item.valorTotal)}</td>
+                                <td className="py-2 px-2 text-gray-700">
+                                  {item.metaId
+                                    ? metasMock.find((m) => m.id === item.metaId)?.titulo || item.meta || '-'
+                                    : item.meta || '-'}
+                                </td>
                                 <td className="py-2 px-2">
                                   <div className="flex items-center justify-center gap-1">
                                     <button
@@ -543,15 +625,6 @@ export default function RubricasPage() {
                             </td>
                             <td className="py-2 px-2">
                               <input
-                                type="text"
-                                value={newItem.cnpjDestinacao || ''}
-                                onChange={(e) => setNewItem({ ...newItem, cnpjDestinacao: e.target.value })}
-                                placeholder="00.000.000/0000-00"
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
-                              />
-                            </td>
-                            <td className="py-2 px-2">
-                              <input
                                 type="number"
                                 value={newItem.quantidade || 1}
                                 onChange={(e) => setNewItem({ ...newItem, quantidade: Number(e.target.value) })}
@@ -582,6 +655,20 @@ export default function RubricasPage() {
                               {formatCurrency((newItem.quantidade || 0) * (newItem.meses || 0) * (newItem.valorUnitario || 0))}
                             </td>
                             <td className="py-2 px-2">
+                              <select
+                                value={newItem.metaId || ''}
+                                onChange={(e) => setNewItem({ ...newItem, metaId: e.target.value || undefined })}
+                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                              >
+                                <option value="">Selecione uma meta</option>
+                                {metasMock.map((meta) => (
+                                  <option key={meta.id} value={meta.id}>
+                                    {meta.numero} - {meta.titulo}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2 px-2">
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   onClick={() => handleAddItem(rubrica.id)}
@@ -596,10 +683,10 @@ export default function RubricasPage() {
                                     setAddingToRubrica(null);
                                     setNewItem({
                                       descricao: '',
-                                      cnpjDestinacao: '',
                                       quantidade: 1,
                                       meses: 1,
                                       valorUnitario: 0,
+                                      metaId: undefined,
                                     });
                                   }}
                                   className="p-1 text-gray-600 hover:bg-gray-100 rounded"
@@ -636,7 +723,7 @@ export default function RubricasPage() {
 
       {/* Resumo por rubrica */}
       <div className="bg-gray-50 rounded-lg p-4 mt-6">
-        <h4 className="font-medium text-gray-900 mb-3">Resumo por Rubrica</h4>
+        <h4 className="font-medium text-gray-900 mb-3">Resultado por Rubrica</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {rubricas.filter(r => r.itens.length > 0).map((rubrica) => (
             <div key={rubrica.id} className="bg-white p-3 rounded-lg border border-gray-200">

@@ -378,6 +378,18 @@ export default function MetaEtapaFasePage() {
               Salvo com sucesso!
             </div>
           )}
+          <button
+            onClick={() => {
+              if (!isEditing) {
+                handleEdit();
+              }
+              addMeta();
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nova Meta
+          </button>
           {!isEditing ? (
             <button
               onClick={handleEdit}
@@ -407,19 +419,6 @@ export default function MetaEtapaFasePage() {
           )}
         </div>
       </div>
-
-      {/* Botão Nova Meta (só em modo edição) */}
-      {isEditing && (
-        <div className="flex justify-end">
-          <button
-            onClick={addMeta}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nova Meta
-          </button>
-        </div>
-      )}
 
       {/* Lista de Metas */}
       {currentMetas.length === 0 ? (

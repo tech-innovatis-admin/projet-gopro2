@@ -37,12 +37,21 @@ const BriefcaseBusinessIcon = () => (
 );
 
 // Tipos
+type TipoEmpresa = "INCUBADA" | "INDEPENDENTE";
+
+type VinculoRubrica = {
+  rubricaId: string;
+  itemIds: string[];
+};
+
 type Incubada = {
   id: string;
   razaoSocial: string;
   nomeFantasia?: string;
   cnpj: string;
   tipoServico: string;
+  tipoEmpresa: TipoEmpresa; // Novo campo obrigatório
+  vinculos: VinculoRubrica[]; // Novo campo obrigatório - múltiplos vínculos
   contato?: string;
   email?: string;
   telefone?: string;
@@ -55,6 +64,75 @@ type Incubada = {
   observacao?: string;
 };
 
+// Tipos para rubricas (importados da estrutura de rubricas)
+interface ItemRubrica {
+  id: string;
+  descricao: string;
+  cnpjDestinacao: string;
+  quantidade: number;
+  meses: number;
+  valorUnitario: number;
+  valorTotal: number;
+}
+
+interface Rubrica {
+  id: string;
+  codigo: string;
+  nome: string;
+  itens: ItemRubrica[];
+}
+
+// Mock de rubricas (deve ser buscado do contrato atual)
+const mockRubricas: Rubrica[] = [
+  {
+    id: "1",
+    codigo: "MC",
+    nome: "Material de Consumo",
+    itens: [
+      {
+        id: "1-1",
+        descricao: "Reagentes químicos para laboratório",
+        cnpjDestinacao: "12.345.678/0001-00",
+        quantidade: 50,
+        meses: 12,
+        valorUnitario: 150.0,
+        valorTotal: 90000.0,
+      },
+      {
+        id: "1-2",
+        descricao: "Material de escritório",
+        cnpjDestinacao: "",
+        quantidade: 1,
+        meses: 12,
+        valorUnitario: 500.0,
+        valorTotal: 6000.0,
+      },
+    ],
+  },
+  {
+    id: "2",
+    codigo: "PP",
+    nome: "Pagamento de Pessoal",
+    itens: [
+      {
+        id: "2-1",
+        descricao: "Bolsa de pesquisador júnior",
+        cnpjDestinacao: "",
+        quantidade: 1,
+        meses: 12,
+        valorUnitario: 3500.0,
+        valorTotal: 42000.0,
+      },
+    ],
+  },
+  {
+    id: "3",
+    codigo: "OST-PJ",
+    nome: "Outros Serviços de Terceiros - Pessoa Jurídica",
+    itens: [],
+  },
+];
+
 // Mock de dados
 const mockIncubadas: Incubada[] = [
   {
@@ -63,6 +141,13 @@ const mockIncubadas: Incubada[] = [
     nomeFantasia: "TechSol",
     cnpj: "12.345.678/0001-90",
     tipoServico: "Desenvolvimento de Software",
+    tipoEmpresa: "INCUBADA",
+    vinculos: [
+      {
+        rubricaId: "3",
+        itemIds: [],
+      },
+    ],
     contato: "Carlos Mendes",
     email: "contato@techsol.com.br",
     telefone: "(11) 3333-4444",
@@ -78,6 +163,17 @@ const mockIncubadas: Incubada[] = [
     nomeFantasia: "DataCore",
     cnpj: "98.765.432/0001-21",
     tipoServico: "Análise de Dados e BI",
+    tipoEmpresa: "INDEPENDENTE",
+    vinculos: [
+      {
+        rubricaId: "1",
+        itemIds: ["1-1", "1-2"],
+      },
+      {
+        rubricaId: "2",
+        itemIds: ["2-1"],
+      },
+    ],
     contato: "Ana Paula",
     email: "ana@datacore.com.br",
     cidade: "Campinas",
@@ -109,6 +205,11 @@ export default function IncubadasPage() {
   const [formData, setFormData] = useState<Partial<Incubada>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [rubricas] = useState<Rubrica[]>(mockRubricas);
+  const [novoVinculo, setNovoVinculo] = useState<{
+    rubricaId: string;
+    itemIds: string[];
+  }>({ rubricaId: "", itemIds: [] });
 
   const handleEdit = () => {
     setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
@@ -121,6 +222,7 @@ export default function IncubadasPage() {
     setIsModalOpen(false);
     setEditingIncubada(null);
     setFormData({});
+    setNovoVinculo({ rubricaId: "", itemIds: [] });
   };
 
   const handleSave = async () => {
@@ -135,12 +237,18 @@ export default function IncubadasPage() {
 
   // Abrir modal para nova empresa
   const openNewModal = () => {
+    if (!isEditing) {
+      setIsEditing(true);
+      setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
+    }
     setEditingIncubada(null);
     setFormData({
       razaoSocial: "",
       nomeFantasia: "",
       cnpj: "",
       tipoServico: "",
+      tipoEmpresa: undefined,
+      vinculos: [],
       contato: "",
       email: "",
       telefone: "",
@@ -152,19 +260,55 @@ export default function IncubadasPage() {
       dataFim: "",
       observacao: "",
     });
+    setNovoVinculo({ rubricaId: "", itemIds: [] });
     setIsModalOpen(true);
   };
 
   // Abrir modal para editar
   const openEditModal = (incubada: Incubada) => {
+    if (!isEditing) {
+      setIsEditing(true);
+      setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
+    }
     setEditingIncubada(incubada);
     setFormData({ ...incubada });
+    setNovoVinculo({ rubricaId: "", itemIds: [] });
     setIsModalOpen(true);
+  };
+
+  // Adicionar vínculo
+  const adicionarVinculo = () => {
+    if (!novoVinculo.rubricaId || novoVinculo.itemIds.length === 0) return;
+
+    const vinculosAtuais = formData.vinculos || [];
+    const novoVinculoCompleto: VinculoRubrica = {
+      rubricaId: novoVinculo.rubricaId,
+      itemIds: [...novoVinculo.itemIds],
+    };
+
+    setFormData({
+      ...formData,
+      vinculos: [...vinculosAtuais, novoVinculoCompleto],
+    });
+    setNovoVinculo({ rubricaId: "", itemIds: [] });
+  };
+
+  // Remover vínculo
+  const removerVinculo = (index: number) => {
+    const vinculosAtuais = formData.vinculos || [];
+    setFormData({
+      ...formData,
+      vinculos: vinculosAtuais.filter((_, i) => i !== index),
+    });
   };
 
   // Salvar empresa
   const saveIncubada = () => {
-    if (!formData.razaoSocial || !formData.cnpj) return;
+    if (!formData.razaoSocial || !formData.cnpj || !formData.tipoEmpresa) return;
+    if (!formData.vinculos || formData.vinculos.length === 0) {
+      alert("É obrigatório vincular a empresa a pelo menos uma rubrica e seus itens.");
+      return;
+    }
 
     if (editingIncubada) {
       setEditIncubadas((prev) =>
@@ -179,6 +323,8 @@ export default function IncubadasPage() {
         nomeFantasia: formData.nomeFantasia,
         cnpj: formData.cnpj!,
         tipoServico: formData.tipoServico || "",
+        tipoEmpresa: formData.tipoEmpresa!,
+        vinculos: formData.vinculos || [],
         contato: formData.contato,
         email: formData.email,
         telefone: formData.telefone,
@@ -196,6 +342,7 @@ export default function IncubadasPage() {
     setIsModalOpen(false);
     setFormData({});
     setEditingIncubada(null);
+    setNovoVinculo({ rubricaId: "", itemIds: [] });
   };
 
   // Remover empresa
@@ -228,6 +375,13 @@ export default function IncubadasPage() {
               Salvo com sucesso!
             </div>
           )}
+          <button
+            onClick={openNewModal}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nova Empresa
+          </button>
           {!isEditing ? (
             <button
               onClick={handleEdit}
@@ -238,13 +392,6 @@ export default function IncubadasPage() {
             </button>
           ) : (
             <>
-              <button
-                onClick={handleCancel}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <X className="h-4 w-4" />
-                Cancelar
-              </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -258,18 +405,6 @@ export default function IncubadasPage() {
         </div>
       </div>
 
-      {/* Botão Nova Empresa (só em modo edição) */}
-      {isEditing && (
-        <div className="flex justify-end">
-          <button
-            onClick={openNewModal}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nova Empresa
-          </button>
-        </div>
-      )}
 
       {/* Lista de Empresas */}
       {currentIncubadas.length === 0 ? (
@@ -283,22 +418,18 @@ export default function IncubadasPage() {
             Nenhuma empresa cadastrada
           </h3>
           <p className="text-sm text-gray-500 mb-4">
-            {isEditing
-              ? "Adicione empresas incubadas que realizam serviços no projeto."
-              : "Clique em Editar para adicionar empresas."}
+            Adicione empresas incubadas que realizam serviços no projeto.
           </p>
-          {isEditing && (
-            <button
-              onClick={openNewModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Adicionar Empresa
-            </button>
-          )}
+          <button
+            onClick={openNewModal}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar Empresa
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {currentIncubadas.map((incubada) => (
             <div
               key={incubada.id}
@@ -324,26 +455,29 @@ export default function IncubadasPage() {
                   </div>
                 </div>
                 {isEditing && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openEditModal(incubada)}
-                      className="p-1.5 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Editar"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => removeIncubada(incubada.id)}
-                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => openEditModal(incubada)}
+                    className="p-1.5 text-[#004225] hover:bg-emerald-50 rounded-lg transition-colors"
+                    title="Editar"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
                 )}
               </div>
 
               <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      incubada.tipoEmpresa === "INCUBADA"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-blue-100 text-blue-800"
+                    }`}
+                  >
+                    {incubada.tipoEmpresa === "INCUBADA" ? "Incubada" : "Independente"}
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-2 text-gray-600">
                   <FileText className="h-4 w-4 text-gray-400" />
                   <span>{incubada.tipoServico || "—"}</span>
@@ -362,6 +496,20 @@ export default function IncubadasPage() {
                   <div className="flex items-center gap-2 text-gray-600">
                     <Globe className="h-4 w-4 text-gray-400" />
                     <span>{incubada.email}</span>
+                  </div>
+                )}
+
+                {incubada.vinculos && incubada.vinculos.length > 0 && (
+                  <div className="flex flex-col gap-1 pt-2 border-t border-gray-100">
+                    <span className="text-xs font-medium text-gray-500">Vínculos:</span>
+                    {incubada.vinculos.map((vinculo, idx) => {
+                      const rubrica = rubricas.find((r) => r.id === vinculo.rubricaId);
+                      return (
+                        <span key={idx} className="text-xs text-gray-600">
+                          • {rubrica ? `${rubrica.codigo}` : "Rubrica"} ({vinculo.itemIds.length} item{vinculo.itemIds.length !== 1 ? "s" : ""})
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -411,8 +559,15 @@ export default function IncubadasPage() {
             setIsModalOpen(false);
             setFormData({});
             setEditingIncubada(null);
+            setNovoVinculo({ rubricaId: "", itemIds: [] });
           }}
+          onDelete={editingIncubada ? () => removeIncubada(editingIncubada.id) : undefined}
           isEditingItem={!!editingIncubada}
+          rubricas={rubricas}
+          novoVinculo={novoVinculo}
+          setNovoVinculo={setNovoVinculo}
+          adicionarVinculo={adicionarVinculo}
+          removerVinculo={removerVinculo}
         />
       )}
     </div>
@@ -425,14 +580,28 @@ function IncubadaModal({
   setFormData,
   onSave,
   onClose,
+  onDelete,
   isEditingItem,
+  rubricas,
+  novoVinculo,
+  setNovoVinculo,
+  adicionarVinculo,
+  removerVinculo,
 }: {
   formData: Partial<Incubada>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<Incubada>>>;
   onSave: () => void;
   onClose: () => void;
+  onDelete?: () => void;
   isEditingItem: boolean;
+  rubricas: Rubrica[];
+  novoVinculo: { rubricaId: string; itemIds: string[] };
+  setNovoVinculo: React.Dispatch<React.SetStateAction<{ rubricaId: string; itemIds: string[] }>>;
+  adicionarVinculo: () => void;
+  removerVinculo: (index: number) => void;
 }) {
+  const rubricaSelecionada = rubricas.find((r) => r.id === novoVinculo.rubricaId);
+  const itensDisponiveis = rubricaSelecionada?.itens || [];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
@@ -601,6 +770,27 @@ function IncubadaModal({
               />
             </div>
 
+            {/* Tipo de Empresa */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">
+                Tipo de Empresa <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.tipoEmpresa || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tipoEmpresa: e.target.value as TipoEmpresa,
+                  })
+                }
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+              >
+                <option value="">Selecione...</option>
+                <option value="INCUBADA">Incubada</option>
+                <option value="INDEPENDENTE">Não incubada / Independente</option>
+              </select>
+            </div>
+
             {/* Data Início */}
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">
@@ -631,6 +821,137 @@ function IncubadaModal({
               />
             </div>
 
+            {/* Vínculos com Rubricas */}
+            <div className="md:col-span-2 space-y-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Vínculos com Rubricas <span className="text-red-500">*</span>
+              </label>
+              
+              {/* Lista de vínculos existentes */}
+              {formData.vinculos && formData.vinculos.length > 0 && (
+                <div className="space-y-2">
+                  {formData.vinculos.map((vinculo, index) => {
+                    const rubrica = rubricas.find((r) => r.id === vinculo.rubricaId);
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            {rubrica ? `${rubrica.codigo} - ${rubrica.nome}` : "Rubrica não encontrada"}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Itens:{" "}
+                            {vinculo.itemIds
+                              .map((itemId) => {
+                                const item = rubrica?.itens.find((i) => i.id === itemId);
+                                return item ? item.descricao : itemId;
+                              })
+                              .join(", ")}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removerVinculo(index)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remover vínculo"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Formulário para adicionar novo vínculo */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">
+                  Adicionar Novo Vínculo
+                </h4>
+                <div className="space-y-3">
+                  {/* Seleção de Rubrica */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-gray-700">
+                      Rubrica <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={novoVinculo.rubricaId}
+                      onChange={(e) => {
+                        setNovoVinculo({ rubricaId: e.target.value, itemIds: [] });
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                    >
+                      <option value="">Selecione uma rubrica...</option>
+                      {rubricas.map((rubrica) => (
+                        <option key={rubrica.id} value={rubrica.id}>
+                          {rubrica.codigo} - {rubrica.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Seleção de Itens (múltipla) */}
+                  {novoVinculo.rubricaId && itensDisponiveis.length > 0 && (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Itens da Rubrica <span className="text-red-500">*</span>
+                      </label>
+                      <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-lg p-2 bg-white">
+                        {itensDisponiveis.map((item) => (
+                          <label
+                            key={item.id}
+                            className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={novoVinculo.itemIds.includes(item.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNovoVinculo({
+                                    ...novoVinculo,
+                                    itemIds: [...novoVinculo.itemIds, item.id],
+                                  });
+                                } else {
+                                  setNovoVinculo({
+                                    ...novoVinculo,
+                                    itemIds: novoVinculo.itemIds.filter((id) => id !== item.id),
+                                  });
+                                }
+                              }}
+                              className="rounded border-gray-300 text-[#004225] focus:ring-[#004225]"
+                            />
+                            <span className="text-xs text-gray-700 flex-1">
+                              {item.descricao}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {novoVinculo.rubricaId && itensDisponiveis.length === 0 && (
+                    <p className="text-xs text-gray-500">
+                      Esta rubrica não possui itens cadastrados.
+                    </p>
+                  )}
+
+                  {/* Botão para adicionar vínculo */}
+                  {novoVinculo.rubricaId && novoVinculo.itemIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={adicionarVinculo}
+                      className="w-full px-3 py-2 text-sm font-medium text-[#004225] bg-white border border-[#004225] rounded-lg hover:bg-emerald-50 transition-colors"
+                    >
+                      <Plus className="h-4 w-4 inline-block mr-1" />
+                      Adicionar Vínculo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Observação */}
             <div className="md:col-span-2 space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">
@@ -650,20 +971,44 @@ function IncubadaModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onSave}
-            disabled={!formData.razaoSocial || !formData.cnpj}
-            className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
-          </button>
+        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+          <div>
+            {isEditingItem && onDelete && (
+              <button
+                onClick={() => {
+                  if (confirm("Deseja realmente excluir esta empresa?")) {
+                    onDelete();
+                    onClose();
+                  }
+                }}
+                className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="h-4 w-4 inline-block mr-2" />
+                Excluir Empresa
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onSave}
+              disabled={
+                !formData.razaoSocial ||
+                !formData.cnpj ||
+                !formData.tipoEmpresa ||
+                !formData.vinculos ||
+                formData.vinculos.length === 0
+              }
+              className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

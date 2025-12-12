@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useState, useEffect, useRef } from "react";
 import { X, Upload, FileText, AlertCircle, Edit } from "lucide-react";
 import type { Arquivo, TipoArquivo } from "../page";
@@ -30,6 +28,10 @@ const tipoLabels: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: "Relatório Técnico",
   RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
+  PROPOSTA_COMERCIAL: "Proposta comercial",
+  ETP: "ETP",
+  RELATORIO_INCUBADAS: "Relatórios de Incubadas",
+  NOTA_FISCAL: "Nota Fiscal",
   OUTROS: "Outros",
 };
 
@@ -299,11 +301,13 @@ export function EditarArquivoModal({
                   paddingRight: "2.5rem",
                 }}
               >
-                {Object.entries(tipoLabels).map(([tipo, label]) => (
-                  <option key={tipo} value={tipo}>
-                    {label}
-                  </option>
-                ))}
+                {Object.entries(tipoLabels)
+                  .sort(([, labelA], [, labelB]) => labelA.localeCompare(labelB, "pt-BR"))
+                  .map(([tipo, label]) => (
+                    <option key={tipo} value={tipo}>
+                      {label}
+                    </option>
+                  ))}
               </select>
             </FormField>
 

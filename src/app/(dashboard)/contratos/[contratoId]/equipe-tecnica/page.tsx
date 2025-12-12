@@ -16,6 +16,16 @@ import {
   UserCircle,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
+import {
+  formatCPF,
+  unformatCPF,
+  validateCPFComplete,
+} from "./_components/CPFValidator";
+import {
+  formatPhone,
+  unformatPhone,
+  validatePhoneComplete,
+} from "./_components/PhoneValidator";
 
 // Tipos
 type Papel =
@@ -94,30 +104,14 @@ const mockMembros: Membro[] = [
   },
 ];
 
-// Funções de formatação
-const formatCPF = (cpf: string) => {
-  const cleaned = cpf.replace(/\D/g, "");
-  if (cleaned.length === 11) {
-    return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  }
-  return cpf;
-};
-
-const formatTelefone = (tel: string) => {
-  const cleaned = tel.replace(/\D/g, "");
-  if (cleaned.length === 11) {
-    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-  } else if (cleaned.length === 10) {
-    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-  }
-  return tel;
-};
+// Funções de formatação (removidas - usando PhoneValidator)
 
 export default function EquipeTecnicaPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
 
   const [isEditing, setIsEditing] = useState(false);
+  const [showCancelButton, setShowCancelButton] = useState(false);
   const [membros, setMembros] = useState<Membro[]>(mockMembros);
   const [editMembros, setEditMembros] = useState<Membro[]>(mockMembros);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -125,18 +119,24 @@ export default function EquipeTecnicaPage() {
   const [formData, setFormData] = useState<Partial<Membro>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [cpfError, setCpfError] = useState<string>("");
+  const [phoneError, setPhoneError] = useState<string>("");
 
   const handleEdit = () => {
     setEditMembros(JSON.parse(JSON.stringify(membros)));
     setIsEditing(true);
+    setShowCancelButton(true);
   };
 
   const handleCancel = () => {
     setEditMembros(JSON.parse(JSON.stringify(membros)));
     setIsEditing(false);
+    setShowCancelButton(false);
     setIsModalOpen(false);
     setEditingMembro(null);
     setFormData({});
+    setCpfError("");
+    setPhoneError("");
   };
 
   const handleSave = async () => {
@@ -145,6 +145,7 @@ export default function EquipeTecnicaPage() {
     setMembros(JSON.parse(JSON.stringify(editMembros)));
     setIsSaving(false);
     setIsEditing(false);
+    setShowCancelButton(false);
     setSavedMessage(true);
     setTimeout(() => setSavedMessage(false), 3000);
   };
@@ -163,13 +164,22 @@ export default function EquipeTecnicaPage() {
       vinculo: "",
       cargaHoraria: 0,
     });
+    setCpfError("");
+    setPhoneError("");
     setIsModalOpen(true);
   };
 
   // Abrir modal para editar
   const openEditModal = (membro: Membro) => {
     setEditingMembro(membro);
-    setFormData({ ...membro });
+    // Formatar CPF e telefone ao abrir o modal para edição
+    setFormData({
+      ...membro,
+      cpf: membro.cpf ? formatCPF(membro.cpf) : "",
+      telefone: membro.telefone ? formatPhone(membro.telefone) : "",
+    });
+    setCpfError("");
+    setPhoneError("");
     setIsModalOpen(true);
   };
 
@@ -177,10 +187,39 @@ export default function EquipeTecnicaPage() {
   const saveMembro = () => {
     if (!formData.nome || !formData.papel || !formData.cpf) return;
 
+    // Validar CPF antes de salvar
+    const cpfValidation = validateCPFComplete(formData.cpf || "");
+    if (!cpfValidation.isValid) {
+      setCpfError(cpfValidation.errorMessage);
+      return;
+    }
+
+    // Validar telefone se fornecido (opcional)
+    if (formData.telefone && formData.telefone.trim()) {
+      const phoneValidation = validatePhoneComplete(formData.telefone);
+      if (!phoneValidation.isValid) {
+        setPhoneError(phoneValidation.errorMessage);
+        return;
+      }
+    }
+
+    // Salvar CPF e telefone sem formatação
+    const cpfUnformatted = unformatCPF(formData.cpf || "");
+    const phoneUnformatted = formData.telefone
+      ? unformatPhone(formData.telefone)
+      : formData.telefone;
+
     if (editingMembro) {
       setEditMembros((prev) =>
         prev.map((m) =>
-          m.id === editingMembro.id ? { ...m, ...formData } as Membro : m
+          m.id === editingMembro.id
+            ? {
+                ...m,
+                ...formData,
+                cpf: cpfUnformatted,
+                telefone: phoneUnformatted,
+              } as Membro
+            : m
         )
       );
     } else {
@@ -190,8 +229,8 @@ export default function EquipeTecnicaPage() {
         papel: formData.papel as Papel,
         papelCustom: formData.papelCustom,
         email: formData.email,
-        telefone: formData.telefone,
-        cpf: formData.cpf,
+        telefone: phoneUnformatted,
+        cpf: cpfUnformatted,
         avatarUrl: formData.avatarUrl,
         endereco: formData.endereco,
         vinculo: formData.vinculo,
@@ -203,6 +242,8 @@ export default function EquipeTecnicaPage() {
     setIsModalOpen(false);
     setFormData({});
     setEditingMembro(null);
+    setCpfError("");
+    setPhoneError("");
   };
 
   // Remover membro
@@ -236,6 +277,20 @@ export default function EquipeTecnicaPage() {
               Salvo com sucesso!
             </div>
           )}
+          <button
+            onClick={() => {
+              if (!isEditing) {
+                setEditMembros(JSON.parse(JSON.stringify(membros)));
+                setIsEditing(true);
+                // Não mostra o botão Cancelar quando entra em modo de edição via "+ Novo Membro"
+              }
+              openNewModal();
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Membro
+          </button>
           {!isEditing ? (
             <button
               onClick={handleEdit}
@@ -246,13 +301,15 @@ export default function EquipeTecnicaPage() {
             </button>
           ) : (
             <>
-              <button
-                onClick={handleCancel}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <X className="h-4 w-4" />
-                Cancelar
-              </button>
+              {showCancelButton && (
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              )}
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -266,19 +323,6 @@ export default function EquipeTecnicaPage() {
         </div>
       </div>
 
-      {/* Botão Novo Membro (só em modo edição) */}
-      {isEditing && (
-        <div className="flex justify-end">
-          <button
-            onClick={openNewModal}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Membro
-          </button>
-        </div>
-      )}
-
       {/* Lista de Membros */}
       {currentMembros.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -288,20 +332,9 @@ export default function EquipeTecnicaPage() {
           <h3 className="text-sm font-semibold text-gray-900 mb-1">
             Nenhum membro cadastrado
           </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            {isEditing
-              ? "Adicione membros à equipe técnica do contrato."
-              : "Clique em Editar para adicionar membros."}
+          <p className="text-sm text-gray-500">
+            Clique em "Novo Membro" para adicionar membros à equipe técnica do contrato.
           </p>
-          {isEditing && (
-            <button
-              onClick={openNewModal}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Adicionar Membro
-            </button>
-          )}
         </div>
       ) : (
         <div className="border border-gray-200 rounded-lg">
@@ -387,7 +420,7 @@ export default function EquipeTecnicaPage() {
                       {membro.telefone && (
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">
                           <Phone className="h-3.5 w-3.5 text-gray-400" />
-                          {formatTelefone(membro.telefone)}
+                          {formatPhone(membro.telefone)}
                         </div>
                       )}
                     </div>
@@ -453,8 +486,14 @@ export default function EquipeTecnicaPage() {
             setIsModalOpen(false);
             setFormData({});
             setEditingMembro(null);
+            setCpfError("");
+            setPhoneError("");
           }}
           isEditingMembro={!!editingMembro}
+          cpfError={cpfError}
+          setCpfError={setCpfError}
+          phoneError={phoneError}
+          setPhoneError={setPhoneError}
         />
       )}
     </div>
@@ -468,12 +507,20 @@ function MembroModal({
   onSave,
   onClose,
   isEditingMembro,
+  cpfError,
+  setCpfError,
+  phoneError,
+  setPhoneError,
 }: {
   formData: Partial<Membro>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<Membro>>>;
   onSave: () => void;
   onClose: () => void;
   isEditingMembro: boolean;
+  cpfError: string;
+  setCpfError: React.Dispatch<React.SetStateAction<string>>;
+  phoneError: string;
+  setPhoneError: React.Dispatch<React.SetStateAction<string>>;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -642,14 +689,39 @@ function MembroModal({
                 type="tel"
                 value={formData.telefone || ""}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, "");
-                  setFormData({ ...formData, telefone: value });
+                  const formatted = formatPhone(e.target.value);
+                  setFormData({ ...formData, telefone: formatted });
+                  
+                  // Validar em tempo real quando o usuário terminar de digitar
+                  if (formatted.replace(/\D/g, "").length >= 10) {
+                    const validation = validatePhoneComplete(formatted);
+                    setPhoneError(validation.errorMessage);
+                  } else {
+                    setPhoneError("");
+                  }
                 }}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="(11) 99999-9999"
-                maxLength={11}
+                onBlur={() => {
+                  // Validar ao perder o foco
+                  if (formData.telefone && formData.telefone.trim()) {
+                    const validation = validatePhoneComplete(formData.telefone);
+                    setPhoneError(validation.errorMessage);
+                  } else {
+                    setPhoneError("");
+                  }
+                }}
+                className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
+                  phoneError
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-[#004225]"
+                }`}
+                placeholder="(11) 98765-4321"
+                maxLength={15}
               />
-              <p className="text-xs text-gray-500">Apenas números</p>
+              {phoneError ? (
+                <p className="text-xs text-red-600">{phoneError}</p>
+              ) : (
+                <p className="text-xs text-gray-500">Digite o telefone completo (10 ou 11 dígitos)</p>
+              )}
             </div>
 
             {/* CPF */}
@@ -661,14 +733,37 @@ function MembroModal({
                 type="text"
                 value={formData.cpf || ""}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, "");
-                  setFormData({ ...formData, cpf: value });
+                  const formatted = formatCPF(e.target.value);
+                  setFormData({ ...formData, cpf: formatted });
+                  
+                  // Validar em tempo real quando o usuário terminar de digitar
+                  if (formatted.length === 14) {
+                    const validation = validateCPFComplete(formatted);
+                    setCpfError(validation.errorMessage);
+                  } else {
+                    setCpfError("");
+                  }
                 }}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                onBlur={() => {
+                  // Validar ao perder o foco
+                  if (formData.cpf) {
+                    const validation = validateCPFComplete(formData.cpf);
+                    setCpfError(validation.errorMessage);
+                  }
+                }}
+                className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
+                  cpfError
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-[#004225]"
+                }`}
                 placeholder="000.000.000-00"
-                maxLength={11}
+                maxLength={14}
               />
-              <p className="text-xs text-gray-500">Apenas números (11 dígitos)</p>
+              {cpfError ? (
+                <p className="text-xs text-red-600">{cpfError}</p>
+              ) : (
+                <p className="text-xs text-gray-500">Digite o CPF completo (11 dígitos)</p>
+              )}
             </div>
 
             {/* Vínculo */}
@@ -735,7 +830,13 @@ function MembroModal({
           </button>
           <button
             onClick={onSave}
-            disabled={!formData.nome || !formData.papel || !formData.cpf}
+            disabled={
+              !formData.nome ||
+              !formData.papel ||
+              !formData.cpf ||
+              !!cpfError ||
+              !!phoneError
+            }
             className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isEditingMembro ? "Salvar Alterações" : "Adicionar Membro"}

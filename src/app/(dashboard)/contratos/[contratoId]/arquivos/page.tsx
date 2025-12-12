@@ -29,6 +29,10 @@ type TipoArquivo =
   | "RELATORIO_TECNICO"
   | "RELATORIO_FINANCEIRO"
   | "COMPROVANTE_DESPESA"
+  | "PROPOSTA_COMERCIAL"
+  | "ETP"
+  | "RELATORIO_INCUBADAS"
+  | "NOTA_FISCAL"
   | "OUTROS";
 
 export interface Arquivo {
@@ -54,6 +58,10 @@ const tipoLabels: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: "Relatório Técnico",
   RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
+  PROPOSTA_COMERCIAL: "Proposta comercial",
+  ETP: "ETP",
+  RELATORIO_INCUBADAS: "Relatórios de Incubadas",
+  NOTA_FISCAL: "Nota Fiscal",
   OUTROS: "Outros",
 };
 
@@ -66,6 +74,10 @@ const tipoCores: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: "bg-cyan-100 text-cyan-800",
   RELATORIO_FINANCEIRO: "bg-yellow-100 text-yellow-800",
   COMPROVANTE_DESPESA: "bg-red-100 text-red-800",
+  PROPOSTA_COMERCIAL: "bg-indigo-100 text-indigo-800",
+  ETP: "bg-teal-100 text-teal-800",
+  RELATORIO_INCUBADAS: "bg-pink-100 text-pink-800",
+  NOTA_FISCAL: "bg-amber-100 text-amber-800",
   OUTROS: "bg-gray-100 text-gray-800",
 };
 
@@ -337,11 +349,13 @@ export default function ArquivosPage() {
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
         >
           <option value="TODOS">Todos os tipos</option>
-          {Object.entries(tipoLabels).map(([tipo, label]) => (
-            <option key={tipo} value={tipo}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(tipoLabels)
+            .sort(([, labelA], [, labelB]) => labelA.localeCompare(labelB, "pt-BR"))
+            .map(([tipo, label]) => (
+              <option key={tipo} value={tipo}>
+                {label}
+              </option>
+            ))}
         </select>
         <span className="text-sm text-gray-500">
           {arquivosFiltrados.length} arquivo(s) encontrado(s)
