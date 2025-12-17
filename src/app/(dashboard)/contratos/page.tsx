@@ -719,7 +719,7 @@ function MetricCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>

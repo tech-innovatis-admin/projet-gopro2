@@ -18,6 +18,7 @@ import {
   X,
   Flag,
 } from "lucide-react";
+import { NovoMarcoModal, NovoMarcoForm } from "./_components/NovoMarcoModal";
 
 // Tipos
 type MarcoStatus = "PLANEJADO" | "EM_ANDAMENTO" | "CONCLUIDO" | "ATRASADO" | "CANCELADO";
@@ -151,26 +152,39 @@ const mockRiscos: Risco[] = [
   },
 ];
 
-// Cálculos
-const totalMarcos = mockMarcos.length;
-const marcosConcluidos = mockMarcos.filter((m) => m.status === "CONCLUIDO").length;
-const marcosAtrasados = mockMarcos.filter((m) => m.status === "ATRASADO").length;
-const percentualGeral = Math.round(
-  mockMarcos.reduce((acc, m) => acc + m.percentual, 0) / totalMarcos
-);
-
 export default function ContratoExecucaoPage() {
+  const [marcos, setMarcos] = useState<Marco[]>(mockMarcos);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"TODOS" | MarcoStatus>("TODOS");
   const [filterFase, setFilterFase] = useState<string>("TODOS");
   const [showRiscos, setShowRiscos] = useState(false);
+  const [isNovoMarcoModalOpen, setIsNovoMarcoModalOpen] = useState(false);
+
+  // Cálculos baseados no estado
+  const totalMarcos = marcos.length;
+  const marcosConcluidos = marcos.filter((m) => m.status === "CONCLUIDO").length;
+  const marcosAtrasados = marcos.filter((m) => m.status === "ATRASADO").length;
+  const percentualGeral = totalMarcos > 0 
+    ? Math.round(marcos.reduce((acc, m) => acc + m.percentual, 0) / totalMarcos)
+    : 0;
 
   // Fases únicas
-  const fases = [...new Set(mockMarcos.map((m) => m.fase))];
+  const fases = [...new Set(marcos.map((m) => m.fase))];
+
+  const handleCreateMarco = async (data: NovoMarcoForm) => {
+    const novoMarco: Marco = {
+      id: Math.random().toString(36).substr(2, 9),
+      ...data,
+      status: data.status as MarcoStatus,
+    };
+    
+    setMarcos((prev) => [...prev, novoMarco]);
+    setIsNovoMarcoModalOpen(false);
+  };
 
   // Filtragem de marcos
   const filteredMarcos = useMemo(() => {
-    return mockMarcos
+    return marcos
       .filter((m) => (filterStatus === "TODOS" ? true : m.status === filterStatus))
       .filter((m) => (filterFase === "TODOS" ? true : m.fase === filterFase))
       .filter((m) =>
@@ -180,7 +194,7 @@ export default function ContratoExecucaoPage() {
               .includes(searchQuery.toLowerCase())
           : true
       );
-  }, [filterStatus, filterFase, searchQuery]);
+  }, [marcos, filterStatus, filterFase, searchQuery]);
 
   const hasActiveFilters = filterStatus !== "TODOS" || filterFase !== "TODOS" || searchQuery;
 
@@ -191,7 +205,7 @@ export default function ContratoExecucaoPage() {
   };
 
   // Próximo marco
-  const proximoMarco = mockMarcos
+  const proximoMarco = marcos
     .filter((m) => m.status === "PLANEJADO" || m.status === "EM_ANDAMENTO")
     .sort((a, b) => new Date(a.dataPlanejada).getTime() - new Date(b.dataPlanejada).getTime())[0];
 
@@ -217,7 +231,10 @@ export default function ContratoExecucaoPage() {
             <AlertTriangle className="h-4 w-4" />
             Riscos ({mockRiscos.filter((r) => r.status !== "RESOLVIDO").length})
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors">
+          <button
+            onClick={() => setIsNovoMarcoModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+          >
             <Plus className="h-4 w-4" />
             Novo Marco
           </button>
@@ -524,6 +541,12 @@ export default function ContratoExecucaoPage() {
           </div>
         )}
       </div>
+
+      <NovoMarcoModal
+        isOpen={isNovoMarcoModalOpen}
+        onClose={() => setIsNovoMarcoModalOpen(false)}
+        onSubmit={handleCreateMarco}
+      />
     </div>
   );
 }

@@ -1,11 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle, ArrowRight, History } from 'lucide-react';
+import { RemanejamentoModal } from './_components/RemanejamentoModal';
+import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 
 // Tipos
 type ID = string;
+
+interface Remanejamento {
+  id: string;
+  contratoId: string;
+  itemOrigemId: string;
+  itemDestinoId: string;
+  valor: number;
+  data: string;
+  motivo: string;
+  createdBy: string;
+  createdAt: string;
+  status?: 'PENDENTE' | 'APROVADO';
+}
 
 type Lancamento = {
   valor: number;    // valor pago daquele subitem na parcela
@@ -29,6 +44,10 @@ interface ItemRubrica {
   meta?: string; // meta vinculada ao item (texto livre ou ID da meta)
   metaId?: string; // ID da meta selecionada da página de metas
   subitens?: Subitem[]; // subitens com empresa/RH e lançamentos por parcela
+  // Campos calculados para remanejamento (não persistidos diretamente no item)
+  remanejamentoDebito?: number; // Total de débitos (saídas)
+  remanejamentoCredito?: number; // Total de créditos (entradas)
+  valorFinal?: number; // Valor Total - Débito + Crédito
 }
 
 interface Rubrica {
@@ -204,6 +223,12 @@ export default function RubricasPage() {
   });
   const [isAddingRubrica, setIsAddingRubrica] = useState(false);
   const [newRubrica, setNewRubrica] = useState({ codigo: '', nome: '' });
+  
+  // Estado para remanejamentos
+  const [remanejamentos, setRemanejamentos] = useState<Remanejamento[]>([]);
+  const [remanejamentoModalOpen, setRemanejamentoModalOpen] = useState(false);
+  const [itemParaRemanejamento, setItemParaRemanejamento] = useState<ItemRubrica | null>(null);
+  const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
 
   // Formatar moeda
   const formatCurrency = (value: number) => {
@@ -214,14 +239,50 @@ export default function RubricasPage() {
   };
 
 
-  // Calcular total da rubrica
-  const calcularTotalRubrica = (rubrica: Rubrica) => {
-    return rubrica.itens.reduce((acc, item) => acc + item.valorTotal, 0);
+  // Calcular débitos e créditos por item baseado nos remanejamentos
+  const calcularRemanejamentosItem = (itemId: string) => {
+    const debito = remanejamentos
+      .filter(rem => rem.itemOrigemId === itemId)
+      .reduce((acc, rem) => acc + rem.valor, 0);
+    
+    const credito = remanejamentos
+      .filter(rem => rem.itemDestinoId === itemId)
+      .reduce((acc, rem) => acc + rem.valor, 0);
+    
+    return { debito, credito };
   };
 
-  // Calcular total geral
+  // Calcular valor final do item (Valor Total - Débito + Crédito)
+  const calcularValorFinalItem = (item: ItemRubrica) => {
+    const { debito, credito } = calcularRemanejamentosItem(item.id);
+    return item.valorTotal - debito + credito;
+  };
+
+  // Calcular total da rubrica (soma dos valores finais dos itens)
+  const calcularTotalRubrica = (rubrica: Rubrica) => {
+    return rubrica.itens.reduce((acc, item) => {
+      return acc + calcularValorFinalItem(item);
+    }, 0);
+  };
+
+  // Calcular total geral (soma de todas as rubricas)
   const calcularTotalGeral = () => {
     return rubricas.reduce((acc, rubrica) => acc + calcularTotalRubrica(rubrica), 0);
+  };
+
+  // Calcular totais de remanejamento por rubrica
+  const calcularRemanejamentosRubrica = (rubrica: Rubrica) => {
+    const debito = rubrica.itens.reduce((acc, item) => {
+      const { debito: itemDebito } = calcularRemanejamentosItem(item.id);
+      return acc + itemDebito;
+    }, 0);
+    
+    const credito = rubrica.itens.reduce((acc, item) => {
+      const { credito: itemCredito } = calcularRemanejamentosItem(item.id);
+      return acc + itemCredito;
+    }, 0);
+    
+    return { debito, credito };
   };
 
   // Toggle expandir rubrica
@@ -338,6 +399,84 @@ export default function RubricasPage() {
       setRubricas(rubricas.filter(r => r.id !== rubricaId));
     }
   };
+
+  // Abrir modal de remanejamento
+  const handleAbrirRemanejamento = (item: ItemRubrica) => {
+    setItemParaRemanejamento(item);
+    setRemanejamentoModalOpen(true);
+  };
+
+  // Confirmar remanejamento
+  const handleConfirmarRemanejamento = async (form: {
+    itemOrigemId: string;
+    itemDestinoId: string;
+    valor: number;
+    data: string;
+    motivo: string;
+  }) => {
+    // Criar novo remanejamento
+    const novoRemanejamento: Remanejamento = {
+      id: `rem-${Date.now()}`,
+      contratoId,
+      itemOrigemId: form.itemOrigemId,
+      itemDestinoId: form.itemDestinoId,
+      valor: form.valor,
+      data: form.data,
+      motivo: form.motivo,
+      createdBy: 'Usuário Atual', // TODO: pegar do contexto de auth
+      createdAt: new Date().toISOString(),
+      status: 'APROVADO',
+    };
+
+    // Adicionar à lista de remanejamentos
+    setRemanejamentos(prev => [...prev, novoRemanejamento]);
+
+    // TODO: Salvar via API
+    // await fetch(`/api/contratos/${contratoId}/rubricas/remanejamentos-itens`, {
+    //   method: 'POST',
+    //   body: JSON.stringify(novoRemanejamento),
+    // });
+
+    setRemanejamentoModalOpen(false);
+    setItemParaRemanejamento(null);
+  };
+
+  // Obter remanejamentos com dados relacionados para exibição
+  const remanejamentosComDados = useMemo(() => {
+    return remanejamentos.map(rem => {
+      const itemOrigem = rubricas
+        .flatMap(r => r.itens)
+        .find(item => item.id === rem.itemOrigemId);
+      
+      const itemDestino = rubricas
+        .flatMap(r => r.itens)
+        .find(item => item.id === rem.itemDestinoId);
+      
+      const rubricaOrigem = rubricas.find(r => 
+        r.itens.some(item => item.id === rem.itemOrigemId)
+      );
+      
+      const rubricaDestino = rubricas.find(r => 
+        r.itens.some(item => item.id === rem.itemDestinoId)
+      );
+
+      return {
+        ...rem,
+        itemOrigem: itemOrigem ? {
+          descricao: itemOrigem.descricao,
+          codigo: itemOrigem.codigo,
+          rubricaNome: rubricaOrigem?.nome || '',
+          rubricaCodigo: rubricaOrigem?.codigo || '',
+        } : undefined,
+        itemDestino: itemDestino ? {
+          descricao: itemDestino.descricao,
+          codigo: itemDestino.codigo,
+          rubricaNome: rubricaDestino?.nome || '',
+          rubricaCodigo: rubricaDestino?.codigo || '',
+        } : undefined,
+      };
+    });
+  }, [remanejamentos, rubricas]);
 
   return (
     <div className="space-y-6">
@@ -492,8 +631,11 @@ export default function RubricasPage() {
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">Meses</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Unit.</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Total</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-28 text-red-600">Rem. (Deb.)</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-28 text-green-600">Rem. (Créd.)</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-32 text-blue-600">Valor Final</th>
                           <th className="text-left py-2 px-2 font-medium text-gray-600 min-w-[200px]">Meta</th>
-                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-20">Ações</th>
+                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-32">Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -541,6 +683,9 @@ export default function RubricasPage() {
                                 <td className="py-2 px-2 text-right font-medium text-gray-700">
                                   {formatCurrency(editForm.quantidade * editForm.meses * editForm.valorUnitario)}
                                 </td>
+                                <td className="py-2 px-2 text-right text-gray-400">—</td>
+                                <td className="py-2 px-2 text-right text-gray-400">—</td>
+                                <td className="py-2 px-2 text-right text-gray-400">—</td>
                                 <td className="py-2 px-2">
                                   <select
                                     value={editForm.metaId || ''}
@@ -582,6 +727,31 @@ export default function RubricasPage() {
                                 <td className="py-2 px-2 text-right text-gray-700">{item.meses}</td>
                                 <td className="py-2 px-2 text-right text-gray-700">{formatCurrency(item.valorUnitario)}</td>
                                 <td className="py-2 px-2 text-right font-medium text-gray-900">{formatCurrency(item.valorTotal)}</td>
+                                <td className="py-2 px-2 text-right">
+                                  {(() => {
+                                    const { debito } = calcularRemanejamentosItem(item.id);
+                                    return debito > 0 ? (
+                                      <span className="text-red-600 font-medium">{formatCurrency(debito)}</span>
+                                    ) : (
+                                      <span className="text-gray-400">—</span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="py-2 px-2 text-right">
+                                  {(() => {
+                                    const { credito } = calcularRemanejamentosItem(item.id);
+                                    return credito > 0 ? (
+                                      <span className="text-green-600 font-medium">{formatCurrency(credito)}</span>
+                                    ) : (
+                                      <span className="text-gray-400">—</span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="py-2 px-2 text-right">
+                                  <span className="font-semibold text-blue-600">
+                                    {formatCurrency(calcularValorFinalItem(item))}
+                                  </span>
+                                </td>
                                 <td className="py-2 px-2 text-gray-700">
                                   {item.metaId
                                     ? metasMock.find((m) => m.id === item.metaId)?.titulo || item.meta || '-'
@@ -589,6 +759,18 @@ export default function RubricasPage() {
                                 </td>
                                 <td className="py-2 px-2">
                                   <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => handleAbrirRemanejamento(item)}
+                                      className="p-1 text-[#004225] hover:bg-emerald-50 rounded"
+                                      title="Remanejar"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up-down-icon lucide-arrow-up-down">
+                                        <path d="m21 16-4 4-4-4"/>
+                                        <path d="M17 20V4"/>
+                                        <path d="m3 8 4-4 4 4"/>
+                                        <path d="M7 4v16"/>
+                                      </svg>
+                                    </button>
                                     <button
                                       onClick={() => handleStartEdit(item)}
                                       className="p-1 text-gray-600 hover:bg-gray-100 rounded"
@@ -654,6 +836,9 @@ export default function RubricasPage() {
                             <td className="py-2 px-2 text-right font-medium text-blue-700">
                               {formatCurrency((newItem.quantidade || 0) * (newItem.meses || 0) * (newItem.valorUnitario || 0))}
                             </td>
+                            <td className="py-2 px-2 text-right text-gray-400">—</td>
+                            <td className="py-2 px-2 text-right text-gray-400">—</td>
+                            <td className="py-2 px-2 text-right text-gray-400">—</td>
                             <td className="py-2 px-2">
                               <select
                                 value={newItem.metaId || ''}
@@ -745,8 +930,32 @@ export default function RubricasPage() {
               {formatCurrency(calcularTotalGeral())}
             </p>
           </div>
+
         </div>
       </div>
+
+      {/* Modais */}
+      {itemParaRemanejamento && (
+        <RemanejamentoModal
+          isOpen={remanejamentoModalOpen}
+          onClose={() => {
+            setRemanejamentoModalOpen(false);
+            setItemParaRemanejamento(null);
+          }}
+          onConfirm={handleConfirmarRemanejamento}
+          itemOrigem={itemParaRemanejamento}
+          rubricas={rubricas}
+          contratoId={contratoId}
+        />
+      )}
+
+      <HistoricoRemanejamentos
+        isOpen={historicoModalOpen}
+        onClose={() => setHistoricoModalOpen(false)}
+        remanejamentos={remanejamentosComDados}
+        contratoId={contratoId}
+      />
     </div>
   );
 }
+

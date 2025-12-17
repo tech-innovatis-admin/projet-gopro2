@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AlertCircle, Calendar, Check, CheckCircle, Edit, Plus, Save, Trash2, X } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import { mockContrato } from "../types";
+import { MoneyInput } from "./_components/MoneyImput";
 
 type ParcelaPrevista = {
   id: string;
@@ -193,7 +194,7 @@ export default function DesembolsoPage() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Cronograma de Desembolso - Previsto</h2>
           <p className="text-sm text-gray-500">
-            Cadastre as parcelas previstas de recebimento do valor total do projeto.
+            Cadastre os desembolsos previstas de recebimento do valor total do projeto.
           </p>
         </div>
 
@@ -210,7 +211,7 @@ export default function DesembolsoPage() {
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Nova Parcela
+            Novo Desembolso
           </button>
 
           {!isEditing ? (
@@ -252,7 +253,7 @@ export default function DesembolsoPage() {
         </div>
 
         <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-500">Parcelas</p>
+          <p className="text-sm text-gray-500">Desembolsos</p>
           <p className="text-2xl font-bold text-gray-900">{currentParcelas.length}</p>
           <p className="text-xs text-gray-400 mt-1">Quantidade prevista</p>
         </div>
@@ -265,7 +266,7 @@ export default function DesembolsoPage() {
 
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <p className="text-sm text-gray-500">{excedente > 0 ? "Excedente" : "Restante"}</p>
-          <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-blue-600"}`}>
+          <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-[#004225]"}`}>
             {formatCurrency(excedente > 0 ? excedente : restante)}
           </p>
           <p className="text-xs text-gray-400 mt-1">{excedente > 0 ? "Ultrapassa o total" : "Falta para fechar"}</p>
@@ -274,13 +275,13 @@ export default function DesembolsoPage() {
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <p className="text-sm text-gray-500">% Previsto</p>
           <div className="flex items-center gap-2">
-            <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-blue-600"}`}>
+            <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-[#004225]"}`}>
               {percentualPrevisto.toFixed(1)}%
             </p>
           </div>
           <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
             <div
-              className={`${excedente > 0 ? "bg-red-600" : "bg-blue-600"} h-2 rounded-full transition-all`}
+              className={`${excedente > 0 ? "bg-red-600" : "bg-[#004225]"} h-2 rounded-full transition-all`}
               style={{ width: `${Math.min(percentualPrevisto, 100)}%` }}
             />
           </div>
@@ -316,8 +317,8 @@ export default function DesembolsoPage() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
-              <h4 className="font-medium text-blue-900">Nova Parcela</h4>
-              <p className="text-xs text-blue-700/80 mt-0.5">Informe data e valor previsto. Observação é opcional.</p>
+              <h4 className="font-medium text-[#004225]">Nova Desembolso</h4>
+              <p className="text-xs text-[#004225]/80 mt-0.5">Informe data e valor previsto. Observação é opcional.</p>
             </div>
             <button
               onClick={() => {
@@ -348,13 +349,11 @@ export default function DesembolsoPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Valor previsto <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                value={newParcela.valorPrevisto || ""}
-                onChange={(e) => setNewParcela({ ...newParcela, valorPrevisto: Number(e.target.value) })}
-                min={0}
-                step={0.01}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              <MoneyInput
+                valueCents={Math.round((newParcela.valorPrevisto || 0) * 100)}
+                onValueChange={(cents) => setNewParcela({ ...newParcela, valorPrevisto: cents / 100 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-right"
+                placeholder="R$ 0,00"
               />
             </div>
 
@@ -397,7 +396,7 @@ export default function DesembolsoPage() {
           <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-700 font-medium">Nenhuma parcela cadastrada</p>
           <p className="text-gray-500 text-sm mt-1">
-            Cadastre as parcelas previstas para recebimento do valor total do projeto.
+            Cadastre os desembolsos previstas para recebimento do valor total do projeto.
           </p>
           {isEditing && (
             <button onClick={() => setIsAdding(true)} className="mt-4 text-blue-600 hover:text-blue-700 font-medium">
@@ -413,7 +412,7 @@ export default function DesembolsoPage() {
         >
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-center py-3 px-4 font-medium text-gray-600">Parcelas</th>
+              <th className="text-center py-3 px-4 font-medium text-gray-600">Desembolsos</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Data prevista</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">% do total</th>
@@ -440,12 +439,9 @@ export default function DesembolsoPage() {
                         />
                       </td>
                       <td className="py-3 px-4">
-                        <input
-                          type="number"
-                          value={editForm.valorPrevisto}
-                          onChange={(e) => setEditForm({ ...editForm, valorPrevisto: Number(e.target.value) })}
-                          min={0}
-                          step={0.01}
+                        <MoneyInput
+                          valueCents={Math.round(editForm.valorPrevisto * 100)}
+                          onValueChange={(cents) => setEditForm({ ...editForm, valorPrevisto: cents / 100 })}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
                         />
                       </td>
@@ -530,7 +526,7 @@ export default function DesembolsoPage() {
         <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
           <AlertCircle className="w-5 h-5 text-amber-700 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-amber-900">Existem parcelas com informações inválidas.</p>
+            <p className="text-sm font-medium text-amber-900">Existem desembolsos com informações inválidas.</p>
             <p className="text-xs text-amber-800 mt-1">Verifique: data prevista e valor previsto (&gt; 0).</p>
           </div>
         </div>

@@ -30,12 +30,17 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { mockContrato, type Contrato } from "./types";
+import { rubricasMock, parcelasMock } from "./rubricas/page";
 
 type TabItem = {
   label: string;
   href: string;
   description: string;
 };
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
 
 export default function ContratoLayout({
   children,
@@ -48,6 +53,22 @@ export default function ContratoLayout({
   const [isDescricaoExpanded, setIsDescricaoExpanded] = useState(false);
   const [isInfoComplementarExpanded, setIsInfoComplementarExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Cálculo do Saldo Total (replicado de pagamentos/page.tsx)
+  const totalRecebido = (parcelasMock as any[]).reduce((acc, p) => acc + (Number(p.valorRecebido) || 0), 0);
+
+  const totalPago = (rubricasMock as any[]).reduce((accRub: number, rub: any) => {
+    return accRub + (rub.itens || []).reduce((accItem: number, item: any) => {
+      return accItem + (item.subitens || []).reduce((accSub: number, sub: any) => {
+        const sumLancamentos = Object.values(sub.lancamentos || {}).reduce((accLanc: number, lanc: any) => {
+            return accLanc + (Number(lanc?.valor) || 0);
+        }, 0);
+        return accSub + sumLancamentos;
+      }, 0);
+    }, 0);
+  }, 0);
+
+  const saldoTotal = totalRecebido - totalPago;
   const [editContrato, setEditContrato] = useState<Contrato>({ ...mockContrato, id: contratoId });
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
@@ -229,10 +250,10 @@ export default function ContratoLayout({
                   </h1>
                 )}
                 {!isEditing && (
-                  <>
-                    <TipoBadge tipo={contrato.tipo} />
-                    <StatusBadge status={contrato.status} />
-                  </>
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <DollarSign className="w-4 h-4" />
+                    <span className="text-sm font-medium">Saldo: {formatCurrency(saldoTotal)}</span>
+                  </div>
                 )}
                 {isEditing && (
                   <div className="flex items-center gap-2">
@@ -259,9 +280,10 @@ export default function ContratoLayout({
                   </div>
                 )}
               </div>
-              <p className="text-gray-500 text-sm">
-                Contrato ID: {contratoId}
-              </p>
+              <div className="flex items-center gap-3 text-gray-500 text-sm">
+                <span>Contrato ID: {contratoId}</span>
+                {!isEditing && <StatusBadge status={contrato.status} />}
+              </div>
             </div>
 
             {/* Ações */}

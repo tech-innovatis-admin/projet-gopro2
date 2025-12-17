@@ -320,16 +320,6 @@ export default function PagamentosPlanilhaPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Pagamentos (Planilha)</h3>
-          <p className="text-sm text-gray-500">
-            Contrato <span className="font-mono">{contratoId}</span> — Entrada de recurso por parcela e distribuição por item/subitem (Empresa/RH)
-          </p>
-        </div>
-      </div>
-
       {/* Resumo topo */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="font-medium text-gray-900 mb-3">Resumo Financeiro</h4>
@@ -692,7 +682,6 @@ export default function PagamentosPlanilhaPage() {
                                           type="text"
                                           value={newSubitemEmpresa}
                                           onChange={(e) => setNewSubitemEmpresa(e.target.value)}
-                                          placeholder="Empresa/RH"
                                           className="w-full px-2 py-1 border border-emerald-300 rounded text-sm"
                                           autoFocus
                                         />

@@ -16,6 +16,8 @@ type TipoArquivo =
   | "ETP"
   | "RELATORIO_INCUBADAS"
   | "NOTA_FISCAL"
+  | "TED"
+  | "COMPROVANTES"
   | "OUTROS";
 
 interface NovoArquivoForm {
@@ -45,6 +47,8 @@ const tipoLabels: Record<TipoArquivo, string> = {
   ETP: "ETP",
   RELATORIO_INCUBADAS: "Relatórios de Incubadas",
   NOTA_FISCAL: "Nota Fiscal",
+  TED: "TED",
+  COMPROVANTES: "Comprovantes",
   OUTROS: "Outros",
 };
 

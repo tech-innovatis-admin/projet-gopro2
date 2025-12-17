@@ -17,6 +17,12 @@ type TipoArquivo =
   | 'RELATORIO_TECNICO'
   | 'RELATORIO_FINANCEIRO'
   | 'COMPROVANTE_DESPESA'
+  | 'PROPOSTA_COMERCIAL'
+  | 'ETP'
+  | 'RELATORIO_INCUBADAS'
+  | 'NOTA_FISCAL'
+  | 'TED'
+  | 'COMPROVANTES'
   | 'OUTROS';
 
 interface Arquivo {
@@ -40,6 +46,12 @@ const tipoLabels: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: 'Relatório Técnico',
   RELATORIO_FINANCEIRO: 'Relatório Financeiro',
   COMPROVANTE_DESPESA: 'Comprovante de Despesa',
+  PROPOSTA_COMERCIAL: 'Proposta comercial',
+  ETP: 'ETP',
+  RELATORIO_INCUBADAS: 'Relatórios de Incubadas',
+  NOTA_FISCAL: 'Nota Fiscal',
+  TED: 'TED',
+  COMPROVANTES: 'Comprovantes',
   OUTROS: 'Outros',
 };
 
@@ -52,6 +64,12 @@ const tipoCores: Record<TipoArquivo, string> = {
   RELATORIO_TECNICO: 'bg-cyan-100 text-cyan-800',
   RELATORIO_FINANCEIRO: 'bg-yellow-100 text-yellow-800',
   COMPROVANTE_DESPESA: 'bg-red-100 text-red-800',
+  PROPOSTA_COMERCIAL: 'bg-indigo-100 text-indigo-800',
+  ETP: 'bg-teal-100 text-teal-800',
+  RELATORIO_INCUBADAS: 'bg-pink-100 text-pink-800',
+  NOTA_FISCAL: 'bg-amber-100 text-amber-800',
+  TED: 'bg-emerald-100 text-emerald-800',
+  COMPROVANTES: 'bg-rose-100 text-rose-800',
   OUTROS: 'bg-gray-100 text-gray-800',
 };
 
@@ -147,9 +165,24 @@ export default function ArquivosTab({ contratoId }: ArquivosTabProps) {
   };
 
   // Ícone por formato
-  const getFileIcon = () => {
-    // Sem ícone para arquivos neste contexto
-    return null;
+  const getFileIcon = (formato: string) => {
+    const iconClass = "w-10 h-10";
+    switch (formato.toLowerCase()) {
+      case "pdf":
+        return <FileText className={`${iconClass} text-red-500`} />;
+      case "doc":
+      case "docx":
+        return <File className={`${iconClass} text-blue-500`} />;
+      case "xls":
+      case "xlsx":
+        return <FileSpreadsheet className={`${iconClass} text-green-600`} />;
+      case "png":
+      case "jpg":
+      case "jpeg":
+        return <Image className={`${iconClass} text-purple-500`} />;
+      default:
+        return <File className={`${iconClass} text-gray-500`} />;
+    }
   };
 
   // Filtrar arquivos

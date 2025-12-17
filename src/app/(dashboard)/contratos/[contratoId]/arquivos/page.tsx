@@ -16,6 +16,9 @@ import {
   FileSpreadsheet,
   Image,
   Plus,
+  Folder,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
@@ -33,6 +36,8 @@ type TipoArquivo =
   | "ETP"
   | "RELATORIO_INCUBADAS"
   | "NOTA_FISCAL"
+  | "TED"
+  | "COMPROVANTES"
   | "OUTROS";
 
 export interface Arquivo {
@@ -62,6 +67,8 @@ const tipoLabels: Record<TipoArquivo, string> = {
   ETP: "ETP",
   RELATORIO_INCUBADAS: "Relatórios de Incubadas",
   NOTA_FISCAL: "Nota Fiscal",
+  TED: "TED",
+  COMPROVANTES: "Comprovantes",
   OUTROS: "Outros",
 };
 
@@ -78,6 +85,8 @@ const tipoCores: Record<TipoArquivo, string> = {
   ETP: "bg-teal-100 text-teal-800",
   RELATORIO_INCUBADAS: "bg-pink-100 text-pink-800",
   NOTA_FISCAL: "bg-amber-100 text-amber-800",
+  TED: "bg-emerald-100 text-emerald-800",
+  COMPROVANTES: "bg-rose-100 text-rose-800",
   OUTROS: "bg-gray-100 text-gray-800",
 };
 
@@ -191,6 +200,14 @@ export default function ArquivosPage() {
   const [isNovoArquivoModalOpen, setIsNovoArquivoModalOpen] = useState(false);
   const [arquivoParaEditar, setArquivoParaEditar] = useState<Arquivo | null>(null);
   const [isEditarArquivoModalOpen, setIsEditarArquivoModalOpen] = useState(false);
+  const [pastasAbertas, setPastasAbertas] = useState<Record<string, boolean>>({});
+
+  const togglePasta = (tipo: string) => {
+    setPastasAbertas((prev) => ({
+      ...prev,
+      [tipo]: !prev[tipo],
+    }));
+  };
 
   const handleEdit = () => {
     setEditArquivos(JSON.parse(JSON.stringify(arquivos)));
@@ -277,6 +294,19 @@ export default function ArquivosPage() {
       ? currentArquivos
       : currentArquivos.filter((a) => a.tipo === filtroTipo);
 
+  // Agrupar arquivos por tipo
+  const arquivosPorTipo = arquivosFiltrados.reduce((acc, arquivo) => {
+    if (!acc[arquivo.tipo]) {
+      acc[arquivo.tipo] = [];
+    }
+    acc[arquivo.tipo].push(arquivo);
+    return acc;
+  }, {} as Record<TipoArquivo, Arquivo[]>);
+
+  // Obter tipos ordenados que possuem arquivos
+  const tiposComArquivos = Object.keys(arquivosPorTipo).sort((a, b) => 
+    tipoLabels[a as TipoArquivo].localeCompare(tipoLabels[b as TipoArquivo], "pt-BR")
+  ) as TipoArquivo[];
 
   return (
     <div className="space-y-6">
@@ -362,7 +392,7 @@ export default function ArquivosPage() {
         </span>
       </div>
 
-      {/* Lista de arquivos */}
+      {/* Lista de arquivos organizada por pastas */}
       {arquivosFiltrados.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -377,81 +407,106 @@ export default function ArquivosPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
-          {arquivosFiltrados.map((arquivo) => (
-            <div
-              key={arquivo.id}
-              className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow"
-            >
-              {/* Ícone */}
-              <div className="flex-shrink-0">{getFileIcon(arquivo.formato)}</div>
-
-              {/* Info do arquivo */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-medium text-gray-900 truncate">
-                    {arquivo.nome}
-                  </h4>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${tipoCores[arquivo.tipo]}`}
-                  >
-                    {tipoLabels[arquivo.tipo]}
-                  </span>
+        <div className="space-y-4">
+          {tiposComArquivos.map((tipo) => (
+            <div key={tipo} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+              {/* Cabeçalho da Pasta */}
+              <button
+                onClick={() => togglePasta(tipo)}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {pastasAbertas[tipo] ? (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-500" />
+                  )}
+                  <Folder className={`w-6 h-6 ${pastasAbertas[tipo] ? "text-[#004225]" : "text-gray-400"}`} />
+                  <div className="text-left">
+                    <h3 className="font-medium text-gray-900">{tipoLabels[tipo]}</h3>
+                    <p className="text-xs text-gray-500">
+                      {arquivosPorTipo[tipo].length} {arquivosPorTipo[tipo].length === 1 ? "arquivo" : "arquivos"}
+                    </p>
+                  </div>
                 </div>
-                {arquivo.descricao && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    {arquivo.descricao}
-                  </p>
-                )}
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                  <span>{formatFileSize(arquivo.tamanho)}</span>
-                  <span>•</span>
-                  <span>{formatDate(arquivo.dataUpload)}</span>
-                  <span>•</span>
-                  <span>Por: {arquivo.uploadPor}</span>
-                </div>
-              </div>
+              </button>
 
-              {/* Ações */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => window.open(arquivo.url, "_blank")}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                  title="Visualizar"
-                >
-                  <Eye className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => {
-                    const link = document.createElement("a");
-                    link.href = arquivo.url;
-                    link.download = arquivo.nome;
-                    link.click();
-                  }}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                  title="Baixar"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
-                {isEditing && (
-                  <>
-                    <button
-                      onClick={() => handleOpenEditarArquivo(arquivo)}
-                      className="p-2 text-[#004225] hover:bg-emerald-50 rounded-lg"
-                      title="Editar"
+              {/* Conteúdo da Pasta */}
+              {pastasAbertas[tipo] && (
+                <div className="border-t border-gray-200 divide-y divide-gray-100">
+                  {arquivosPorTipo[tipo].map((arquivo) => (
+                    <div
+                      key={arquivo.id}
+                      className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors pl-12"
                     >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(arquivo.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
+                      {/* Ícone */}
+                      <div className="flex-shrink-0">{getFileIcon(arquivo.formato)}</div>
+
+                      {/* Info do arquivo */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900 truncate">
+                            {arquivo.nome}
+                          </h4>
+                        </div>
+                        {arquivo.descricao && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {arquivo.descricao}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <span>{formatFileSize(arquivo.tamanho)}</span>
+                          <span>•</span>
+                          <span>{formatDate(arquivo.dataUpload)}</span>
+                          <span>•</span>
+                          <span>Por: {arquivo.uploadPor}</span>
+                        </div>
+                      </div>
+
+                      {/* Ações */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => window.open(arquivo.url, "_blank")}
+                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                          title="Visualizar"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const link = document.createElement("a");
+                            link.href = arquivo.url;
+                            link.download = arquivo.nome;
+                            link.click();
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          title="Baixar"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                        {isEditing && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEditarArquivo(arquivo)}
+                              className="p-2 text-[#004225] hover:bg-emerald-50 rounded-lg"
+                              title="Editar"
+                            >
+                              <Edit className="w-5 h-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(arquivo.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
