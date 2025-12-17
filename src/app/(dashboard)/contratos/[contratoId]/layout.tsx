@@ -251,7 +251,6 @@ export default function ContratoLayout({
                 )}
                 {!isEditing && (
                   <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <DollarSign className="w-4 h-4" />
                     <span className="text-sm font-medium">Saldo: {formatCurrency(saldoTotal)}</span>
                   </div>
                 )}

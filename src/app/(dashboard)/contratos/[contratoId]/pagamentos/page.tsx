@@ -14,6 +14,8 @@ import {
   Save,
 } from 'lucide-react';
 import { rubricasMock, parcelasMock } from '../rubricas/page';
+import { MoneyInput } from '../desembolso/_components/MoneyImput';
+import { ResizableTable } from '@/components/ui/resizable-table';
 
 type ID = string;
 
@@ -325,7 +327,7 @@ export default function PagamentosPlanilhaPage() {
         <h4 className="font-medium text-gray-900 mb-3">Resumo Financeiro</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-3 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500">Total Recebido (parcelas)</p>
+            <p className="text-xs text-gray-500">Total Recebido (pagamentos)</p>
             <p className="text-xl font-semibold text-gray-900">{formatCurrency(totalRecebido)}</p>
           </div>
           <div className="bg-white p-3 rounded-lg border border-gray-200">
@@ -345,8 +347,7 @@ export default function PagamentosPlanilhaPage() {
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
         <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
           <div>
-            <h4 className="font-medium text-gray-900">Entrada de recurso (Parcelas recebidas)</h4>
-            <p className="text-xs text-gray-500">Essas parcelas geram as colunas 1º, 2º, 3º… na planilha.</p>
+            <h4 className="font-medium text-gray-900">Parcelas recebidas</h4>
           </div>
 
           {!isAddingParcela && (
@@ -398,15 +399,11 @@ export default function PagamentosPlanilhaPage() {
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Valor recebido <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={newParcela.valorRecebido}
-                  onChange={(e) => setNewParcela(v => ({ ...v, valorRecebido: safeNumber(e.target.value) }))}
+                <MoneyInput
+                  valueCents={Math.round(newParcela.valorRecebido * 100)}
+                  onValueChange={(cents) => setNewParcela(v => ({ ...v, valorRecebido: cents / 100 }))}
                   className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">{formatCurrency(newParcela.valorRecebido)}</p>
               </div>
 
               <div>
@@ -449,11 +446,11 @@ export default function PagamentosPlanilhaPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-t border-gray-200 bg-white">
-                <th className="text-left py-2 px-3 font-medium text-gray-600 w-28">Parcela</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-600 w-48">Valor Recebido</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-600 w-44">Data Receb.</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-600 w-48">Total Pago</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-600 w-48">Saldo</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600 w-28">Parcela</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600 w-48">Valor Recebido</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600 w-44">Data Receb.</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600 w-48">Total Pago</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600 w-48">Saldo</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-600 w-28">Ações</th>
               </tr>
             </thead>
@@ -479,27 +476,28 @@ export default function PagamentosPlanilhaPage() {
                       <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
                         {editingParcelaId === p.id && editParcelaForm ? (
                           <>
-                            <td className="py-2 px-3 font-medium text-gray-900">{ordinal(p.numero)}</td>
+                            <td className="py-2 px-3 text-center font-medium text-gray-900">{ordinal(p.numero)}</td>
                             <td className="py-2 px-3">
-                              <input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                value={editParcelaForm.valorRecebido}
-                                onChange={(e) => setEditParcelaForm(v => (v ? { ...v, valorRecebido: safeNumber(e.target.value) } : v))}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                              />
+                              <div className="flex justify-center">
+                                <MoneyInput
+                                  valueCents={Math.round(editParcelaForm.valorRecebido * 100)}
+                                  onValueChange={(cents) => setEditParcelaForm(v => (v ? { ...v, valorRecebido: cents / 100 } : v))}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                                />
+                              </div>
                             </td>
                             <td className="py-2 px-3">
-                              <input
-                                type="date"
-                                value={editParcelaForm.dataRecebimento}
-                                onChange={(e) => setEditParcelaForm(v => (v ? { ...v, dataRecebimento: e.target.value } : v))}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                              <div className="flex justify-center">
+                                <input
+                                  type="date"
+                                  value={editParcelaForm.dataRecebimento}
+                                  onChange={(e) => setEditParcelaForm(v => (v ? { ...v, dataRecebimento: e.target.value } : v))}
+                                  className="px-2 py-1 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
                             </td>
-                            <td className="py-2 px-3 text-right font-medium text-gray-900">{formatCurrency(pago)}</td>
-                            <td className={`py-2 px-3 text-right font-semibold ${saldo < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                            <td className="py-2 px-3 text-center font-medium text-gray-900">{formatCurrency(pago)}</td>
+                            <td className={`py-2 px-3 text-center font-semibold ${saldo < 0 ? 'text-red-600' : 'text-blue-600'}`}>
                               {formatCurrency(saldo)}
                             </td>
                             <td className="py-2 px-3">
@@ -523,11 +521,11 @@ export default function PagamentosPlanilhaPage() {
                           </>
                         ) : (
                           <>
-                            <td className="py-2 px-3 font-medium text-gray-900">{ordinal(p.numero)}</td>
-                            <td className="py-2 px-3 text-right font-semibold text-gray-900">{formatCurrency(p.valorRecebido)}</td>
-                            <td className="py-2 px-3 text-gray-700">{p.dataRecebimento || '-'}</td>
-                            <td className="py-2 px-3 text-right font-medium text-gray-900">{formatCurrency(pago)}</td>
-                            <td className={`py-2 px-3 text-right font-semibold ${saldo < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                            <td className="py-2 px-3 text-center font-medium text-gray-900">{ordinal(p.numero)}</td>
+                            <td className="py-2 px-3 text-center font-semibold text-gray-900">{formatCurrency(p.valorRecebido)}</td>
+                            <td className="py-2 px-3 text-center text-gray-700">{p.dataRecebimento || '-'}</td>
+                            <td className="py-2 px-3 text-center font-medium text-gray-900">{formatCurrency(pago)}</td>
+                            <td className={`py-2 px-3 text-center font-semibold ${saldo < 0 ? 'text-red-600' : 'text-blue-600'}`}>
                               {formatCurrency(saldo)}
                             </td>
                             <td className="py-2 px-3">
@@ -597,19 +595,34 @@ export default function PagamentosPlanilhaPage() {
                       <span>Nenhum item cadastrado nesta rubrica</span>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          {/* Header agrupado (colSpan) */}
-                          <tr className="border-b border-gray-200">
-                            <th rowSpan={2} className="text-left py-2 px-2 font-medium text-gray-600 w-20">Código</th>
-                            <th rowSpan={2} className="text-left py-2 px-2 font-medium text-gray-600 min-w-[260px]">Item</th>
-                            <th rowSpan={2} className="text-right py-2 px-2 font-medium text-gray-600 w-24">Qtd</th>
-                            <th rowSpan={2} className="text-right py-2 px-2 font-medium text-gray-600 w-24">Meses</th>
-                            <th rowSpan={2} className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor unit.</th>
-                            <th rowSpan={2} className="text-right py-2 px-2 font-medium text-gray-600 w-36">Total</th>
-                            <th rowSpan={2} className="text-left py-2 px-2 font-medium text-gray-600 min-w-[200px]">Meta</th>
-                            <th rowSpan={2} className="text-left py-2 px-2 font-medium text-gray-600 min-w-[240px]">Subitem</th>
+                    <ResizableTable
+                      columnCount={9 + parcelas.length * 2}
+                      defaultWidths={[
+                        100, // Código
+                        260, // Item
+                        100, // Qtd
+                        100, // Meses
+                        140, // Valor unit.
+                        150, // Total
+                        200, // Meta
+                        240, // Subitem
+                        ...parcelas.flatMap(() => [270, 270]), // Valor e Data de pag. para cada parcela
+                        150, // SALDO
+                      ]}
+                      minColumnWidth={80}
+                      className="divide-y divide-gray-200"
+                    >
+                      <thead>
+                        {/* Header agrupado (colSpan) */}
+                        <tr className="border-b border-gray-200">
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Código</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Item</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Qtd</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Meses</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Valor unit.</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Total</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Meta</th>
+                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Subitem</th>
 
                             {parcelas
                               .slice()
@@ -626,7 +639,7 @@ export default function PagamentosPlanilhaPage() {
                                 </th>
                               ))}
 
-                            <th rowSpan={2} className="text-right py-2 px-2 font-medium text-gray-600 w-36">SALDO</th>
+                            <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600 w-36">SALDO</th>
                           </tr>
 
                           <tr className="border-b border-gray-200">
@@ -654,12 +667,12 @@ export default function PagamentosPlanilhaPage() {
                               <Fragment key={it.id}>
                                 {/* Linha do ITEM (pai) */}
                                 <tr className="border-b border-gray-100 bg-gray-50">
-                                  <td className="py-2 px-2 font-mono text-gray-700">{it.codigo}</td>
-                                  <td className="py-2 px-2 font-medium text-gray-900">{it.descricao}</td>
-                                  <td className="py-2 px-2 text-right text-gray-700">{it.quantidade}</td>
-                                  <td className="py-2 px-2 text-right text-gray-700">{it.meses}</td>
-                                  <td className="py-2 px-2 text-right text-gray-700">{formatCurrency(it.valorUnitario)}</td>
-                                  <td className="py-2 px-2 text-right font-semibold text-gray-900">{formatCurrency(totalItem)}</td>
+                                  <td className="py-2 px-2 text-center font-mono text-gray-700">{it.codigo}</td>
+                                  <td className="py-2 px-2 text-left font-medium text-gray-900">{it.descricao}</td>
+                                  <td className="py-2 px-2 text-center text-gray-700">{it.quantidade}</td>
+                                  <td className="py-2 px-2 text-center text-gray-700">{it.meses}</td>
+                                  <td className="py-2 px-2 text-center text-gray-700">{formatCurrency(it.valorUnitario)}</td>
+                                  <td className="py-2 px-2 text-center font-semibold text-gray-900">{formatCurrency(totalItem)}</td>
                                   <td className="py-2 px-2 text-gray-700">{it.meta || '-'}</td>
 
                                   <td className="py-2 px-2">
@@ -715,16 +728,16 @@ export default function PagamentosPlanilhaPage() {
                                       const totalParcelaItem = calcularPagoItemPorParcela(it, p.id);
 
                                       return [
-                                        <td key={`${it.id}-${p.id}-sum`} className="py-2 px-2 text-right font-medium text-gray-900">
+                                        <td key={`${it.id}-${p.id}-sum`} className="py-2 px-2 text-center font-medium text-gray-900">
                                           {formatCurrency(totalParcelaItem)}
                                         </td>,
-                                        <td key={`${it.id}-${p.id}-dash`} className="py-2 px-2 text-gray-400">
+                                        <td key={`${it.id}-${p.id}-dash`} className="py-2 px-2 text-center text-gray-400">
                                           
                                         </td>,
                                       ];
                                     })}
 
-                                  <td className={`py-2 px-2 text-right font-semibold ${saldoItem < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                  <td className={`py-2 px-2 text-center font-semibold ${saldoItem < 0 ? 'text-red-600' : 'text-blue-600'}`}>
                                     {formatCurrency(saldoItem)}
                                   </td>
                                 </tr>
@@ -773,7 +786,7 @@ export default function PagamentosPlanilhaPage() {
                                               </button>
                                             )}
                                           </div>
-                                          <p className="text-xs text-gray-500 mt-1">
+                                          <p className="text-xs text-gray-500 mt-1 text-left">
                                             Total lançado: <span className="font-medium">{formatCurrency(totalSub)}</span>
                                           </p>
                                         </td>
@@ -787,34 +800,35 @@ export default function PagamentosPlanilhaPage() {
                                             return [
                                               <td key={`${sub.id}-${p.id}-v`} className="py-2 px-2 text-center">
                                                 {isEditingSubitens ? (
-                                                  <input
-                                                    type="number"
-                                                    min={0}
-                                                    step={0.01}
-                                                    value={cell.valor}
-                                                    onChange={(e) =>
-                                                      updateLancamentoCampo(it.id, sub.id, p.id, { valor: safeNumber(e.target.value) })
-                                                    }
-                                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right bg-white"
-                                                  />
+                                                  <div className="flex justify-center">
+                                                    <MoneyInput
+                                                      valueCents={Math.round(cell.valor * 100)}
+                                                      onValueChange={(cents) =>
+                                                        updateLancamentoCampo(it.id, sub.id, p.id, { valor: cents / 100 })
+                                                      }
+                                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center bg-white"
+                                                    />
+                                                  </div>
                                                 ) : (
-                                                  <div className="text-right text-gray-700 py-1 px-2">
+                                                  <div className="text-center text-gray-700 py-1 px-2">
                                                     {formatCurrency(cell.valor)}
                                                   </div>
                                                 )}
                                               </td>,
                                               <td key={`${sub.id}-${p.id}-d`} className="py-2 px-2 text-center">
                                                 {isEditingSubitens ? (
-                                                  <input
-                                                    type="date"
-                                                    value={cell.dataPag || ''}
-                                                    onChange={(e) =>
-                                                      updateLancamentoCampo(it.id, sub.id, p.id, { dataPag: e.target.value })
-                                                    }
-                                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-white"
-                                                  />
+                                                  <div className="flex justify-center">
+                                                    <input
+                                                      type="date"
+                                                      value={cell.dataPag || ''}
+                                                      onChange={(e) =>
+                                                        updateLancamentoCampo(it.id, sub.id, p.id, { dataPag: e.target.value })
+                                                      }
+                                                      className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                                                    />
+                                                  </div>
                                                 ) : (
-                                                  <div className="text-gray-700 py-1 px-2">
+                                                  <div className="text-center text-gray-700 py-1 px-2">
                                                     {cell.dataPag || '-'}
                                                   </div>
                                                 )}
@@ -823,7 +837,7 @@ export default function PagamentosPlanilhaPage() {
                                           })}
 
                                         {/* SALDO: não se aplica para subitem (na planilha costuma ficar no item). */}
-                                        <td className="py-2 px-2 text-right text-gray-400">—</td>
+                                        <td className="py-2 px-2 text-center text-gray-400">—</td>
                                       </tr>
                                     );
                                   })
@@ -832,57 +846,13 @@ export default function PagamentosPlanilhaPage() {
                             );
                           })}
                         </tbody>
-                      </table>
-                    </div>
+                      </ResizableTable>
                   )}
                 </div>
               )}
             </div>
           );
         })}
-      </div>
-
-      {/* Resumo por parcela (saldo de cada pagamento) */}
-      <div className="bg-gray-50 rounded-lg p-4 mt-6">
-        <h4 className="font-medium text-gray-900 mb-3">Saldo por Pagamento (Parcela)</h4>
-
-        {parcelas.length === 0 ? (
-          <div className="flex items-center gap-2 text-gray-500 py-6 justify-center bg-white rounded-lg border border-gray-200">
-            <AlertCircle className="w-5 h-5" />
-            <span>Cadastre parcelas para visualizar os saldos</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {parcelas
-              .slice()
-              .sort((a, b) => a.numero - b.numero)
-              .map((p) => {
-                const pago = totalPagoPorParcela.get(p.id) || 0;
-                const saldo = safeNumber(p.valorRecebido) - pago;
-
-                return (
-                  <div key={p.id} className="bg-white p-3 rounded-lg border border-gray-200">
-                    <p className="text-xs text-gray-500">{ordinal(p.numero)} PAGAMENTO</p>
-                    <p className="text-sm text-gray-700">Recebido: <span className="font-semibold">{formatCurrency(p.valorRecebido)}</span></p>
-                    <p className="text-sm text-gray-700">Pago: <span className="font-semibold">{formatCurrency(pago)}</span></p>
-                    <p className={`text-lg font-semibold ${saldo < 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                      Saldo: {formatCurrency(saldo)}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">Data receb.: {p.dataRecebimento || '-'}</p>
-                  </div>
-                );
-              })}
-          </div>
-        )}
-
-        <div className="mt-4 pt-4 border-t border-gray-300 flex justify-end">
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Saldo Total do Contrato</p>
-            <p className={`text-2xl font-bold ${saldoTotalContrato < 0 ? 'text-red-600' : 'text-blue-600'}`}>
-              {formatCurrency(saldoTotalContrato)}
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
