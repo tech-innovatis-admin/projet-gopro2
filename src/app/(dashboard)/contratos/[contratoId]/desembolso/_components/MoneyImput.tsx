@@ -293,6 +293,13 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
       }
     };
 
+    // Handler onChange necessário para evitar warning do React
+    // O componente controla tudo via onKeyDown, então este handler previne mudanças diretas
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Previne mudanças diretas no input (tudo é controlado via onKeyDown)
+      e.preventDefault();
+    };
+
     return (
       <input
         ref={inputRef}
@@ -302,6 +309,7 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
         spellCheck={false}
         disabled={disabled}
         readOnly={readOnly}
+        onChange={handleChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onFocus={handleFocus}

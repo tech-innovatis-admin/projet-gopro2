@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, ArrowRight, AlertCircle, Calendar, FileText } from 'lucide-react';
+import { MoneyInput } from '../../desembolso/_components/MoneyImput';
 
 type ID = string;
 
@@ -238,28 +239,20 @@ export function RemanejamentoModal({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Valor do Remanejamento <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  max={saldoDisponivel}
-                  value={form.valor || ''}
-                  onChange={(e) => setForm({ ...form, valor: parseFloat(e.target.value) || 0 })}
-                  className={`w-full pl-8 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] ${
-                    errors.valor ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="0,00"
-                />
-              </div>
+              <MoneyInput
+                valueCents={Math.round((form.valor || 0) * 100)}
+                onValueChange={(cents) => {
+                  const valorReais = cents / 100;
+                  setForm({ ...form, valor: valorReais });
+                }}
+                maxCents={Math.round(saldoDisponivel * 100)}
+                className={`w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] ${
+                  errors.valor ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="R$ 0,00"
+              />
               {errors.valor && (
                 <p className="mt-1 text-sm text-red-600">{errors.valor}</p>
-              )}
-              {form.valor > 0 && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Valor formatado: {formatCurrency(form.valor)}
-                </p>
               )}
             </div>
 

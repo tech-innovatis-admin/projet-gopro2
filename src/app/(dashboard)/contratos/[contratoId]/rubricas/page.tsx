@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle, ArrowRight, History } from 'lucide-react';
 import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
+import { MoneyInput } from '../desembolso/_components/MoneyImput';
 
 // Tipos
 type ID = string;
@@ -671,12 +672,9 @@ export default function RubricasPage() {
                                   />
                                 </td>
                                 <td className="py-2 px-2">
-                                  <input
-                                    type="number"
-                                    value={editForm.valorUnitario}
-                                    onChange={(e) => setEditForm({ ...editForm, valorUnitario: Number(e.target.value) })}
-                                    min={0}
-                                    step={0.01}
+                                  <MoneyInput
+                                    valueCents={Math.round(editForm.valorUnitario * 100)}
+                                    onValueChange={(cents) => setEditForm({ ...editForm, valorUnitario: cents / 100 })}
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
                                   />
                                 </td>
@@ -824,12 +822,9 @@ export default function RubricasPage() {
                               />
                             </td>
                             <td className="py-2 px-2">
-                              <input
-                                type="number"
-                                value={newItem.valorUnitario || 0}
-                                onChange={(e) => setNewItem({ ...newItem, valorUnitario: Number(e.target.value) })}
-                                min={0}
-                                step={0.01}
+                              <MoneyInput
+                                valueCents={Math.round((newItem.valorUnitario || 0) * 100)}
+                                onValueChange={(cents) => setNewItem({ ...newItem, valorUnitario: cents / 100 })}
                                 className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-right"
                               />
                             </td>
