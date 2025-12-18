@@ -626,7 +626,7 @@ export default function RubricasPage() {
                 ) : (
                   <ResizableTable
                     columnCount={10}
-                    defaultWidths={[250, 80, 80, 130, 130, 120, 120, 130, 200, 120]}
+                    defaultWidths={[250, 80, 80, 150, 150, 120, 120, 150, 220, 130]}
                     minColumnWidth={60}
                     className="text-sm"
                   >
@@ -658,22 +658,22 @@ export default function RubricasPage() {
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                                   />
                                 </td>
-                                <td className="py-2 px-2">
+                                <td className="py-2 px-2 text-center">
                                   <input
                                     type="number"
                                     value={editForm.quantidade}
                                     onChange={(e) => setEditForm({ ...editForm, quantidade: Number(e.target.value) })}
                                     min={1}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                                   />
                                 </td>
-                                <td className="py-2 px-2">
+                                <td className="py-2 px-2 text-center">
                                   <input
                                     type="number"
                                     value={editForm.meses}
                                     onChange={(e) => setEditForm({ ...editForm, meses: Number(e.target.value) })}
                                     min={1}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                                   />
                                 </td>
                                 <td className="py-2 px-2">
@@ -726,8 +726,8 @@ export default function RubricasPage() {
                               // Modo visualização
                               <>
                                 <td className="py-2 px-2 text-gray-900">{item.descricao}</td>
-                                <td className="py-2 px-2 text-right text-gray-700">{item.quantidade}</td>
-                                <td className="py-2 px-2 text-right text-gray-700">{item.meses}</td>
+                                <td className="py-2 px-2 text-center text-gray-700">{item.quantidade}</td>
+                                <td className="py-2 px-2 text-center text-gray-700">{item.meses}</td>
                                 <td className="py-2 px-2 text-right text-gray-700">{formatCurrency(item.valorUnitario)}</td>
                                 <td className="py-2 px-2 text-right font-medium text-gray-900">{formatCurrency(item.valorTotal)}</td>
                                 <td className="py-2 px-2 text-right">
@@ -808,22 +808,22 @@ export default function RubricasPage() {
                                 autoFocus
                               />
                             </td>
-                            <td className="py-2 px-2">
+                            <td className="py-2 px-2 text-center">
                               <input
                                 type="number"
                                 value={newItem.quantidade || 1}
                                 onChange={(e) => setNewItem({ ...newItem, quantidade: Number(e.target.value) })}
                                 min={1}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-right"
+                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
                               />
                             </td>
-                            <td className="py-2 px-2">
+                            <td className="py-2 px-2 text-center">
                               <input
                                 type="number"
                                 value={newItem.meses || 1}
                                 onChange={(e) => setNewItem({ ...newItem, meses: Number(e.target.value) })}
                                 min={1}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-right"
+                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
                               />
                             </td>
                             <td className="py-2 px-2">
