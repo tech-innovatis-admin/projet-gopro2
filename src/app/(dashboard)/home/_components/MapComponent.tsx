@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -29,8 +30,18 @@ interface MapComponentProps {
 }
 
 export default function MapComponent({ locations }: MapComponentProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Centro do mapa focado no Nordeste brasileiro
   const center: [number, number] = [-6.5, -37.5];
+
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <MapContainer

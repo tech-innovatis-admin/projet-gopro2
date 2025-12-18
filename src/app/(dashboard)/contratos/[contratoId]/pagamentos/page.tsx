@@ -60,6 +60,20 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 }
 
+function formatDate(dateString: string): string {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString + 'T00:00:00'); // Adiciona hora para evitar problemas de timezone
+    if (isNaN(date.getTime())) return dateString; // Se não for uma data válida, retorna o original
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateString;
+  }
+}
+
 function ordinal(n: number) {
   return `${n}º`;
 }
@@ -829,7 +843,7 @@ export default function PagamentosPlanilhaPage() {
                                                   </div>
                                                 ) : (
                                                   <div className="text-center text-gray-700 py-1 px-2">
-                                                    {cell.dataPag || '-'}
+                                                    {formatDate(cell.dataPag)}
                                                   </div>
                                                 )}
                                               </td>,

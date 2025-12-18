@@ -22,192 +22,253 @@ Acesse [http://localhost:3000](http://localhost:3000) no navegador.
 
 ```
 gopro-2/
-├── .cursor/                 # Configurações do Cursor IDE
-├── .env                     # Variáveis de ambiente (não versionado)
-├── .git/                    # Controle de versão Git
-├── .gitignore               # Arquivos ignorados pelo Git
-├── .next/                   # Arquivos de build do Next.js (gerado)
-├── node_modules/            # Dependências instaladas (gerado)
+├── .cursor/                    # Configurações do Cursor IDE
+│   └── commands/               # Comandos customizados do Cursor
 │
-├── components/              # Componentes UI compartilhados (shadcn/ui)
+├── .env                        # Variáveis de ambiente (não versionado)
+├── .git/                       # Controle de versão Git
+├── .gitignore                  # Arquivos ignorados pelo Git
+├── .next/                      # Arquivos de build do Next.js (gerado)
+├── node_modules/               # Dependências instaladas (gerado)
+│
+├── components/                 # Componentes UI compartilhados (shadcn/ui) - Root level
 │   └── ui/
-│       ├── button.tsx       # Componente de botão
-│       ├── card.tsx         # Componente de card
-│       ├── checkbox.tsx     # Componente de checkbox
-│       ├── input.tsx        # Componente de input
-│       ├── label.tsx        # Componente de label
-│       ├── NavBar.tsx       # Barra de navegação principal
-│       ├── select.tsx       # Componente de select
-│       └── separator.tsx    # Componente separador
+│       ├── button.tsx          # Componente de botão
+│       ├── card.tsx            # Componente de card
+│       ├── checkbox.tsx        # Componente de checkbox
+│       ├── input.tsx           # Componente de input
+│       ├── label.tsx           # Componente de label
+│       ├── MiniFooter.tsx      # Mini rodapé reutilizável
+│       ├── NavBar.tsx          # Barra de navegação principal
+│       ├── resizable-table.tsx # Tabela com colunas redimensionáveis
+│       ├── select.tsx          # Componente de select/dropdown
+│       └── separator.tsx       # Componente separador visual
 │
 ├── components.json          # Configuração do shadcn/ui
 │
-├── docs/                    # Documentação do projeto
-│   └── README.md            # Este arquivo
+├── docs/                       # Documentação do projeto
+│   ├── README.md               # Este arquivo (documentação principal)
+│   ├── BASE_DADOS.md           # Documentação do banco de dados
+│   ├── BASE_NECESSARIA.md      # Dados necessários para inicialização
+│   ├── ESTRUTURA_CONTRATO_ID.md # Estrutura específica de IDs de contratos
+│   └── Banco de Dados Real/    # Documentação de banco de dados real
+│       ├── Dicionário.md       # Dicionário de dados
+│       ├── GoPro2_Especificacao_Backend.md
+│       └── GoPro2_Especificacao_Backend_Complemento.md
 │
 ├── EXEMPLO_CSS_LETRAS_BREAK/ # Exemplo de efeito CSS (animação de letras)
 │   ├── exemplo1.html
 │   ├── exemplo2.css
 │   └── exemplo3.js
 │
-├── lib/                     # Utilitários do shadcn/ui
-│   └── utils.ts             # Função cn() para classes condicionais
+├── hooks/                      # Hooks customizados (root level)
+│   └── useResizableColumns.ts  # Hook para colunas de tabela redimensionáveis
 │
-├── prisma/                  # Configuração do Prisma ORM
-│   └── schema.prisma        # Schema do banco de dados
+├── lib/                        # Utilitários shadcn/ui (root level)
+│   └── utils.ts                # Função cn() para classes condicionais Tailwind
 │
-├── public/                  # Arquivos estáticos públicos
-│   ├── Logos/               # Logos da aplicação
-│   │   ├── GoPro2_SVG.svg           # Logo GoPro2 SVG
-│   │   ├── GoPro2_SVG (2).svg       # Logo GoPro2 SVG (variação)
-│   │   ├── logo_innovatis.svg       # Logo Innovatis
-│   │   ├── logo_innovatis_oficial.svg # Logo Innovatis oficial
-│   │   └── logo_innovatis_preta.svg # Logo Innovatis preta
-│   ├── Poppins/             # Fonte Poppins (todas as variações)
-│   │   ├── OFL.txt          # Licença da fonte
-│   │   ├── Poppins-Regular.ttf
-│   │   ├── Poppins-Bold.ttf
-│   │   ├── Poppins-Medium.ttf
-│   │   ├── Poppins-SemiBold.ttf
-│   │   └── ... (demais variações)
-│   ├── epitacio.png         # Imagem do fundador
-│   ├── epitacio_brito_foto_oficial.jpeg
-│   ├── file.svg
-│   ├── globe.svg
-│   ├── next.svg
-│   ├── vercel.svg
-│   └── window.svg
+├── prisma/                     # Configuração do Prisma ORM
+│   └── schema.prisma           # Schema do banco de dados (Prisma Schema)
 │
-├── src/                     # Código fonte principal
-│   ├── .env                 # Variáveis de ambiente do src
+├── public/                     # Arquivos estáticos públicos
+│   ├── Logos/                  # Logos e identidade visual
+│   │   ├── EXEMPLO_CSS_LETRAS_BREAK/ # Exemplos de CSS para logos animados
+│   │   ├── logo_innovatis.svg  # Logo Innovatis padrão
+│   │   ├── logo_innovatis_oficial.svg # Logo Innovatis versão oficial
+│   │   ├── logo_innovatis_preta.svg # Logo Innovatis preta
+│   │   ├── para vitor.svg      # Logo custom
+│   │   └── vitor_svg.svg       # Logo custom Vitor
+│   ├── Poppins/                # Fonte Poppins (todas as variações)
+│   │   └── OFL.txt             # Licença aberta da fonte Poppins
+│   ├── epitacio.png            # Imagem de perfil
+│   ├── epitacio_brito_foto_oficial.jpeg # Imagem oficial
+│   ├── file.svg                # Ícone de arquivo
+│   ├── globe.svg               # Ícone de globo
+│   ├── next.svg                # Logo Next.js
+│   ├── vercel.svg              # Logo Vercel
+│   └── window.svg              # Ícone de janela
+│
+├── src/                        # Código fonte principal
+│   ├── .env                    # Variáveis de ambiente do src
 │   │
-│   ├── app/                 # App Router do Next.js
-│   │   ├── favicon.ico      # Favicon legado (substituído via metadata)
-│   │   ├── globals.css      # Estilos globais (Tailwind CSS)
-│   │   ├── layout.tsx       # Layout raiz (ícone: logo_innovatis_preta.svg)
-│   │   ├── page.tsx         # Página inicial (rota /)
-│   │   ├── not-found.tsx/   # Página 404 customizada
+│   ├── app/                    # App Router do Next.js
+│   │   ├── globals.css         # Estilos globais (Tailwind CSS + custom)
+│   │   ├── layout.tsx          # Layout raiz da aplicação
+│   │   ├── page.tsx            # Página inicial pública (rota /)
+│   │   ├── not-found.tsx/      # Página 404 customizada
 │   │   │
-│   │   ├── api/             # API Routes (Backend)
-│   │   │   └── auth/
-│   │   │       ├── login/
-│   │   │       │   └── route.ts   # POST /api/auth/login
-│   │   │       ├── logout/
-│   │   │       │   └── route.ts   # POST /api/auth/logout
-│   │   │       └── me/
-│   │   │           └── route.ts   # GET /api/auth/me
+│   │   ├── api/                # API Routes (Backend)
+│   │   │   ├── auth/           # Endpoints de autenticação
+│   │   │   │   ├── login/
+│   │   │   │   │   └── route.ts        # POST /api/auth/login
+│   │   │   │   ├── logout/
+│   │   │   │   │   └── route.ts        # POST /api/auth/logout
+│   │   │   │   └── me/
+│   │   │   │       └── route.ts        # GET /api/auth/me (user info)
+│   │   │   │
+│   │   │   └── contratos/      # Endpoints de contratos
+│   │   │       └── [contratoId]/ # Rotas dinâmicas por contrato
+│   │   │           └── ... (endpoints específicos)
 │   │   │
-│   │   ├── (auth)/          # Route Group: Rotas públicas (não autenticadas)
+│   │   ├── (auth)/             # Route Group: Rotas públicas (não autenticadas)
 │   │   │   └── login/
-│   │   │       ├── page.tsx       # Página de login (/login)
-│   │   │       └── _components/   # Componentes específicos do login (vazio)
+│   │   │       ├── page.tsx              # Página de login (/login)
+│   │   │       └── _components/          # Componentes específicos do login (vazio)
 │   │   │
-│   │   └── (dashboard)/     # Route Group: Rotas protegidas (autenticadas)
-│   │       │
-│   │       ├── home/        # Dashboard principal
-│   │       │   ├── page.tsx       # Página home (/home)
-│   │       │   └── _components/   # Componentes da dashboard
+│   │   └── (dashboard)/        # Route Group: Rotas protegidas (autenticadas)
+│   │       ├── home/           # Dashboard principal
+│   │       │   ├── page.tsx               # Página home (/home)
+│   │       │   └── _components/          # Componentes da dashboard
 │   │       │       ├── CategoryPieChart.tsx    # Gráfico de pizza por categoria
-│   │       │       ├── ContractsLineChart.tsx  # Gráfico de linha temporal
+│   │       │       ├── ContractsLineChart.tsx  # Gráfico de linha - evolução temporal
 │   │       │       ├── ContractsMap.tsx        # Mapa geográfico de contratos
-│   │       │       ├── MapComponent.tsx        # Componente base do mapa
-│   │       │       ├── PartnerBarChart.tsx     # Gráfico de barras por parceiro
+│   │       │       ├── MapComponent.tsx        # Componente base do mapa (React-Leaflet)
+│   │       │       ├── PartnerBarChart.tsx     # Gráfico de barras - performance por parceiro
 │   │       │       └── index.ts                # Exportações centralizadas
 │   │       │
-│   │       ├── contratos/   # Gestão de contratos
-│   │       │   ├── page.tsx       # Listagem de contratos (/contratos)
-│   │       │   ├── _components/   # Componentes específicos
-│   │       │   │   ├── NovoContratoModal.tsx    # Modal de cadastro de contrato
-│   │       │   │   └── index.ts                 # Exportações
+│   │       ├── contratos/      # Gestão de contratos (Projetos & Produtos)
+│   │       │   ├── page.tsx                    # Listagem de contratos (/contratos)
+│   │       │   │                               # Filtros: tipo, status, parceiro, período
+│   │       │   │                               # Tabela com paginação e ordenação
 │   │       │   │
-│   │       │   ├── pre-projetos/  # Pré-projetos e pré-contratos
-│   │       │   │   ├── page.tsx       # Listagem de pré-projetos (/contratos/pre-projetos)
-│   │       │   │   ├── README.md     # Documentação específica
-│   │       │   │   └── _components/   # Componentes específicos
-│   │       │   │       ├── NovoPreProjetoModal.tsx  # Modal de cadastro
-│   │       │   │       └── index.ts                 # Exportações
+│   │       │   ├── _components/                # Componentes específicos
+│   │       │   │   ├── index.ts                # Exportações centralizadas
+│   │       │   │   └── NovoContratoModal.tsx   # Modal para criar novo contrato
 │   │       │   │
-│   │       │   └── [contratoId]/  # Rotas dinâmicas por contrato
-│   │       │       ├── layout.tsx       # Layout compartilhado com 10 tabs
-│   │       │       ├── page.tsx         # Visão Geral do contrato (/contratos/[id])
-│   │       │       ├── contratacoes/
-│   │       │       │   └── page.tsx     # Contratações (/contratos/[id]/contratacoes)
-│   │       │       ├── execucao/
-│   │       │       │   └── page.tsx     # Execução (/contratos/[id]/execucao)
-│   │       │       ├── rubricas/
-│   │       │       │   └── page.tsx     # Rubricas (/contratos/[id]/rubricas)
-│   │       │       ├── informacoes/
-│   │       │       │   └── page.tsx     # Informações (/contratos/[id]/informacoes)
-│   │       │       ├── meta-etapa-fase/
-│   │       │       │   └── page.tsx     # Metas, Etapas e Fases (/contratos/[id]/meta-etapa-fase)
-│   │       │       ├── equipe-tecnica/
-│   │       │       │   └── page.tsx     # Equipe Técnica (/contratos/[id]/equipe-tecnica)
-│   │       │       ├── incubadas/
-│   │       │       │   └── page.tsx     # Incubadas (/contratos/[id]/incubadas)
-│   │       │       ├── desembolso/
-│   │       │       │   └── page.tsx     # Desembolso (/contratos/[id]/desembolso)
-│   │       │       ├── arquivos/
-│   │       │       │   └── page.tsx     # Arquivos (/contratos/[id]/arquivos)
-│   │       │       └── editar/          # Página de edição centralizada
-│   │       │           ├── page.tsx     # Container com sidebar vertical
-│   │       │           └── _components/ # Componentes das abas de edição
-│   │       │               ├── InformacoesContratoTab.tsx
-│   │       │               ├── MetaEtapaFaseTab.tsx
-│   │       │               ├── EquipeTecnicaTab.tsx
-│   │       │               ├── IncubadasTab.tsx
-│   │       │               ├── RubricasTab.tsx
-│   │       │               ├── DesembolsoTab.tsx
-│   │       │               ├── ArquivosTab.tsx
-│   │       │               └── index.ts
+│   │       │   ├── pre-projetos/               # Pré-projetos e pré-contratos
+│   │       │   │   ├── page.tsx                # Listagem (/contratos/pre-projetos)
+│   │       │   │   ├── README.md               # Documentação específica
+│   │       │   │   └── _components/            # Componentes específicos
+│   │       │   │       ├── index.ts            # Exportações
+│   │       │   │       └── NovoPreProjetoModal.tsx # Modal de cadastro de pré-projeto
+│   │       │   │
+│   │       │   └── [contratoId]/               # Rotas dinâmicas por contrato
+│   │       │       ├── layout.tsx              # Layout compartilhado com tabs
+│   │       │       ├── page.tsx                # Visão Geral (/contratos/[id])
+│   │       │       ├── types.ts                # Tipos TypeScript específicos
+│   │       │       │
+│   │       │       ├── arquivos/               # Documentos e arquivos anexados
+│   │       │       │   ├── page.tsx
+│   │       │       │   └── _components/        # Componentes de upload/gerenciamento
+│   │       │       │
+│   │       │       ├── desembolso/             # Gestão de desembolsos
+│   │       │       │   ├── page.tsx
+│   │       │       │   └── _components/        # Componentes de fluxo de caixa
+│   │       │       │
+│   │       │       ├── editar/                 # Página centralizada de edição
+│   │       │       │   ├── page.tsx            # Container com sidebar vertical
+│   │       │       │   └── _components/        # Componentes das abas de edição
+│   │       │       │       ├── index.ts        # Exportações
+│   │       │       │       ├── InformacoesContratoTab.tsx
+│   │       │       │       ├── MetaEtapaFaseTab.tsx
+│   │       │       │       ├── EquipeTecnicaTab.tsx
+│   │       │       │       ├── IncubadasTab.tsx
+│   │       │       │       ├── RubricasTab.tsx
+│   │       │       │       ├── DesembolsoTab.tsx
+│   │       │       │       └── ArquivosTab.tsx
+│   │       │       │
+│   │       │       ├── equipe-tecnica/         # Gestão de equipe técnica
+│   │       │       │   ├── page.tsx
+│   │       │       │   └── _components/        # Componentes de pessoas e funções
+│   │       │       │
+│   │       │       ├── execucao/               # Acompanhamento de execução
+│   │       │       │   ├── page.tsx
+│   │       │       │   └── _components/        # Componentes de cronograma
+│   │       │       │
+│   │       │       ├── incubadas/              # Empresas incubadas pelo projeto
+│   │       │       │   └── page.tsx
+│   │       │       │
+│   │       │       ├── meta-etapa-fase/        # Estrutura de trabalho
+│   │       │       │   └── page.tsx            # Metas, Etapas e Fases
+│   │       │       │
+│   │       │       ├── pagamentos/             # Gestão de pagamentos
+│   │       │       │   └── page.tsx
+│   │       │       │
+│   │       │       └── rubricas/               # Estrutura orçamentária
+│   │       │           ├── page.tsx
+│   │       │           └── _components/        # Componentes de orçamento
 │   │       │
-│   │       └── parceiros/   # Gestão de parceiros
-│   │           ├── page.tsx       # Listagem de parceiros (/parceiros)
+│   │       ├── configuracoes/                  # Página de configurações gerais
+│   │       │   └── page.tsx
+│   │       │
+│   │       └── parceiros/                      # Gestão de parceiros
+│   │           ├── page.tsx                    # Listagem geral (/parceiros)
 │   │           ├── fundacoes/
-│   │           │   └── page.tsx   # Fundações (/parceiros/fundacoes)
+│   │           │   └── page.tsx                # Fundações (/parceiros/fundacoes)
 │   │           └── ifes/
-│   │               └── page.tsx   # IFES (/parceiros/ifes)
+│   │               └── page.tsx                # IFES (/parceiros/ifes)
 │   │
-│   ├── components/          # Componentes React reutilizáveis
-│   │   ├── ModalListener.tsx    # Sistema de modais globais
-│   │   └── ... (outros componentes)
+│   ├── components/             # Componentes React reutilizáveis (src level)
+│   │   ├── ModalListener.tsx   # Sistema de modais globais
+│   │   └── ui/                 # Componentes UI específicos (vazio)
 │   │
-│   ├── generated/           # Código gerado automaticamente
-│   │   └── prisma/          # Cliente Prisma gerado
-│   │       ├── client.js
-│   │       ├── client.d.ts
-│   │       ├── index.js
-│   │       ├── index.d.ts
+│   ├── contexts/               # React Context API (vazio - pronto para uso)
+│   │
+│   ├── generated/              # Código gerado automaticamente
+│   │   └── prisma/             # Cliente Prisma gerado
+│   │       ├── client.js / client.d.ts
+│   │       ├── index.js / index.d.ts
+│   │       ├── default.js / default.d.ts
+│   │       ├── edge.js / edge.d.ts
+│   │       ├── index-browser.js
+│   │       ├── package.json
+│   │       ├── query_compiler_bg.js
+│   │       ├── query_compiler_bg.wasm-base64.js
 │   │       ├── schema.prisma
-│   │       ├── runtime/     # Runtime do Prisma
-│   │       │   ├── client.js
-│   │       │   ├── client.d.ts
-│   │       │   ├── index-browser.js
-│   │       │   ├── index-browser.d.ts
-│   │       │   └── wasm-compiler-edge.js
-│   │       └── ... (demais arquivos gerados)
+│   │       ├── wasm-edge-light-loader.mjs
+│   │       ├── wasm-worker-loader.mjs
+│   │       └── runtime/        # Runtime do Prisma
+│   │           ├── client.js / client.d.ts
+│   │           ├── index-browser.js / index-browser.d.ts
+│   │           └── wasm-compiler-edge.js
 │   │
-│   ├── hooks/               # Hooks customizados React (vazio)
+│   ├── hooks/                  # Hooks customizados React (vazio - pronto para uso)
 │   │
-│   ├── lib/                 # Bibliotecas e utilitários
-│   │   ├── auth.ts          # Funções de autenticação
-│   │   ├── jwt.ts           # Utilitários JWT
-│   │   └── prisma.ts        # Instância do Prisma Client
+│   ├── lib/                    # Bibliotecas e utilitários
+│   │   ├── auth.ts             # Funções de autenticação
+│   │   ├── jwt.ts              # Utilitários JWT (tokens)
+│   │   └── prisma.ts           # Instância singleton do Prisma Client
 │   │
-│   ├── middleware.ts        # Middleware de autenticação (proteção de rotas)
+│   ├── middleware.ts           # Middleware de autenticação (proteção de rotas)
 │   │
-│   ├── public/              # Arquivos públicos do src (vazio)
+│   ├── public/                 # Arquivos públicos do src (vazio)
 │   │
-│   └── utils/               # Utilitários gerais (vazio)
+│   └── utils/                  # Utilitários gerais (vazio - pronto para uso)
 │
-├── eslint.config.mjs        # Configuração do ESLint
-├── next-env.d.ts            # Tipos do Next.js
-├── next.config.ts           # Configuração do Next.js
-├── package.json             # Dependências e scripts npm
-├── package-lock.json        # Lockfile do npm
-├── postcss.config.mjs       # Configuração do PostCSS
-├── prisma.config.ts         # Configuração adicional do Prisma
-└── tsconfig.json            # Configuração do TypeScript
+├── ANALISE_REQUISITOS_CHEFE.md # Análise de requisitos do projeto
+├── RubricasTab.tsx             # Componente de tab de rubricas (root level)
+├── MPI - 13 Planos de...xlsx   # Documento de especificação (dados anexos)
+│
+├── eslint.config.mjs           # Configuração do ESLint
+├── next-env.d.ts               # Tipos gerados do Next.js
+├── next.config.ts              # Configuração do Next.js
+├── package.json                # Dependências e scripts npm
+├── package-lock.json           # Lockfile do npm (versões exatas)
+├── postcss.config.mjs          # Configuração do PostCSS
+├── prisma.config.ts            # Configuração adicional do Prisma
+├── tsconfig.json               # Configuração do TypeScript
+└── tsconfig.tsbuildinfo        # Cache do TypeScript build info
 ```
+
+### 📊 Resumo Estrutural
+
+| Nível | Propósito | Localização |
+|-------|-----------|------------|
+| **Raiz** | Configurações, docs e assets | `/` |
+| **Components** | UI reutilizável (shadcn) | `/components/ui` |
+| **Src/App** | Rotas e páginas Next.js | `/src/app/` |
+| **Src/Components** | Componentes React internos | `/src/components/` |
+| **Src/Lib** | Utilitários e serviços | `/src/lib/` |
+| **Generated** | Código auto-gerado (Prisma) | `/src/generated/` |
+| **API Routes** | Endpoints HTTP | `/src/app/api/` |
+| **Dashboard** | Rotas protegidas | `/src/app/(dashboard)/` |
+
+### 🔍 Principais Pastas Vazias (Prontas para Expansão)
+
+- **`src/hooks/`** - Para novos hooks React personalizados
+- **`src/contexts/`** - Para gerenciamento de estado global
+- **`src/utils/`** - Para funções utilitárias compartilhadas
+- **`src/components/ui/`** - Para componentes UI específicos do projeto
 
 ## 📋 Conceitos Fundamentais
 

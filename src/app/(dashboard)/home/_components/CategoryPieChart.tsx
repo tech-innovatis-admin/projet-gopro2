@@ -39,7 +39,7 @@ export function CategoryPieChart() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 h-full">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-zinc-900">
+        <h3 className="text-lg font-semibold text-[#004225]">
           Contratos por Categoria
         </h3>
         <span className="text-sm text-zinc-500">{total} contratos</span>
