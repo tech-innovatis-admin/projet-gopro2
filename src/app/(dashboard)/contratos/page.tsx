@@ -18,6 +18,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
+import { MoneyInput } from "./[contratoId]/desembolso/_components/MoneyImput";
 
 // Tipos
 type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "DRAFT" | "CANCELADO" | "EM_NEGOCIACAO";
@@ -53,6 +54,8 @@ type Filters = {
   segmento: string;
   tipo: "TODOS" | ContratoTipo;
   localidade: string;
+  valorMinimo: number;
+  valorMaximo: number;
 };
 
 type SortConfig = {
@@ -154,7 +157,20 @@ const mockContratos: Contrato[] = [
 
 const parceiros = [...new Set(mockContratos.map((c) => c.parceiro))];
 const orgaosFinanciadores = [...new Set(mockContratos.map((c) => c.orgaoFinanciador))];
-const segmentos = [...new Set(mockContratos.map((c) => c.segmento))];
+const segmentos = [
+  "Educação",
+  "Saúde",
+  "Ciência",
+  "Meio Ambiente",
+  "Tecnologia",
+  "Turismo",
+  "Social",
+  "Economia",
+  "Cultura",
+  "Esporte",
+  "Agricultura",
+  "Outro",
+];
 const localidades = [...new Set(mockContratos.map((c) => c.uf))];
 
 export default function ContratosPage() {
@@ -169,6 +185,8 @@ export default function ContratosPage() {
     segmento: "",
     tipo: "TODOS",
     localidade: "",
+    valorMinimo: 0,
+    valorMaximo: 0,
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "dataInicio",
@@ -234,6 +252,15 @@ export default function ContratosPage() {
       .filter((c) => (filters.segmento ? c.segmento === filters.segmento : true))
       .filter((c) => (filters.tipo === "TODOS" ? true : c.tipo === filters.tipo))
       .filter((c) => (filters.localidade ? c.uf === filters.localidade : true))
+      .filter((c) => {
+        // Converter filtros de centavos para reais (MoneyInput trabalha com centavos)
+        const valorMinimoReais = filters.valorMinimo / 100;
+        const valorMaximoReais = filters.valorMaximo / 100;
+        
+        if (valorMinimoReais > 0 && c.valorTotal < valorMinimoReais) return false;
+        if (valorMaximoReais > 0 && c.valorTotal > valorMaximoReais) return false;
+        return true;
+      })
       .filter((c) => {
         if (!filters.periodoInicio) return true;
         return new Date(c.dataInicio) >= new Date(filters.periodoInicio);
@@ -307,6 +334,8 @@ export default function ContratosPage() {
       segmento: "",
       tipo: "TODOS",
       localidade: "",
+      valorMinimo: 0,
+      valorMaximo: 0,
     });
     setPage(1);
   };
@@ -319,6 +348,8 @@ export default function ContratosPage() {
     filters.orgaoFinanciador !== "" ||
     filters.segmento !== "" ||
     filters.localidade !== "" ||
+    filters.valorMinimo > 0 ||
+    filters.valorMaximo > 0 ||
     filters.periodoInicio !== "" ||
     filters.periodoFim !== "" ||
     filters.q !== "";
@@ -443,6 +474,8 @@ export default function ContratosPage() {
                       filters.orgaoFinanciador,
                       filters.segmento,
                       filters.localidade,
+                      filters.valorMinimo > 0,
+                      filters.valorMaximo > 0,
                       filters.periodoInicio,
                       filters.periodoFim,
                     ].filter(Boolean).length
@@ -457,7 +490,7 @@ export default function ContratosPage() {
 
           {/* Filtros expandidos */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Status */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
@@ -576,35 +609,35 @@ export default function ContratosPage() {
                 </select>
               </div>
 
-              {/* Período Início */}
+              {/* Valor Mínimo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Data início (de)
+                  Valor mínimo
                 </label>
-                <input
-                  type="date"
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                  value={filters.periodoInicio}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, periodoInicio: e.target.value }));
+                <MoneyInput
+                  valueCents={filters.valorMinimo}
+                  onValueChange={(value) => {
+                    setFilters((f) => ({ ...f, valorMinimo: value }));
                     setPage(1);
                   }}
+                  placeholder="R$ 0,00"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
                 />
               </div>
 
-              {/* Período Fim */}
+              {/* Valor Máximo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Data término (até)
+                  Valor máximo
                 </label>
-                <input
-                  type="date"
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                  value={filters.periodoFim}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, periodoFim: e.target.value }));
+                <MoneyInput
+                  valueCents={filters.valorMaximo}
+                  onValueChange={(value) => {
+                    setFilters((f) => ({ ...f, valorMaximo: value }));
                     setPage(1);
                   }}
+                  placeholder="R$ 0,00"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
                 />
               </div>
             </div>
