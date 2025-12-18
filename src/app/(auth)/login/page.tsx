@@ -230,7 +230,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#1F4E79] to-[#153653] hover:from-[#153653] hover:to-[#0D2436] text-white font-semibold shadow-lg shadow-[#1F4E79]/30 hover:shadow-xl hover:shadow-[#1F4E79]/40 transition-all duration-300 group disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#01C18B] to-[#153653] hover:from-[#01C18B] hover:to-[#0D2436] text-white font-semibold shadow-lg shadow-[#1F4E79]/30 hover:shadow-xl hover:shadow-[#1F4E79]/40 transition-all duration-300 group disabled:opacity-70 disabled:cursor-not-allowed"
                   size="lg"
                 >
                   {isLoading ? (
