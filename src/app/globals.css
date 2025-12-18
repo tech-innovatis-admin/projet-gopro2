@@ -45,6 +45,25 @@
 
 :root {
   --radius: 0.625rem;
+  
+  /* Cores Semânticas GoPro 2.0 */
+  /* Primary (Azul Institucional) - Estrutura UI, navbar, botões primários */
+  --color-primary-blue: #1F4E79;
+  --color-primary-blue-hover: #153653;
+  --color-primary-blue-dark: #0D2436;
+  
+  /* Brand (Verde Innovatis) - Apenas logo e identidade institucional */
+  --color-brand-green: #004225;
+  
+  /* Accent (Turquoise) - Highlights, microinterações, indicadores secundários */
+  --color-accent-turquoise: #00C48B;
+  --color-accent-turquoise-light: #D1FAEC;
+  
+  /* Success (Verde Success) - Status positivos, confirmações, feedback */
+  --color-success-green: #1E7F4B;
+  --color-success-green-light: #D1FAEC;
+  
+  /* Tailwind Theme Variables */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

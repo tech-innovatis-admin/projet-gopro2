@@ -25,7 +25,7 @@ export default function HomePage() {
                   <p className="text-sm text-zinc-500">Olá,</p>
                   <p className="text-lg font-semibold text-zinc-900">Administrador</p>
                 </div>
-                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold">
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold">
                   A
                 </div>
               </div>
@@ -54,10 +54,10 @@ export default function HomePage() {
                 <div>
                   <p className="text-sm text-zinc-500 text-center mb-1">Em Andamento</p>
                   <p className="text-2xl font-bold text-zinc-900">42</p>
-                  <p className="text-sm font-medium text-[#00B894] mt-1">R$ 8.423.120,00</p>
+                  <p className="text-sm font-medium text-[#00C48B] mt-1">R$ 8.423.120,00</p>
                 </div>
-                <div className="p-3 bg-[#00B894]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#00B894]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-3 bg-[#00C48B]/10 rounded-lg">
+                  <svg className="h-3 w-3 text-[#00C48B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
@@ -69,10 +69,10 @@ export default function HomePage() {
                 <div>
                   <p className="text-sm text-zinc-500 text-center mb-1">Concluídos</p>
                   <p className="text-2xl font-bold text-zinc-900">58</p>
-                  <p className="text-sm font-medium text-[#004225] mt-1">R$ 9.124.730,00</p>
+                  <p className="text-sm font-medium text-[#1E7F4B] mt-1">R$ 9.124.730,00</p>
                 </div>
-                <div className="p-3 bg-[#004225]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#004225]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-3 bg-[#1E7F4B]/10 rounded-lg">
+                  <svg className="h-3 w-3 text-[#1E7F4B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
@@ -99,10 +99,10 @@ export default function HomePage() {
                 <div>
                   <p className="text-sm text-zinc-500 text-center mb-1">Total de Contratos</p>
                   <p className="text-2xl font-bold text-zinc-900">116</p>
-                  <p className="text-sm font-medium text-[#004225] mt-1">R$ 19.247.850,00</p>
+                  <p className="text-sm font-medium text-[#1F4E79] mt-1">R$ 19.247.850,00</p>
                 </div>
-                <div className="p-3 bg-[#004225]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#004225]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-3 bg-[#1F4E79]/10 rounded-lg">
+                  <svg className="h-3 w-3 text-[#1F4E79]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>

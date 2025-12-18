@@ -282,7 +282,7 @@ export function NavBar() {
                     variant="ghost"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg transition-colors duration-200"
                   >
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold text-sm">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold text-sm">
                       A
                     </div>
                     <span className="hidden sm:block">Admin</span>

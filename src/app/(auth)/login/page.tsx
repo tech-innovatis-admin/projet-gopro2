@@ -86,18 +86,18 @@ export default function LoginPage() {
               <h2 className="text-4xl font-bold leading-tight">
                 Gerenciar projetos
                 <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#004225] to-[#00B894]">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1F4E79] to-[#00C48B]">
                   de forma inteligente
                 </span>
               </h2>
             </div>
 
-            <blockquote className="border-l-2 border-[#004225] pl-6 space-y-3">
+            <blockquote className="border-l-2 border-[#1F4E79] pl-6 space-y-3">
               <p className="text-lg text-zinc-300 leading-relaxed">
                 &ldquo;Você não precisa saber tudo, mas precisa saber fazer o que fazer com o que sabe.&rdquo;
               </p>
               <footer className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold">
                   EB
                 </div>
                 <div>
@@ -177,7 +177,7 @@ export default function LoginPage() {
                       required
                       className="pl-11 pr-4 h-12 rounded-xl border-zinc-200 bg-zinc-50/50 focus:bg-white focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20 transition-all duration-200"
                     />
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#004225] transition-colors" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#1F4E79] transition-colors" />
                   </div>
                 </div>
 
@@ -197,7 +197,7 @@ export default function LoginPage() {
                       required
                       className="pl-11 pr-4 h-12 rounded-xl border-zinc-200 bg-zinc-50/50 focus:bg-white focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20 transition-all duration-200"
                     />
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#004225] transition-colors" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#1F4E79] transition-colors" />
                   </div>
                 </div>
 
@@ -209,7 +209,7 @@ export default function LoginPage() {
                       checked={rememberMe}
                       onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                       disabled={isLoading}
-                      className="border-zinc-300 data-[state=checked]:bg-[#004225] data-[state=checked]:border-[#004225]"
+                      className="border-zinc-300 data-[state=checked]:bg-[#1F4E79] data-[state=checked]:border-[#1F4E79]"
                     />
                     <Label
                       htmlFor="remember"
@@ -220,7 +220,7 @@ export default function LoginPage() {
                   </div>
                   <Link
                     href="/forgot-password"
-                    className="text-sm text-zinc-600 hover:text-[#0B7A4B] font-medium hover:underline transition-colors"
+                    className="text-sm text-zinc-600 hover:text-[#00C48B] font-medium hover:underline transition-colors"
                   >
                     Esqueceu a senha?
                   </Link>
@@ -230,7 +230,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#004225] to-[#00B894] hover:from-[#002816] hover:to-[#0B7A4B] text-white font-semibold shadow-lg shadow-[#004225]/30 hover:shadow-xl hover:shadow-[#004225]/40 transition-all duration-300 group disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#1F4E79] to-[#153653] hover:from-[#153653] hover:to-[#0D2436] text-white font-semibold shadow-lg shadow-[#1F4E79]/30 hover:shadow-xl hover:shadow-[#1F4E79]/40 transition-all duration-300 group disabled:opacity-70 disabled:cursor-not-allowed"
                   size="lg"
                 >
                   {isLoading ? (
@@ -261,11 +261,11 @@ export default function LoginPage() {
           {/* Termos e Política */}
           <p className="text-center text-xs text-zinc-400 leading-relaxed">
             Ao continuar, você concorda com nossos{" "}
-            <Link href="/terms" className="text-zinc-600 hover:text-[#0B7A4B] underline underline-offset-2 transition-colors">
+            <Link href="/terms" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
               Termos de Serviço
             </Link>{" "}
             e{" "}
-            <Link href="/privacy" className="text-zinc-600 hover:text-[#0B7A4B] underline underline-offset-2 transition-colors">
+            <Link href="/privacy" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
               Política de Privacidade
             </Link>
           </p>

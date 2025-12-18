@@ -38,6 +38,8 @@ type Contrato = {
   dataTermino?: string;
   responsavel: string;
   uf: string;
+  orgaoFinanciador: string;
+  segmento: string;
 };
 
 type Filters = {
@@ -47,6 +49,10 @@ type Filters = {
   periodoInicio: string;
   periodoFim: string;
   q: string;
+  orgaoFinanciador: string;
+  segmento: string;
+  tipo: "TODOS" | ContratoTipo;
+  localidade: string;
 };
 
 type SortConfig = {
@@ -71,6 +77,8 @@ const mockContratos: Contrato[] = [
     dataTermino: "2025-12-31",
     responsavel: "João Silva",
     uf: "SP",
+    orgaoFinanciador: "CNPq",
+    segmento: "Tecnologia da Informação",
   },
   {
     id: "2",
@@ -87,6 +95,8 @@ const mockContratos: Contrato[] = [
     dataTermino: "2025-09-01",
     responsavel: "Maria Santos",
     uf: "RJ",
+    orgaoFinanciador: "FINEP",
+    segmento: "Software e Serviços",
   },
   {
     id: "3",
@@ -102,6 +112,8 @@ const mockContratos: Contrato[] = [
     dataInicio: "2025-06-20",
     responsavel: "Carlos Oliveira",
     uf: "MG",
+    orgaoFinanciador: "FAPEMIG",
+    segmento: "Desenvolvimento Web",
   },
   {
     id: "4",
@@ -118,6 +130,8 @@ const mockContratos: Contrato[] = [
     dataTermino: "2026-06-30",
     responsavel: "Ana Costa",
     uf: "PR",
+    orgaoFinanciador: "MEC",
+    segmento: "Infraestrutura",
   },
   {
     id: "5",
@@ -133,10 +147,15 @@ const mockContratos: Contrato[] = [
     dataInicio: "2025-04-01",
     responsavel: "Pedro Mendes",
     uf: "RS",
+    orgaoFinanciador: "CAPES",
+    segmento: "Serviços",
   },
 ];
 
 const parceiros = [...new Set(mockContratos.map((c) => c.parceiro))];
+const orgaosFinanciadores = [...new Set(mockContratos.map((c) => c.orgaoFinanciador))];
+const segmentos = [...new Set(mockContratos.map((c) => c.segmento))];
+const localidades = [...new Set(mockContratos.map((c) => c.uf))];
 
 export default function ContratosPage() {
   const [filters, setFilters] = useState<Filters>({
@@ -146,6 +165,10 @@ export default function ContratosPage() {
     periodoInicio: "",
     periodoFim: "",
     q: "",
+    orgaoFinanciador: "",
+    segmento: "",
+    tipo: "TODOS",
+    localidade: "",
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "dataInicio",
@@ -188,6 +211,8 @@ export default function ContratosPage() {
         dataTermino: data.dataFim || undefined,
         responsavel: data.coordenador,
         uf: data.localidade.split(" - ")[1] || "BR",
+        orgaoFinanciador: data.orgaoFinanciador || "N/A",
+        segmento: data.segmento || "Geral",
       };
       
       setContratos((prev) => [novoContrato, ...prev]);
@@ -205,6 +230,10 @@ export default function ContratosPage() {
       .filter((c) => (filters.govIf === "TODOS" ? true : c.govIf === filters.govIf))
       .filter((c) => (filters.status === "TODOS" ? true : c.status === filters.status))
       .filter((c) => (filters.parceiro ? c.parceiro === filters.parceiro : true))
+      .filter((c) => (filters.orgaoFinanciador ? c.orgaoFinanciador === filters.orgaoFinanciador : true))
+      .filter((c) => (filters.segmento ? c.segmento === filters.segmento : true))
+      .filter((c) => (filters.tipo === "TODOS" ? true : c.tipo === filters.tipo))
+      .filter((c) => (filters.localidade ? c.uf === filters.localidade : true))
       .filter((c) => {
         if (!filters.periodoInicio) return true;
         return new Date(c.dataInicio) >= new Date(filters.periodoInicio);
@@ -237,18 +266,18 @@ export default function ContratosPage() {
     return result;
   }, [contratos, filters, sortConfig]);
 
-  // Métricas
+  // Métricas (baseadas nos dados filtrados)
   const counts = useMemo(() => {
-    const total = contratos.length;
-    const emExecucao = contratos.filter((c) => c.status === "EM_ANDAMENTO").length;
-    const concluidos = contratos.filter((c) => c.status === "CONCLUIDO").length;
-    const suspensos = contratos.filter((c) => c.status === "SUSPENSO").length;
-    const valorTotal = contratos.reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorEmExecucao = contratos
+    const total = filtered.length;
+    const emExecucao = filtered.filter((c) => c.status === "EM_ANDAMENTO").length;
+    const concluidos = filtered.filter((c) => c.status === "CONCLUIDO").length;
+    const suspensos = filtered.filter((c) => c.status === "SUSPENSO").length;
+    const valorTotal = filtered.reduce((acc, c) => acc + c.valorTotal, 0);
+    const valorEmExecucao = filtered
       .filter((c) => c.status === "EM_ANDAMENTO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
     return { total, emExecucao, concluidos, suspensos, valorTotal, valorEmExecucao };
-  }, [contratos]);
+  }, [filtered]);
 
   // Paginação
   const paginatedData = useMemo(() => {
@@ -274,6 +303,10 @@ export default function ContratosPage() {
       periodoInicio: "",
       periodoFim: "",
       q: "",
+      orgaoFinanciador: "",
+      segmento: "",
+      tipo: "TODOS",
+      localidade: "",
     });
     setPage(1);
   };
@@ -281,7 +314,11 @@ export default function ContratosPage() {
   const hasActiveFilters =
     filters.govIf !== "TODOS" ||
     filters.status !== "TODOS" ||
+    filters.tipo !== "TODOS" ||
     filters.parceiro !== "" ||
+    filters.orgaoFinanciador !== "" ||
+    filters.segmento !== "" ||
+    filters.localidade !== "" ||
     filters.periodoInicio !== "" ||
     filters.periodoFim !== "" ||
     filters.q !== "";
@@ -401,7 +438,11 @@ export default function ContratosPage() {
                     [
                       filters.govIf !== "TODOS",
                       filters.status !== "TODOS",
+                      filters.tipo !== "TODOS",
                       filters.parceiro,
+                      filters.orgaoFinanciador,
+                      filters.segmento,
+                      filters.localidade,
                       filters.periodoInicio,
                       filters.periodoFim,
                     ].filter(Boolean).length
@@ -416,7 +457,7 @@ export default function ContratosPage() {
 
           {/* Filtros expandidos */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Status */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
@@ -438,6 +479,23 @@ export default function ContratosPage() {
                 </select>
               </div>
 
+              {/* Tipo de Contrato */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Tipo de Contrato</label>
+                <select
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                  value={filters.tipo}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, tipo: e.target.value as Filters["tipo"] }));
+                    setPage(1);
+                  }}
+                >
+                  <option value="TODOS">Todos os tipos</option>
+                  <option value="PROJETO">Projeto</option>
+                  <option value="PRODUTO">Produto</option>
+                </select>
+              </div>
+
               {/* Parceiro */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Parceiro</label>
@@ -453,6 +511,66 @@ export default function ContratosPage() {
                   {parceiros.map((p) => (
                     <option key={p} value={p}>
                       {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Órgão Financiador */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Órgão Financiador</label>
+                <select
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                  value={filters.orgaoFinanciador}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, orgaoFinanciador: e.target.value }));
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todos os órgãos</option>
+                  {orgaosFinanciadores.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Segmento do Contrato */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Segmento</label>
+                <select
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                  value={filters.segmento}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, segmento: e.target.value }));
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todos os segmentos</option>
+                  {segmentos.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Localidade */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Localidade (UF)</label>
+                <select
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                  value={filters.localidade}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, localidade: e.target.value }));
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todas as localidades</option>
+                  {localidades.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
                     </option>
                   ))}
                 </select>
