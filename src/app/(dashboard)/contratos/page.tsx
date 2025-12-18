@@ -18,9 +18,11 @@ import {
   ArrowUpDown,
   Clock,
   XCircle,
+  Download,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import { MoneyInput } from "./[contratoId]/desembolso/_components/MoneyImput";
+import * as XLSX from "xlsx";
 
 // Tipos
 type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
@@ -370,6 +372,65 @@ export default function ContratosPage() {
     filters.periodoFim !== "" ||
     filters.q !== "";
 
+  // Função para exportar para Excel
+  const exportToExcel = () => {
+    // Preparar dados para exportação
+    const exportData = filtered.map((contrato) => ({
+      Código: contrato.codigo,
+      Nome: contrato.nome,
+      "Gov/IF": contrato.govIf,
+      Tipo: contrato.tipo === "PROJETO" ? "Projeto" : "Produto",
+      Cliente: contrato.cliente,
+      Parceiro: contrato.parceiro,
+      "Valor Total": `R$ ${contrato.valorTotal.toLocaleString("pt-BR")}`,
+      Status:
+        contrato.status === "EM_ANDAMENTO"
+          ? "Execução"
+          : contrato.status === "CONCLUIDO"
+          ? "Concluído"
+          : contrato.status === "SUSPENSO"
+          ? "Suspenso"
+          : contrato.status === "PENDENTE"
+          ? "Pendente"
+          : "Cancelado",
+      Início: formatDate(contrato.dataInicio),
+      Término: contrato.dataTermino ? formatDate(contrato.dataTermino) : "—",
+      Responsável: contrato.responsavel,
+      UF: contrato.uf,
+      "Órgão Financiador": contrato.orgaoFinanciador,
+      Segmento: contrato.segmento,
+    }));
+
+    // Criar workbook e worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Ajustar largura das colunas
+    const colWidths = [
+      { wch: 12 }, // Código
+      { wch: 35 }, // Nome
+      { wch: 8 },  // Gov/IF
+      { wch: 10 }, // Tipo
+      { wch: 30 }, // Cliente
+      { wch: 30 }, // Parceiro
+      { wch: 18 }, // Valor Total
+      { wch: 12 }, // Status
+      { wch: 12 }, // Início
+      { wch: 12 }, // Término
+      { wch: 25 }, // Responsável
+      { wch: 5 },  // UF
+      { wch: 20 }, // Órgão Financiador
+      { wch: 25 }, // Segmento
+    ];
+    ws["!cols"] = colWidths;
+
+    // Adicionar worksheet ao workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Contratos");
+
+    // Salvar arquivo
+    XLSX.writeFile(wb, "Planilha de Contratos.xlsx");
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
@@ -391,13 +452,15 @@ export default function ContratosPage() {
             <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
             <p className="text-sm text-gray-500">Gestão unificada de Projetos e Produtos</p>
           </div>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName: 'novo-contrato' } }))}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Contrato
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName: 'novo-contrato' } }))}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Contrato
+            </button>
+          </div>
         </div>
 
         {/* Cards de Métricas */}
@@ -832,6 +895,13 @@ export default function ContratosPage() {
           {/* Paginação */}
           {!loading && filtered.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={exportToExcel}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Exportar Excel
+              </button>
               <span className="text-sm text-gray-600">
                 Mostrando {(page - 1) * pageSize + 1} a{" "}
                 {Math.min(page * pageSize, filtered.length)} de {filtered.length} contratos
