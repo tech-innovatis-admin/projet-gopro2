@@ -6,6 +6,7 @@ import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle, 
 import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
+import { ResizableTable } from '@/components/ui/resizable-table';
 
 // Tipos
 type ID = string;
@@ -623,22 +624,26 @@ export default function RubricasPage() {
                     <span>Nenhum item cadastrado nesta rubrica</span>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-2 font-medium text-gray-600">Descrição</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">Qtd</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">Meses</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Unit.</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-32">Valor Total</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-28 text-red-600">Rem. (Deb.)</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-28 text-green-600">Rem. (Créd.)</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-32 text-blue-600">Valor Final</th>
-                          <th className="text-left py-2 px-2 font-medium text-gray-600 min-w-[200px]">Meta</th>
-                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-32">Ações</th>
-                        </tr>
-                      </thead>
+                  <ResizableTable
+                    columnCount={10}
+                    defaultWidths={[250, 80, 80, 130, 130, 120, 120, 130, 200, 120]}
+                    minColumnWidth={60}
+                    className="text-sm"
+                  >
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-2 font-medium text-gray-600">Descrição</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Qtd</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Meses</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Valor Unit.</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Valor Total</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Créd.)</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Meta</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
+                      </tr>
+                    </thead>
                       <tbody>
                         {rubrica.itens.map((item) => (
                           <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -879,8 +884,7 @@ export default function RubricasPage() {
                           </tr>
                         )}
                       </tbody>
-                    </table>
-                  </div>
+                    </ResizableTable>
                 )}
 
                 {/* Botão adicionar quando não há form visível */}

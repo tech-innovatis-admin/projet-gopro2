@@ -246,25 +246,25 @@ export default function DesembolsoPage() {
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">Valor Total do Projeto</p>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(valorTotalContrato)}</p>
           <p className="text-xs text-gray-400 mt-1">Contrato: {contrato.codigo}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">Desembolsos</p>
           <p className="text-2xl font-bold text-gray-900">{currentParcelas.length}</p>
           <p className="text-xs text-gray-400 mt-1">Quantidade prevista</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">Total Previsto</p>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPrevisto)}</p>
           <p className="text-xs text-gray-400 mt-1">Somatório do cronograma</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">{excedente > 0 ? "Excedente" : "Restante"}</p>
           <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-[#004225]"}`}>
             {formatCurrency(excedente > 0 ? excedente : restante)}
@@ -272,7 +272,7 @@ export default function DesembolsoPage() {
           <p className="text-xs text-gray-400 mt-1">{excedente > 0 ? "Ultrapassa o total" : "Falta para fechar"}</p>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500">% Previsto</p>
           <div className="flex items-center gap-2">
             <p className={`text-2xl font-bold ${excedente > 0 ? "text-red-600" : "text-[#004225]"}`}>
@@ -438,11 +438,11 @@ export default function DesembolsoPage() {
                           className="px-2 py-1 border border-gray-300 rounded text-sm"
                         />
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 text-center">
                         <MoneyInput
                           valueCents={Math.round(editForm.valorPrevisto * 100)}
                           onValueChange={(cents) => setEditForm({ ...editForm, valorPrevisto: cents / 100 })}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                         />
                       </td>
                       <td className="py-3 px-4 text-center text-gray-700 font-medium">
@@ -473,7 +473,7 @@ export default function DesembolsoPage() {
                     <>
                       <td className="py-3 px-4 font-medium text-gray-500 text-center">{formatOrdinal(parcela.numero)}</td>
                       <td className="py-3 px-4 text-center text-gray-700">{formatDate(parcela.dataPrevista)}</td>
-                      <td className="py-3 px-4 text-right font-semibold text-gray-900">{formatCurrency(parcela.valorPrevisto)}</td>
+                      <td className="py-3 px-4 text-center font-semibold text-gray-900">{formatCurrency(parcela.valorPrevisto)}</td>
                       <td className="py-3 px-4 text-center text-gray-700 font-medium">{valorTotalContrato > 0 ? `${parcelaPercentual.toFixed(1)}%` : "—"}</td>
                       <td className="py-3 px-4 text-gray-700">{parcela.observacao ? parcela.observacao : <span className="text-gray-400">—</span>}</td>
                       {isEditing && (
@@ -508,7 +508,7 @@ export default function DesembolsoPage() {
               <td colSpan={2} className="py-3 px-4 text-right text-gray-600">
                 Totais:
               </td>
-              <td className="py-3 px-4 text-right text-gray-900">{formatCurrency(totalPrevisto)}</td>
+              <td className="py-3 px-4 text-center text-gray-900">{formatCurrency(totalPrevisto)}</td>
               <td className="py-3 px-4 text-center text-gray-700">
                 {valorTotalContrato > 0 ? `${Math.min(percentualPrevisto, 999).toFixed(1)}%` : "—"}
               </td>
