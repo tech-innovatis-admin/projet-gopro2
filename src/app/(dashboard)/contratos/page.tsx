@@ -16,12 +16,14 @@ import {
   PauseCircle,
   ChevronDown,
   ArrowUpDown,
+  Clock,
+  XCircle,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import { MoneyInput } from "./[contratoId]/desembolso/_components/MoneyImput";
 
 // Tipos
-type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "DRAFT" | "CANCELADO" | "EM_NEGOCIACAO";
+type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
 type ContratoTipo = "PROJETO" | "PRODUTO";
 
 type Contrato = {
@@ -145,7 +147,7 @@ const mockContratos: Contrato[] = [
     cliente: "Universidade Federal do Rio Grande do Sul",
     parceiro: "Fundação UFRGS",
     categoria: "Serviços",
-    status: "EM_NEGOCIACAO",
+    status: "PENDENTE",
     valorTotal: 180000,
     dataInicio: "2025-04-01",
     responsavel: "Pedro Mendes",
@@ -223,7 +225,7 @@ export default function ContratosPage() {
         cliente: data.localidade,
         parceiro: data.parceiro,
         categoria: "Geral",
-        status: data.status === "A_INICIAR" ? "EM_ANDAMENTO" : data.status === "PENDENCIA" ? "SUSPENSO" : data.status as ContratoStatus,
+        status: data.status as ContratoStatus,
         valorTotal: 0,
         dataInicio: data.dataInicio,
         dataTermino: data.dataFim || undefined,
@@ -299,11 +301,25 @@ export default function ContratosPage() {
     const emExecucao = filtered.filter((c) => c.status === "EM_ANDAMENTO").length;
     const concluidos = filtered.filter((c) => c.status === "CONCLUIDO").length;
     const suspensos = filtered.filter((c) => c.status === "SUSPENSO").length;
+    const pendentes = filtered.filter((c) => c.status === "PENDENTE").length;
+    const cancelados = filtered.filter((c) => c.status === "CANCELADO").length;
     const valorTotal = filtered.reduce((acc, c) => acc + c.valorTotal, 0);
     const valorEmExecucao = filtered
       .filter((c) => c.status === "EM_ANDAMENTO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    return { total, emExecucao, concluidos, suspensos, valorTotal, valorEmExecucao };
+    const valorConcluidos = filtered
+      .filter((c) => c.status === "CONCLUIDO")
+      .reduce((acc, c) => acc + c.valorTotal, 0);
+    const valorSuspensos = filtered
+      .filter((c) => c.status === "SUSPENSO")
+      .reduce((acc, c) => acc + c.valorTotal, 0);
+    const valorPendentes = filtered
+      .filter((c) => c.status === "PENDENTE")
+      .reduce((acc, c) => acc + c.valorTotal, 0);
+    const valorCancelados = filtered
+      .filter((c) => c.status === "CANCELADO")
+      .reduce((acc, c) => acc + c.valorTotal, 0);
+    return { total, emExecucao, concluidos, suspensos, pendentes, cancelados, valorTotal, valorEmExecucao, valorConcluidos, valorSuspensos, valorPendentes, valorCancelados };
   }, [filtered]);
 
   // Paginação
@@ -385,15 +401,16 @@ export default function ContratosPage() {
         </div>
 
         {/* Cards de Métricas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
           <MetricCard
-            title="Total de Contratos"
+            title="Total"
             value={counts.total}
             icon={FileText}
             color="#004225"
+            subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Em Execução"
+            title="Execução"
             value={counts.emExecucao}
             icon={TrendingUp}
             color="#0B7A4B"
@@ -404,12 +421,28 @@ export default function ContratosPage() {
             value={counts.concluidos}
             icon={CheckCircle}
             color="#6D28D9"
+            subtitle={`R$ ${counts.valorConcluidos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
             title="Suspensos"
             value={counts.suspensos}
             icon={PauseCircle}
             color="#F59E0B"
+            subtitle={`R$ ${counts.valorSuspensos.toLocaleString("pt-BR")}`}
+          />
+          <MetricCard
+            title="Pendentes"
+            value={counts.pendentes}
+            icon={Clock}
+            color="#3B82F6"
+            subtitle={`R$ ${counts.valorPendentes.toLocaleString("pt-BR")}`}
+          />
+          <MetricCard
+            title="Cancelados"
+            value={counts.cancelados}
+            icon={XCircle}
+            color="#EF4444"
+            subtitle={`R$ ${counts.valorCancelados.toLocaleString("pt-BR")}`}
           />
         </div>
 
@@ -503,11 +536,10 @@ export default function ContratosPage() {
                   }}
                 >
                   <option value="TODOS">Todos os status</option>
-                  <option value="EM_ANDAMENTO">Em Andamento</option>
+                  <option value="EM_ANDAMENTO">Execução</option>
                   <option value="CONCLUIDO">Concluído</option>
                   <option value="SUSPENSO">Suspenso</option>
-                  <option value="EM_NEGOCIACAO">Em Negociação</option>
-                  <option value="DRAFT">Rascunho</option>
+                  <option value="PENDENTE">Pendente</option>
                   <option value="CANCELADO">Cancelado</option>
                 </select>
               </div>
@@ -667,7 +699,7 @@ export default function ContratosPage() {
             columnCount={10}
             defaultWidths={[
               120, // Código
-              200, // Nome
+              290, // Nome
               100, // Gov/IF
               100, // Tipo
               220, // Cliente / Parceiro
@@ -675,7 +707,7 @@ export default function ContratosPage() {
               130, // Status
               110, // Início
               110, // Término
-              150, // Responsável
+              200, // Responsável
             ]}
             minColumnWidth={80}
             className="divide-y divide-gray-200"
@@ -764,14 +796,14 @@ export default function ContratosPage() {
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => (window.location.href = `/contratos/${contrato.id}`)}
                     >
-                      <Td className="font-mono text-sm">{contrato.codigo}</Td>
+                      <Td className="font-mono text-sm text-center">{contrato.codigo}</Td>
                       <Td className="font-medium text-gray-900 max-w-[200px] truncate">
                         {contrato.nome}
                       </Td>
-                      <Td>
+                      <Td className="text-center">
                         <GovIfBadge govIf={contrato.govIf} />
                       </Td>
-                      <Td>
+                      <Td className="text-center">
                         <TipoBadge tipo={contrato.tipo} />
                       </Td>
                       <Td>
@@ -780,14 +812,14 @@ export default function ContratosPage() {
                           <p className="text-xs text-gray-500 truncate">{contrato.parceiro}</p>
                         </div>
                       </Td>
-                      <Td className="text-right font-medium">
+                      <Td className="text-center font-medium">
                         R$ {contrato.valorTotal.toLocaleString("pt-BR")}
                       </Td>
-                      <Td>
+                      <Td className="text-center">
                         <StatusBadge status={contrato.status} />
                       </Td>
-                      <Td className="text-sm text-gray-600">{formatDate(contrato.dataInicio)}</Td>
-                      <Td className="text-sm text-gray-600">
+                      <Td className="text-sm text-gray-600 text-center">{formatDate(contrato.dataInicio)}</Td>
+                      <Td className="text-sm text-gray-600 text-center">
                         {contrato.dataTermino ? formatDate(contrato.dataTermino) : "—"}
                       </Td>
                       <Td className="text-sm text-gray-600">{contrato.responsavel}</Td>
@@ -870,19 +902,14 @@ function MetricCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
-        </div>
-        <div
-          className="p-3 rounded-xl"
-          style={{ backgroundColor: `${color}15` }}
-        >
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2.5">
           <Icon className="h-6 w-6" style={{ color }} />
+          <p className="text-base font-semibold text-gray-600">{title}</p>
         </div>
+        <p className="text-4xl font-bold text-gray-900">{value}</p>
+        {subtitle && <p className="text-base font-medium text-gray-600">{subtitle}</p>}
       </div>
     </div>
   );
@@ -928,12 +955,11 @@ function SortIcon({ column, sortConfig }: { column: string; sortConfig: SortConf
 
 function StatusBadge({ status }: { status: ContratoStatus }) {
   const config: Record<ContratoStatus, { bg: string; text: string; label: string }> = {
-    EM_ANDAMENTO: { bg: "bg-blue-100", text: "text-blue-800", label: "Em Andamento" },
+    EM_ANDAMENTO: { bg: "bg-blue-100", text: "text-blue-800", label: "Execução" },
     CONCLUIDO: { bg: "bg-green-100", text: "text-green-800", label: "Concluído" },
     SUSPENSO: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Suspenso" },
-    DRAFT: { bg: "bg-gray-100", text: "text-gray-800", label: "Rascunho" },
+    PENDENTE: { bg: "bg-orange-100", text: "text-orange-800", label: "Pendente" },
     CANCELADO: { bg: "bg-red-100", text: "text-red-800", label: "Cancelado" },
-    EM_NEGOCIACAO: { bg: "bg-purple-100", text: "text-purple-800", label: "Em Negociação" },
   };
 
   const { bg, text, label } = config[status];

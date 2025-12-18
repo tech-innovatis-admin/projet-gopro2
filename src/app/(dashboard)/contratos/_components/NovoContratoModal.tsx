@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, FileText, Calendar, MapPin, User, Building2, Tag, AlertCircle } from "lucide-react";
 
 // Tipos
-type ContratoStatus = "DRAFT" | "A_INICIAR" | "EM_ANDAMENTO" | "SUSPENSO" | "PENDENCIA" | "CONCLUIDO";
+type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
 type ContratoTipo = "PROJETO" | "PRODUTO";
 
 type NovoContratoForm = {
@@ -42,12 +42,11 @@ const parceirosDisponiveis = [
 ];
 
 const statusOptions: { value: ContratoStatus; label: string }[] = [
-  { value: "DRAFT", label: "Rascunho" },
-  { value: "A_INICIAR", label: "A iniciar" },
-  { value: "EM_ANDAMENTO", label: "Em andamento" },
-  { value: "SUSPENSO", label: "Suspenso" },
-  { value: "PENDENCIA", label: "Pendência" },
+  { value: "EM_ANDAMENTO", label: "Em Execução" },
   { value: "CONCLUIDO", label: "Concluído" },
+  { value: "SUSPENSO", label: "Suspenso" },
+  { value: "PENDENTE", label: "Pendente" },
+  { value: "CANCELADO", label: "Cancelado" },
 ];
 
 const tipoOptions: { value: ContratoTipo; label: string }[] = [
