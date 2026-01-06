@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   Play,
@@ -10,17 +10,17 @@ import {
 import {
   MOCK_STAGES,
   MOCK_PIPELINE_CONTRACTS,
-  MOCK_INITIATION_ACTIVITIES,
-  MOCK_STAGE_HISTORY,
   getContractActivities,
   getContractStageHistory,
   type InitiationActivity,
   type InitiationActivityStatus,
+  type StageHistoryEntry,
 } from "../../funil/types";
 import {
   InitiationProgressBar,
   InitiationSummary,
-  InitiationActivities,
+  FocusPanel,
+  HistoryPanel,
 } from "./_components";
 
 // =============================================================================
@@ -62,55 +62,87 @@ export default function IniciacaoPage() {
   }, [contratoId]);
 
   // Busca histórico de movimentação
-  const stageHistory = useMemo(() => {
+  const initialStageHistory = useMemo(() => {
     return getContractStageHistory(contratoId);
   }, [contratoId]);
-
-  // Estado para filtro de atividades
-  const [activityFilter, setActivityFilter] = useState<"all" | "pending" | "done">("all");
 
   // Estado de atividades locais (para permitir marcar como concluída)
   const [localActivities, setLocalActivities] = useState<InitiationActivity[]>(activities);
 
+  // Estado de histórico de movimentação local (para atualizações em tempo real)
+  const [localStageHistory, setLocalStageHistory] = useState<StageHistoryEntry[]>(initialStageHistory);
+
   // Estado para armazenar o estágio atual (permite mudança)
   const [currentStageId, setCurrentStageId] = useState<string>(contract.stageId);
+
+  // Estado de loading para mudança de etapa
+  const [isMovingStage, setIsMovingStage] = useState(false);
 
   // Busca o estágio atual baseado no estado
   const currentStage = useMemo(() => {
     return MOCK_STAGES.find(s => s.id === currentStageId);
   }, [currentStageId]);
 
-  // Handler para mudar de etapa
-  const handleStageChange = (newStageId: string) => {
+  // Handler para mudar de etapa (via barra de progresso)
+  const handleStageChange = useCallback(async (newStageId: string) => {
+    if (newStageId === currentStageId || isMovingStage) return;
+
+    const fromStageId = currentStageId;
+    setIsMovingStage(true);
+
+    // Atualização otimista do estado local
     setCurrentStageId(newStageId);
-    // Reseta o filtro de atividades quando muda de etapa
-    setActivityFilter("all");
-  };
 
-  // Filtra atividades baseado no filtro selecionado
-  const filteredActivities = useMemo(() => {
-    switch (activityFilter) {
-      case "pending":
-        return localActivities.filter(a => a.status === "PLANNED");
-      case "done":
-        return localActivities.filter(a => a.status === "DONE");
-      default:
-        return localActivities;
+    // Chamar endpoint para registrar movimentação
+    try {
+      const response = await fetch(`/api/contratos/${contratoId}/iniciacao/move`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromStageId, toStageId: newStageId }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Adicionar novo registro ao histórico local
+        if (data.historyEntry) {
+          setLocalStageHistory(prev => [data.historyEntry, ...prev]);
+        }
+      } else {
+        console.error("Erro ao mover contrato:", await response.text());
+        // Reverter em caso de erro
+        setCurrentStageId(fromStageId);
+      }
+    } catch (error) {
+      console.error("Erro ao chamar endpoint de movimentação:", error);
+      // Reverter em caso de erro
+      setCurrentStageId(fromStageId);
+    } finally {
+      setIsMovingStage(false);
     }
-  }, [localActivities, activityFilter]);
+  }, [contratoId, currentStageId, isMovingStage]);
 
-  // Handler para marcar atividade como concluída
-  const handleCompleteActivity = (activityId: string) => {
+  // Handler para toggle status da atividade (marcar/desmarcar como concluída)
+  const handleToggleActivityStatus = (activityId: string) => {
     setLocalActivities(prev => 
-      prev.map(activity => 
-        activity.id === activityId 
-          ? { 
-              ...activity, 
-              status: "DONE" as InitiationActivityStatus,
-              completedAt: new Date().toISOString(),
-            }
-          : activity
-      )
+      prev.map(activity => {
+        if (activity.id !== activityId) return activity;
+
+        // Se está concluída, volta para PLANNED (desmarcada)
+        if (activity.status === "DONE") {
+          return { 
+            ...activity, 
+            status: "PLANNED" as InitiationActivityStatus,
+            completedAt: null,
+          };
+        }
+
+        // Se está pendente, marca como DONE (concluída)
+        return { 
+          ...activity, 
+          status: "DONE" as InitiationActivityStatus,
+          completedAt: new Date().toISOString(),
+        };
+      })
     );
   };
 
@@ -135,6 +167,24 @@ export default function IniciacaoPage() {
     setLocalActivities(prev => [activity, ...prev]);
   };
 
+  // Handler para editar atividade
+  const handleEditActivity = (activityId: string, updatedData: Partial<InitiationActivity>) => {
+    setLocalActivities(prev => 
+      prev.map(activity => 
+        activity.id === activityId 
+          ? { ...activity, ...updatedData }
+          : activity
+      )
+    );
+  };
+
+  // Handler para excluir atividade
+  const handleDeleteActivity = (activityId: string) => {
+    setLocalActivities(prev => 
+      prev.filter(activity => activity.id !== activityId)
+    );
+  };
+
   // Verifica se pode iniciar o projeto
   const canStartProject = currentStage?.isFinal && 
     localActivities.filter(a => a.status === "PLANNED").length === 0;
@@ -148,42 +198,46 @@ export default function IniciacaoPage() {
     router.push(`/contratos/${contratoId}/execucao`);
   };
 
+  // Estado para controlar abertura do form de nova atividade
+  const [showNewActivityForm, setShowNewActivityForm] = useState(false);
+
   // Pendências bloqueantes
   const pendingActivities = localActivities.filter(a => a.status === "PLANNED").length;
   const hasBlockingPendencies = !currentStage?.isFinal || pendingActivities > 0;
 
   return (
     <div className="space-y-6">
-      {/* Barra de Progresso dos Estágios */}
+      {/* Barra de Progresso dos Estágios - Full Width */}
       <InitiationProgressBar
         stages={MOCK_STAGES}
         currentStageId={currentStageId}
-        stageHistory={stageHistory}
+        stageHistory={localStageHistory}
         onStageChange={handleStageChange}
+        isLoading={isMovingStage}
       />
 
-      {/* Grid Principal: Resumo + Atividades */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Coluna Esquerda: Resumo do Contrato */}
-        <div className="lg:col-span-1">
+      {/* Grid Principal: Layout Pipedrive (30/70) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+        {/* Coluna Esquerda: Resumo + Ações */}
+        <div className="space-y-4">
           <InitiationSummary
             contract={contract}
             currentStage={currentStage}
           />
 
-          {/* Botão Iniciar Projeto */}
-          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Iniciar Execução</h3>
+          {/* Card Iniciar Execução */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 text-sm">Iniciar Execução</h3>
             
             {hasBlockingPendencies ? (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 text-sm text-yellow-700 bg-yellow-50 p-3 rounded-lg">
-                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div className="flex items-start gap-2 text-xs text-yellow-700 bg-yellow-50 p-2.5 rounded-lg">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Pendências para iniciar:</p>
-                    <ul className="mt-1 space-y-1 text-yellow-600">
+                    <p className="font-medium">Pendências:</p>
+                    <ul className="mt-1 space-y-0.5 text-yellow-600">
                       {!currentStage?.isFinal && (
-                        <li>• Contrato não está no estágio final</li>
+                        <li>• Não está no estágio final</li>
                       )}
                       {pendingActivities > 0 && (
                         <li>• {pendingActivities} atividade(s) pendente(s)</li>
@@ -193,7 +247,7 @@ export default function IniciacaoPage() {
                 </div>
                 <button
                   disabled
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
                 >
                   <Play className="h-4 w-4" />
                   Iniciar Projeto
@@ -201,18 +255,18 @@ export default function IniciacaoPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg">
-                  <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div className="flex items-start gap-2 text-xs text-green-700 bg-green-50 p-2.5 rounded-lg">
+                  <CheckCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="font-medium">Pronto para iniciar!</p>
-                    <p className="text-green-600 mt-1">
-                      Todas as etapas de preparação foram concluídas.
+                    <p className="text-green-600 mt-0.5">
+                      Todas as etapas concluídas.
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={handleStartProject}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
                 >
                   <Play className="h-4 w-4" />
                   Iniciar Projeto
@@ -222,16 +276,23 @@ export default function IniciacaoPage() {
           </div>
         </div>
 
-        {/* Coluna Direita: Atividades */}
-        <div className="lg:col-span-2">
-          <InitiationActivities
-            activities={filteredActivities}
-            filter={activityFilter}
-            onFilterChange={setActivityFilter}
-            onCompleteActivity={handleCompleteActivity}
+        {/* Coluna Direita: Foco + Histórico (estilo Pipedrive) */}
+        <div className="space-y-4">
+          {/* Painel de Foco */}
+          <FocusPanel
+            activities={localActivities}
+            onToggleActivityStatus={handleToggleActivityStatus}
+            onEditActivity={handleEditActivity}
+            onDeleteActivity={handleDeleteActivity}
+            onCreateActivity={() => setShowNewActivityForm(true)}
+          />
+
+          {/* Painel de Histórico */}
+          <HistoryPanel
+            activities={localActivities}
+            stageHistory={localStageHistory}
+            onToggleActivityStatus={handleToggleActivityStatus}
             onCreateActivity={handleCreateActivity}
-            totalPending={localActivities.filter(a => a.status === "PLANNED").length}
-            totalDone={localActivities.filter(a => a.status === "DONE").length}
           />
         </div>
       </div>

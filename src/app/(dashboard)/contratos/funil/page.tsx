@@ -68,7 +68,8 @@ export default function FunilContratosPage() {
   }));
 
   // Handler para mover contrato entre colunas
-  const handleMoveContract = useCallback((contractId: string, fromStageId: string, toStageId: string) => {
+  const handleMoveContract = useCallback(async (contractId: string, fromStageId: string, toStageId: string) => {
+    // Atualização otimista do estado local
     setColumns(prevColumns => {
       const newColumns = prevColumns.map(col => ({
         ...col,
@@ -111,7 +112,25 @@ export default function FunilContratosPage() {
 
       return newColumns;
     });
+
+    // Chamar endpoint para registrar movimentação no histórico
+    try {
+      const response = await fetch(`/api/contratos/${contractId}/iniciacao/move`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromStageId, toStageId }),
+      });
+
+      if (!response.ok) {
+        console.error("Erro ao registrar movimentação:", await response.text());
+        // TODO: Em caso de erro, reverter a atualização otimista
+      }
+    } catch (error) {
+      console.error("Erro ao chamar endpoint de movimentação:", error);
+      // TODO: Em caso de erro, reverter a atualização otimista
+    }
   }, []);
+
 
   // Handler para iniciar projeto (quando no estágio final)
   const handleStartProject = useCallback((contractId: string) => {

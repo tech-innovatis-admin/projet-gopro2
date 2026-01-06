@@ -79,15 +79,31 @@ export type InitiationActivity = {
   createdAt: string; // ISO date
 };
 
-// Histórico de Movimentação no Funil
+// Histórico de Movimentação no Funil (modelo atualizado para suportar origem/destino)
 export type StageHistoryEntry = {
   id: string;
   contractId: string;
-  stageId: string;
-  stageName: string;
+  fromStageId: string | null; // null para primeira entrada (contrato criado)
+  fromStageName: string | null;
+  toStageId: string;
+  toStageName: string;
   movedAt: string; // ISO date
+  movedByUserId: string;
   movedByUserName: string;
-  daysInStage: number;
+  daysInPreviousStage: number | null; // dias que ficou na etapa anterior
+};
+
+// Tipo para eventos da Timeline (atividades + histórico unificados)
+export type TimelineEventType = "activity" | "stage_change";
+
+export type TimelineEvent = {
+  id: string;
+  type: TimelineEventType;
+  date: string; // ISO date para ordenação
+  // Dados de atividade (se type === "activity")
+  activity?: InitiationActivity;
+  // Dados de mudança de etapa (se type === "stage_change")
+  stageChange?: StageHistoryEntry;
 };
 
 // =============================================================================
@@ -400,61 +416,79 @@ export const MOCK_INITIATION_ACTIVITIES: InitiationActivity[] = [
   },
 ];
 
-// Histórico Mock de Movimentação
+// Histórico Mock de Movimentação (formato atualizado com origem/destino)
 export const MOCK_STAGE_HISTORY: StageHistoryEntry[] = [
   {
     id: "hist_1",
     contractId: "contract_8",
-    stageId: "stage_1",
-    stageName: "Contrato Assinado",
+    fromStageId: null,
+    fromStageName: null,
+    toStageId: "stage_1",
+    toStageName: "Contrato Assinado",
     movedAt: "2025-12-15T10:00:00Z",
+    movedByUserId: "system",
     movedByUserName: "Sistema",
-    daysInStage: 3,
+    daysInPreviousStage: null,
   },
   {
     id: "hist_2",
     contractId: "contract_8",
-    stageId: "stage_2",
-    stageName: "Documentação Completa",
+    fromStageId: "stage_1",
+    fromStageName: "Contrato Assinado",
+    toStageId: "stage_2",
+    toStageName: "Documentação Completa",
     movedAt: "2025-12-18T14:00:00Z",
+    movedByUserId: "user_2",
     movedByUserName: "Maria Santos",
-    daysInStage: 5,
+    daysInPreviousStage: 3,
   },
   {
     id: "hist_3",
     contractId: "contract_8",
-    stageId: "stage_3",
-    stageName: "Equipe Alocada",
+    fromStageId: "stage_2",
+    fromStageName: "Documentação Completa",
+    toStageId: "stage_3",
+    toStageName: "Equipe Alocada",
     movedAt: "2025-12-23T09:00:00Z",
+    movedByUserId: "user_3",
     movedByUserName: "Carlos Mendes",
-    daysInStage: 4,
+    daysInPreviousStage: 5,
   },
   {
     id: "hist_4",
     contractId: "contract_8",
-    stageId: "stage_4",
-    stageName: "Planejamento Aprovado",
+    fromStageId: "stage_3",
+    fromStageName: "Equipe Alocada",
+    toStageId: "stage_4",
+    toStageName: "Planejamento Aprovado",
     movedAt: "2025-12-27T11:00:00Z",
+    movedByUserId: "user_5",
     movedByUserName: "Prof. André Souza",
-    daysInStage: 6,
+    daysInPreviousStage: 4,
   },
   {
     id: "hist_5",
     contractId: "contract_8",
-    stageId: "stage_5",
-    stageName: "Kickoff Realizado",
+    fromStageId: "stage_4",
+    fromStageName: "Planejamento Aprovado",
+    toStageId: "stage_5",
+    toStageName: "Kickoff Realizado",
     movedAt: "2026-01-02T15:00:00Z",
+    movedByUserId: "user_5",
     movedByUserName: "Prof. André Souza",
-    daysInStage: 3,
+    daysInPreviousStage: 6,
   },
   {
     id: "hist_6",
     contractId: "contract_8",
-    stageId: "stage_6",
-    stageName: "Pronto para Execução",
+    fromStageId: "stage_5",
+    fromStageName: "Kickoff Realizado",
+    toStageId: "stage_6",
+    toStageName: "Pronto para Execução",
     movedAt: "2026-01-05T14:00:00Z",
+    movedByUserId: "system",
     movedByUserName: "Sistema",
-    daysInStage: 1,
+    daysInPreviousStage: 3,
   },
 ];
 

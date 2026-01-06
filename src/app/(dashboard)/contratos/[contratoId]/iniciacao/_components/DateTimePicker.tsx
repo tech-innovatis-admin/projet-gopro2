@@ -91,15 +91,15 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
           {formatDisplayDate()}
         </span>
         {value && (
-          <button
+          <div
             onClick={(e) => {
               e.stopPropagation();
               handleClear();
             }}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 hover:bg-gray-100 rounded transition-colors cursor-pointer flex-shrink-0"
           >
             <X className="h-4 w-4 text-gray-400" />
-          </button>
+          </div>
         )}
       </button>
 
