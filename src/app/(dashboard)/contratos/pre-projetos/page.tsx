@@ -257,13 +257,13 @@ export default function PreProjetosPage() {
             Contratos
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-900 font-medium">Pré-Projetos</span>
+          <span className="text-gray-900 font-medium">Pré-Contratos</span>
         </nav>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pré-Projetos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Pré-Contratos</h1>
             <p className="text-sm text-gray-500">
               Gerenciamento de propostas antes da formalização
             </p>
@@ -273,7 +273,7 @@ export default function PreProjetosPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Novo Pré-Projeto
+            Novo Pré-Contrato
           </button>
         </div>
 
@@ -448,7 +448,7 @@ export default function PreProjetosPage() {
                   <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                      <span className="text-sm text-gray-500">Carregando pré-projetos...</span>
+                      <span className="text-sm text-gray-500">Carregando pré-contratos...</span>
                     </div>
                   </td>
                 </tr>
@@ -459,10 +459,10 @@ export default function PreProjetosPage() {
                       <FolderOpen className="h-12 w-12 text-gray-300" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          Nenhum pré-projeto encontrado
+                          Nenhum pré-contrato encontrado
                         </p>
                         <p className="text-sm text-gray-500">
-                          Crie seu primeiro pré-projeto para começar.
+                          Crie seu primeiro pré-contrato para começar.
                         </p>
                       </div>
                       <div className="flex gap-2 mt-2">
@@ -478,7 +478,7 @@ export default function PreProjetosPage() {
                           onClick={handleOpenModal}
                           className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
                         >
-                          Criar pré-projeto
+                          Criar pré-contrato
                         </button>
                       </div>
                     </div>
@@ -550,7 +550,7 @@ export default function PreProjetosPage() {
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
               <span className="text-sm text-gray-600">
                 Mostrando {(page - 1) * pageSize + 1} a{" "}
-                {Math.min(page * pageSize, filtered.length)} de {filtered.length} pré-projetos
+                {Math.min(page * pageSize, filtered.length)} de {filtered.length} pré-contratos
               </span>
               <div className="flex items-center gap-2">
                 <button

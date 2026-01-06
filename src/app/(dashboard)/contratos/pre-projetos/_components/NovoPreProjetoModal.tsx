@@ -236,7 +236,7 @@ export default function NovoPreProjetoModal({
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
           <div>
-            <h2 className="text-xl font-bold">Novo Pré-Projeto</h2>
+            <h2 className="text-xl font-bold">Novo Pré-Contrato</h2>
             <p className="text-sm text-emerald-100 mt-0.5">
               Cadastre uma proposta antes da formalização
             </p>
@@ -404,7 +404,7 @@ export default function NovoPreProjetoModal({
               type="submit"
               className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors shadow-sm hover:shadow-md"
             >
-              Criar Pré-Projeto
+              Criar Pré-Contrato
             </button>
           </div>
         </form>

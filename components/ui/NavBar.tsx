@@ -51,7 +51,7 @@ const navigationItems: NavItem[] = [
       { label: "Todos os Contratos", href: "/contratos", icon: FolderOpen },
       { label: "Funil de Contratos", href: "/contratos/funil", icon: BarChart3 },
       { label: "Novo Contrato", href: "modal:novo-contrato", icon: FileText },
-      { label: "Pré-Projetos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
+      { label: "Pré-Contratos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
     ],
   },
   {
