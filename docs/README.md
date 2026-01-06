@@ -1140,9 +1140,11 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 |------|---------|-----------|
 | `/home` | `app/(dashboard)/home/page.tsx` | Dashboard principal com gráficos |
 | `/contratos` | `app/(dashboard)/contratos/page.tsx` | Listagem de contratos com filtros e paginação |
+| `/contratos/funil` | `app/(dashboard)/contratos/funil/page.tsx` | Funil de Contratos (Kanban de iniciação) |
 | `/contratos/pre-projetos` | `app/(dashboard)/contratos/pre-projetos/page.tsx` | Gestão de pré-projetos e pré-contratos |
 | `/contratos/[id]` | `app/(dashboard)/contratos/[contratoId]/page.tsx` | Visão Geral do contrato (dashboard resumido) |
-| `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e 10 tabs |
+| `/contratos/[id]/*` | `app/(dashboard)/contratos/[contratoId]/layout.tsx` | Layout compartilhado com header e 11 tabs |
+| `/contratos/[id]/iniciacao` | `app/(dashboard)/contratos/[contratoId]/iniciacao/page.tsx` | Aba de iniciação do contrato (funil) |
 | `/contratos/[id]/contratacoes` | `app/(dashboard)/contratos/[contratoId]/contratacoes/page.tsx` | Gestão de aditivos, OS e subcontratos |
 | `/contratos/[id]/execucao` | `app/(dashboard)/contratos/[contratoId]/execucao/page.tsx` | Cronograma, marcos e gestão de riscos |
 | `/contratos/[id]/rubricas` | `app/(dashboard)/contratos/[contratoId]/rubricas/page.tsx` | Orçamento e execução financeira por rubrica |
@@ -1316,3 +1318,168 @@ Veja a [documentação de deploy](https://nextjs.org/docs/app/building-your-appl
 ---
 
 Esta versão estabelece as bases para um sistema modular e escalável de gestão de contratos, com foco em usabilidade e manutenibilidade do código.
+
+---
+
+## 🎯 Funil de Contratos (Pipeline de Iniciação)
+
+O **Funil de Contratos** é um recurso inspirado no Pipedrive que permite acompanhar contratos já fechados/assinados durante a fase de preparação até o início da execução.
+
+### 📋 Conceito Funcional
+
+- **Escopo**: Apenas contratos assinados cuja execução ainda não começou
+- **Objetivo**: Acompanhar em qual etapa de preparação cada contrato está
+- **Resultado**: Visão Kanban das etapas de iniciação + aba de detalhes por contrato
+
+### 🏗️ Estrutura de Arquivos
+
+```
+contratos/
+├── funil/                              # Página do Funil (Kanban)
+│   ├── page.tsx                        # Board Kanban principal
+│   ├── types.ts                        # Tipos e dados mock
+│   └── _components/
+│       ├── PipelineBoard.tsx           # Container do Kanban com DnD
+│       ├── ColumnHeader.tsx            # Cabeçalho de cada coluna
+│       ├── ContractCard.tsx            # Card de contrato arrastável
+│       └── index.ts                    # Exportações
+│
+└── [contratoId]/
+    ├── layout.tsx                      # Atualizado com aba "Iniciação"
+    └── iniciacao/                      # Nova aba de iniciação
+        ├── page.tsx                    # Página de iniciação do contrato
+        └── _components/
+            ├── InitiationProgressBar.tsx   # Barra de progresso dos estágios
+            ├── InitiationSummary.tsx       # Resumo do contrato
+            ├── InitiationActivities.tsx    # Lista de atividades
+            └── index.ts                    # Exportações
+```
+
+### 🎨 Board Kanban (`/contratos/funil`)
+
+**Características:**
+- **Header**: Título, contadores agregados (nº contratos, valor total), busca e filtros
+- **Colunas**: 6 estágios de iniciação ordenados
+- **Cards**: Contratos arrastáveis com informações resumidas
+- **Drag & Drop**: Arrastar cards entre colunas atualiza o estágio
+
+**Estágios Padrão:**
+1. Contrato Assinado
+2. Documentação Completa
+3. Equipe Alocada
+4. Planejamento Aprovado
+5. Kickoff Realizado
+6. Pronto para Execução (Final)
+
+**Informações no Card:**
+- Código e título do contrato
+- Parceiro
+- Valor total (formatado)
+- Badge de tipo (Projeto/Produto)
+- Coordenador
+- Dias no estágio atual
+- Alertas (SLA expirado, sem atividades agendadas)
+
+### 📊 Aba Iniciação (`/contratos/[id]/iniciacao`)
+
+**Layout com 3 seções:**
+
+1. **Barra de Progresso (topo)**
+   - Linha horizontal com todos os estágios
+   - Estágios concluídos com check ✓
+   - Estágio atual destacado com animação
+   - Dias em cada estágio
+
+2. **Resumo do Contrato (esquerda)**
+   - Código, título, tipo
+   - Valor total
+   - Parceiro e coordenador
+   - Estágio atual e tempo no estágio
+   - Botão "Iniciar Projeto" (quando no estágio final)
+
+3. **Atividades de Iniciação (direita)**
+   - Tabs: Todas / Pendentes / Concluídas
+   - Lista de atividades com tipo, título, data, responsável
+   - Formulário inline para criar nova atividade
+   - Marcar atividade como concluída
+
+### 📝 Tipos de Atividade
+
+| Tipo | Ícone | Descrição |
+|------|-------|-----------|
+| MEETING | 👥 | Reunião |
+| CALL | 📞 | Ligação |
+| EMAIL | 📧 | E-mail |
+| DOCUMENT | 📄 | Documento |
+| INTERNAL_TASK | ✅ | Tarefa Interna |
+
+### 🔄 Status de Atividade
+
+| Status | Descrição |
+|--------|-----------|
+| PLANNED | Atividade planejada/pendente |
+| DONE | Atividade concluída |
+| CANCELED | Atividade cancelada |
+
+### ⚙️ Modelo de Dados (Mock)
+
+**Tipos principais:**
+```typescript
+// Estágio do Funil
+type InitiationStage = {
+  id: string;
+  name: string;
+  order: number;
+  isFinal: boolean;
+  slaDays?: number;
+};
+
+// Contrato no Pipeline
+type PipelineContract = {
+  id: string;
+  title: string;
+  code: string;
+  type: "PROJETO" | "PRODUTO";
+  stageId: string;
+  daysInStage: number;
+  warnings: string[];
+  executionStatus: "NAO_INICIADA" | "EM_EXECUCAO" | "CONCLUIDA" | "SUSPENSA";
+};
+
+// Atividade de Iniciação
+type InitiationActivity = {
+  id: string;
+  contractId: string;
+  title: string;
+  type: InitiationActivityType;
+  status: InitiationActivityStatus;
+  dueAt: string | null;
+  ownerName: string;
+};
+```
+
+### 🚀 Fluxo de Uso
+
+1. Usuário acessa `/contratos/funil` para ver o board Kanban
+2. Arrasta um contrato para outra coluna → atualiza o estágio
+3. Clica no card → abre `/contratos/[id]/iniciacao`
+4. Na aba Iniciação, visualiza progresso e gerencia atividades
+5. Quando no estágio final e sem pendências → botão "Iniciar Projeto" fica habilitado
+6. Ao clicar em "Iniciar Projeto" → muda `executionStatus` para `EM_EXECUCAO`
+
+### 🎯 Próximos Passos (Backend)
+
+Quando implementar o backend, criar:
+
+**Endpoints:**
+- `GET /api/contracts/initiation/pipeline` - Listar funil completo
+- `PATCH /api/contracts/:id/initiation/move` - Mover contrato de estágio
+- `GET /api/contracts/:id/initiation/activities` - Listar atividades
+- `POST /api/contracts/:id/initiation/activities` - Criar atividade
+- `PATCH /api/contracts/:id/initiation/activities/:activityId` - Atualizar atividade
+
+**Modelos Prisma:**
+- `ContractInitiationStage` - Estágios do funil
+- `ContractInitiationStageHistory` - Histórico de movimentação
+- `ContractInitiationActivity` - Atividades de iniciação
+- Adicionar campo `initiationStageId` em `Contract`

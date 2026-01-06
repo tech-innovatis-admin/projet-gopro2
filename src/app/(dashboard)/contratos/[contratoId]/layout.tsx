@@ -89,6 +89,11 @@ export default function ContratoLayout({
       description: "Resumo e informações principais",
     },
     {
+      label: "Iniciação",
+      href: `/contratos/${contratoId}/iniciacao`,
+      description: "Funil de preparação do contrato",
+    },
+    {
       label: "Execução",
       href: `/contratos/${contratoId}/execucao`,
       description: "Cronograma, marcos e entregas",
