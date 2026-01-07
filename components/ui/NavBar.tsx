@@ -69,7 +69,7 @@ const navigationItems: NavItem[] = [
     href: "/equipe",
     icon: Users,
     children: [
-      { label: "Equipe", href: "/equipe", icon: Users },
+      { label: "Membros e Permissões", href: "/equipe", icon: Users },
     ],
   },
 ];
@@ -304,7 +304,10 @@ export function NavBar() {
                   align="end"
                   className="w-56 mt-2 bg-white border border-zinc-200 rounded-lg shadow-lg p-1 animate-in slide-in-from-top-2 duration-200"
                 >
-                  <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
+                  <DropdownMenuItem 
+                    onClick={() => router.push("/perfil")}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150"
+                  >
                     <User className="h-4 w-4" />
                     <span>Perfil</span>
                   </DropdownMenuItem>

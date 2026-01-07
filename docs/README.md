@@ -36,6 +36,8 @@ gopro-2/
 │       ├── button.tsx          # Componente de botão
 │       ├── card.tsx            # Componente de card
 │       ├── checkbox.tsx        # Componente de checkbox
+│       ├── dropdown.tsx        # Componente de dropdown customizado (estilo NavBar)
+│       ├── dropdown.md         # Documentação do componente Dropdown
 │       ├── input.tsx           # Componente de input
 │       ├── label.tsx           # Componente de label
 │       ├── MiniFooter.tsx      # Mini rodapé reutilizável
@@ -1155,6 +1157,8 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 | `/contratos/[id]/desembolso` | `app/(dashboard)/contratos/[contratoId]/desembolso/page.tsx` | Cronograma de pagamentos |
 | `/contratos/[id]/arquivos` | `app/(dashboard)/contratos/[contratoId]/arquivos/page.tsx` | Documentos anexados |
 | `/contratos/[id]/editar` | `app/(dashboard)/contratos/[contratoId]/editar/page.tsx` | Página de edição centralizada (sidebar vertical) |
+| `/contratos/funil/edit` | `app/(dashboard)/contratos/funil/edit/page.tsx` | Configuração de etapas do funil |
+| `/equipe` | `app/(dashboard)/equipe/page.tsx` | Gestão de Equipe e Permissões |
 | `/parceiros` | `app/(dashboard)/parceiros/page.tsx` | Listagem de parceiros |
 | `/parceiros/fundacoes` | `app/(dashboard)/parceiros/fundacoes/page.tsx` | Fundações parceiras |
 | `/parceiros/ifes` | `app/(dashboard)/parceiros/ifes/page.tsx` | IFES parceiras |
@@ -1362,6 +1366,17 @@ contratos/
 - **Colunas**: 6 estágios de iniciação ordenados
 - **Cards**: Contratos arrastáveis com informações resumidas
 - **Drag & Drop**: Arrastar cards entre colunas atualiza o estágio
+- **Layout Flexível**: Colunas com largura uniforme (estilo Pipedrive)
+  - Todas as colunas têm a mesma largura
+  - Largura determinada pela coluna com mais conteúdo
+  - Sem largura fixa ou scroll interno
+  - Altura dinâmica baseada no conteúdo
+- **Página de Configuração**: `/contratos/funil/edit`
+  - Editar nome das etapas
+  - Configurar SLA (prazo de estagnação) por etapa
+  - Adicionar/remover etapas
+  - Reordenar etapas
+  - Validação: não permite excluir etapas com contratos associados
 
 **Estágios Padrão:**
 1. Contrato Assinado
@@ -1384,11 +1399,15 @@ contratos/
 
 **Layout com 3 seções:**
 
-1. **Barra de Progresso (topo)**
-   - Linha horizontal com todos os estágios
-   - Estágios concluídos com check ✓
-   - Estágio atual destacado com animação
-   - Dias em cada estágio
+1. **Barra de Progresso (topo) - Estilo Pipedrive**
+   - Barra horizontal minimalista segmentada
+   - Altura reduzida (32-40px)
+   - Cada segmento mostra apenas "X dias"
+   - Estágios concluídos e atual em verde (`#004225`)
+   - Estágios futuros em cinza claro
+   - Tooltip com nome da etapa ao passar o mouse
+   - Rótulo abaixo mostrando etapa atual e dias no estágio
+   - Permite voltar para etapas anteriores (clique em qualquer etapa)
 
 2. **Resumo do Contrato (esquerda)**
    - Código, título, tipo
@@ -1483,3 +1502,555 @@ Quando implementar o backend, criar:
 - `ContractInitiationStageHistory` - Histórico de movimentação
 - `ContractInitiationActivity` - Atividades de iniciação
 - Adicionar campo `initiationStageId` em `Contract`
+
+---
+
+## 👥 Módulo de Equipe e Permissões (`/equipe`)
+
+O módulo de **Equipe e Permissões** é uma página de governança de acesso que permite gerenciar usuários, níveis de permissão e visualizar a estrutura da equipe de execução.
+
+### 📋 Objetivos da Página
+
+A página responde a três perguntas principais:
+
+1. **Quem é quem na equipe de execução?** - Visualização da estrutura organizacional
+2. **Quem tem acesso a quê na plataforma?** - Perfis e níveis de permissão
+3. **Quem está ativo/inativo/com acesso sensível?** - Governança e segurança
+
+### 🏗️ Estrutura de Arquivos
+
+```
+equipe/
+├── page.tsx                    # Página principal (/equipe)
+├── types.ts                    # Tipos TypeScript (usuários, permissões, níveis)
+├── mockData.ts                 # Dados mock da equipe (7 usuários exemplo)
+└── _components/
+    ├── UsersTable.tsx          # Tabela de usuários com filtros avançados
+    ├── UserDetails.tsx         # Painel de detalhes do usuário
+    └── index.ts                # Exportações centralizadas
+```
+
+### 🎨 Layout da Página
+
+**Estrutura em 2 colunas:**
+
+1. **Tabela de Usuários (esquerda - flexível)**
+   - Lista completa de usuários com filtros
+   - Colunas: Nome, Função, Equipe, Nível, Situação, Último acesso
+   - Sistema de filtros avançados
+   - Busca textual
+
+2. **Detalhes do Usuário (direita - 400px)**
+   - Painel lateral com informações detalhadas
+   - Matriz de permissões por módulo
+   - Histórico de mudanças de acesso
+   - Controles de edição
+
+### 📊 Componentes Principais
+
+#### **UsersTable** - Tabela de Usuários
+
+**Funcionalidades:**
+- **Filtros Avançados:**
+  - Por função (Coordenador, Analista, etc.) - Dropdown customizado
+  - Por nível de permissão (Nível 1, 2, 3) - Dropdown customizado
+  - Por situação (Ativo/Inativo) - Dropdown customizado
+  - Por equipe (Execução, Financeiro, etc.)
+  - Busca textual (nome, email, função)
+
+- **Ações Rápidas:**
+  - Dropdown customizado para alterar nível de permissão (componente `Dropdown`)
+  - Toggle para ativar/desativar usuário
+  - Clique na linha para ver detalhes no painel lateral
+
+- **Visualização:**
+  - Avatares com iniciais
+  - Badges coloridos por nível de permissão (verde/azul/roxo)
+  - Formatação de último acesso (Hoje, Ontem, X dias atrás)
+  - Contador de resultados filtrados
+
+#### **UserDetails** - Detalhes do Usuário
+
+**Seções:**
+
+1. **Resumo:**
+   - Avatar, nome, email
+   - Função e equipe
+   - Nível de permissão atual (dropdown customizado)
+   - Situação (ativo/inativo) com toggle
+   - Último acesso formatado
+
+2. **Permissões por Módulo:**
+   - Matriz visual de permissões
+   - Módulos: Contratos, Funil, Iniciação, Execução, Relatórios, Configurações
+   - Níveis de acesso: Ver, Criar, Editar, Excluir, Configurar, Nenhum
+   - Badges coloridos por tipo de permissão
+
+3. **Histórico de Mudanças:**
+   - Registro de alterações de nível de permissão
+   - Data, usuário que alterou, motivo (opcional)
+   - Visualização em cards com borda verde
+
+### 🔐 Sistema de Permissões
+
+#### **Níveis Globais:**
+
+| Nível | Nome | Descrição | Cor |
+|-------|------|-----------|-----|
+| **LEVEL_1** | Nível 1 | Operacional - Enxerga apenas projetos alocados | Verde (`bg-green-500`) |
+| **LEVEL_2** | Nível 2 | Coordenador - Enxerga todos os projetos da equipe | Azul (`bg-blue-500`) |
+| **LEVEL_3** | Nível 3 | Administrador - Acesso completo a todos os módulos | Roxo (`bg-purple-500`) |
+
+#### **Permissões por Módulo:**
+
+Cada nível tem permissões específicas por módulo:
+
+- **Contratos**: Ver / Criar / Editar / Excluir / Configurar
+- **Funil de Contratos**: Ver / Editar / Configurar
+- **Iniciação de Projetos**: Ver / Editar / Configurar
+- **Execução de Projetos**: Ver / Editar / Configurar
+- **Relatórios / Dashboards**: Ver / Editar
+- **Configurações da Plataforma**: Nenhum / Configurar
+
+### 🎯 Funcionalidades Implementadas
+
+✅ **Visualização da equipe** - Tabela completa com todos os usuários  
+✅ **Filtros avançados** - Por função, nível, situação, equipe e busca textual  
+✅ **Dropdowns customizados** - Componente reutilizável estilo NavBar  
+✅ **Alteração de nível** - Dropdown customizado para mudar nível de permissão  
+✅ **Ativação/Desativação** - Toggle para ativar/inativar usuários  
+✅ **Detalhes do usuário** - Painel lateral com informações completas  
+✅ **Matriz de permissões** - Visualização clara do que cada usuário pode fazer  
+✅ **Histórico de mudanças** - Auditoria completa de alterações de acesso  
+
+### 🎨 Componente Dropdown Customizado
+
+**Localização:** `components/ui/dropdown.tsx`
+
+Componente reutilizável com o mesmo estilo visual do NavBar:
+
+- **Características:**
+  - Animações suaves de abertura/fechamento
+  - Fechamento automático ao clicar fora
+  - Suporte a ícones nas opções
+  - Type-safe com TypeScript
+  - Documentação completa em `components/ui/dropdown.md`
+
+- **Uso na Página de Equipe:**
+  - Filtros da tabela (função, nível, situação)
+  - Seleção de nível de permissão na tabela
+  - Seleção de nível de permissão no painel de detalhes
+  - Pode ser usado em qualquer lugar da aplicação
+
+### 📝 Tipos de Dados
+
+```typescript
+// Usuário da equipe
+type TeamUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;                    // COORDENADOR_PROJETOS, ANALISTA_EXECUCAO, etc.
+  team: Team;                    // EXECUCAO, COMERCIAL, FINANCEIRO
+  permissionLevel: PermissionLevel; // LEVEL_1, LEVEL_2, LEVEL_3
+  status: UserStatus;            // ATIVO, INATIVO
+  modulePermissions: ModulePermissions[];
+  lastAccessAt?: string;
+};
+
+// Histórico de mudanças
+type PermissionHistoryEntry = {
+  id: string;
+  userId: string;
+  fromLevel: PermissionLevel | null;
+  toLevel: PermissionLevel;
+  changedAt: string;
+  changedByUserId: string;
+  changedByName: string;
+  reason?: string;
+};
+```
+
+### 🚀 Próximos Passos (Backend)
+
+Quando implementar o backend, criar:
+
+**Endpoints:**
+- `GET /api/admin/team` - Listar estrutura da equipe
+- `GET /api/admin/users/:id` - Detalhes do usuário + permissões
+- `PATCH /api/admin/users/:id/permission-level` - Alterar nível
+- `PATCH /api/admin/users/:id/status` - Ativar/Inativar usuário
+
+**Modelos Prisma:**
+- `User` - Usuários da equipe (integração com Nexus)
+- `PermissionLevel` - Configuração de níveis
+- `UserPermissionHistory` - Histórico de mudanças
+- `ModulePermission` - Permissões por módulo
+
+---
+
+## 👥 Módulo de Equipe e Permissões (`/equipe`)
+
+O módulo de **Equipe e Permissões** é uma página de governança de acesso que permite gerenciar usuários, níveis de permissão e visualizar a estrutura da equipe de execução.
+
+### 📋 Objetivos da Página
+
+A página responde a três perguntas principais:
+
+1. **Quem é quem na equipe de execução?** - Visualização da estrutura organizacional
+2. **Quem tem acesso a quê na plataforma?** - Perfis e níveis de permissão
+3. **Quem está ativo/inativo/com acesso sensível?** - Governança e segurança
+
+### 🏗️ Estrutura de Arquivos
+
+```
+equipe/
+├── page.tsx                    # Página principal (/equipe)
+├── types.ts                    # Tipos TypeScript (usuários, permissões, níveis)
+├── mockData.ts                 # Dados mock da equipe (7 usuários exemplo)
+└── _components/
+    ├── UsersTable.tsx          # Tabela de usuários com filtros avançados
+    ├── UserDetails.tsx         # Painel de detalhes do usuário
+    └── index.ts                # Exportações centralizadas
+```
+
+### 🎨 Layout da Página
+
+**Estrutura em 2 colunas:**
+
+1. **Tabela de Usuários (esquerda - flexível)**
+   - Lista completa de usuários com filtros
+   - Colunas: Nome, Função, Equipe, Nível, Situação, Último acesso
+   - Sistema de filtros avançados
+   - Busca textual
+
+2. **Detalhes do Usuário (direita - 400px)**
+   - Painel lateral com informações detalhadas
+   - Matriz de permissões por módulo
+   - Histórico de mudanças de acesso
+   - Controles de edição
+
+### 📊 Componentes Principais
+
+#### **UsersTable** - Tabela de Usuários
+
+**Funcionalidades:**
+- **Filtros Avançados:**
+  - Por função (Coordenador, Analista, etc.) - Dropdown customizado
+  - Por nível de permissão (Nível 1, 2, 3) - Dropdown customizado
+  - Por situação (Ativo/Inativo) - Dropdown customizado
+  - Por equipe (Execução, Financeiro, etc.)
+  - Busca textual (nome, email, função)
+
+- **Ações Rápidas:**
+  - Dropdown customizado para alterar nível de permissão (componente `Dropdown`)
+  - Toggle para ativar/desativar usuário
+  - Clique na linha para ver detalhes no painel lateral
+
+- **Visualização:**
+  - Avatares com iniciais
+  - Badges coloridos por nível de permissão (verde/azul/roxo)
+  - Formatação de último acesso (Hoje, Ontem, X dias atrás)
+  - Contador de resultados filtrados
+
+#### **UserDetails** - Detalhes do Usuário
+
+**Seções:**
+
+1. **Resumo:**
+   - Avatar, nome, email
+   - Função e equipe
+   - Nível de permissão atual (dropdown customizado)
+   - Situação (ativo/inativo) com toggle
+   - Último acesso formatado
+
+2. **Permissões por Módulo:**
+   - Matriz visual de permissões
+   - Módulos: Contratos, Funil, Iniciação, Execução, Relatórios, Configurações
+   - Níveis de acesso: Ver, Criar, Editar, Excluir, Configurar, Nenhum
+   - Badges coloridos por tipo de permissão
+
+3. **Histórico de Mudanças:**
+   - Registro de alterações de nível de permissão
+   - Data, usuário que alterou, motivo (opcional)
+   - Visualização em cards com borda verde
+
+### 🔐 Sistema de Permissões
+
+#### **Níveis Globais:**
+
+| Nível | Nome | Descrição | Cor |
+|-------|------|-----------|-----|
+| **LEVEL_1** | Nível 1 | Operacional - Enxerga apenas projetos alocados | Verde (`bg-green-500`) |
+| **LEVEL_2** | Nível 2 | Coordenador - Enxerga todos os projetos da equipe | Azul (`bg-blue-500`) |
+| **LEVEL_3** | Nível 3 | Administrador - Acesso completo a todos os módulos | Roxo (`bg-purple-500`) |
+
+#### **Permissões por Módulo:**
+
+Cada nível tem permissões específicas por módulo:
+
+- **Contratos**: Ver / Criar / Editar / Excluir / Configurar
+- **Funil de Contratos**: Ver / Editar / Configurar
+- **Iniciação de Projetos**: Ver / Editar / Configurar
+- **Execução de Projetos**: Ver / Editar / Configurar
+- **Relatórios / Dashboards**: Ver / Editar
+- **Configurações da Plataforma**: Nenhum / Configurar
+
+### 🎯 Funcionalidades Implementadas
+
+✅ **Visualização da equipe** - Tabela completa com todos os usuários  
+✅ **Filtros avançados** - Por função, nível, situação, equipe e busca textual  
+✅ **Dropdowns customizados** - Componente reutilizável estilo NavBar  
+✅ **Alteração de nível** - Dropdown customizado para mudar nível de permissão  
+✅ **Ativação/Desativação** - Toggle para ativar/inativar usuários  
+✅ **Detalhes do usuário** - Painel lateral com informações completas  
+✅ **Matriz de permissões** - Visualização clara do que cada usuário pode fazer  
+✅ **Histórico de mudanças** - Auditoria completa de alterações de acesso  
+
+### 🎨 Componente Dropdown Customizado
+
+**Localização:** `components/ui/dropdown.tsx`
+
+Componente reutilizável com o mesmo estilo visual do NavBar:
+
+- **Características:**
+  - Animações suaves de abertura/fechamento
+  - Fechamento automático ao clicar fora
+  - Suporte a ícones nas opções
+  - Type-safe com TypeScript
+  - Documentação completa em `components/ui/dropdown.md`
+
+- **Uso na Página de Equipe:**
+  - Filtros da tabela (função, nível, situação)
+  - Seleção de nível de permissão na tabela
+  - Seleção de nível de permissão no painel de detalhes
+  - Pode ser usado em qualquer lugar da aplicação
+
+### 📝 Tipos de Dados
+
+```typescript
+// Usuário da equipe
+type TeamUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;                    // COORDENADOR_PROJETOS, ANALISTA_EXECUCAO, etc.
+  team: Team;                    // EXECUCAO, COMERCIAL, FINANCEIRO
+  permissionLevel: PermissionLevel; // LEVEL_1, LEVEL_2, LEVEL_3
+  status: UserStatus;            // ATIVO, INATIVO
+  modulePermissions: ModulePermissions[];
+  lastAccessAt?: string;
+};
+
+// Histórico de mudanças
+type PermissionHistoryEntry = {
+  id: string;
+  userId: string;
+  fromLevel: PermissionLevel | null;
+  toLevel: PermissionLevel;
+  changedAt: string;
+  changedByUserId: string;
+  changedByName: string;
+  reason?: string;
+};
+```
+
+### 🚀 Próximos Passos (Backend)
+
+Quando implementar o backend, criar:
+
+**Endpoints:**
+- `GET /api/admin/team` - Listar estrutura da equipe
+- `GET /api/admin/users/:id` - Detalhes do usuário + permissões
+- `PATCH /api/admin/users/:id/permission-level` - Alterar nível
+- `PATCH /api/admin/users/:id/status` - Ativar/Inativar usuário
+
+**Modelos Prisma:**
+- `User` - Usuários da equipe (integração com Nexus)
+- `PermissionLevel` - Configuração de níveis
+- `UserPermissionHistory` - Histórico de mudanças
+- `ModulePermission` - Permissões por módulo
+
+---
+
+## 👥 Módulo de Equipe e Permissões (`/equipe`)
+
+O módulo de **Equipe e Permissões** é uma página de governança de acesso que permite gerenciar usuários, níveis de permissão e visualizar a estrutura da equipe de execução.
+
+### 📋 Objetivos da Página
+
+A página responde a três perguntas principais:
+
+1. **Quem é quem na equipe de execução?** - Visualização da estrutura organizacional
+2. **Quem tem acesso a quê na plataforma?** - Perfis e níveis de permissão
+3. **Quem está ativo/inativo/com acesso sensível?** - Governança e segurança
+
+### 🏗️ Estrutura de Arquivos
+
+```
+equipe/
+├── page.tsx                    # Página principal (/equipe)
+├── types.ts                    # Tipos TypeScript (usuários, permissões, níveis)
+├── mockData.ts                 # Dados mock da equipe (7 usuários exemplo)
+└── _components/
+    ├── UsersTable.tsx          # Tabela de usuários com filtros avançados
+    ├── UserDetails.tsx         # Painel de detalhes do usuário
+    └── index.ts                # Exportações centralizadas
+```
+
+### 🎨 Layout da Página
+
+**Estrutura em 2 colunas:**
+
+1. **Tabela de Usuários (esquerda - flexível)**
+   - Lista completa de usuários com filtros
+   - Colunas: Nome, Função, Equipe, Nível, Situação, Último acesso
+   - Sistema de filtros avançados
+   - Busca textual
+
+2. **Detalhes do Usuário (direita - 400px)**
+   - Painel lateral com informações detalhadas
+   - Matriz de permissões por módulo
+   - Histórico de mudanças de acesso
+   - Controles de edição
+
+### 📊 Componentes Principais
+
+#### **UsersTable** - Tabela de Usuários
+
+**Funcionalidades:**
+- **Filtros Avançados:**
+  - Por função (Coordenador, Analista, etc.)
+  - Por nível de permissão (Nível 1, 2, 3)
+  - Por situação (Ativo/Inativo)
+  - Por equipe (Execução, Financeiro, etc.)
+  - Busca textual (nome, email, função)
+
+- **Ações Rápidas:**
+  - Dropdown para alterar nível de permissão (componente Dropdown customizado)
+  - Toggle para ativar/desativar usuário
+  - Clique na linha para ver detalhes
+
+- **Visualização:**
+  - Avatares com iniciais
+  - Badges coloridos por nível de permissão
+  - Formatação de último acesso (Hoje, Ontem, X dias atrás)
+  - Contador de resultados
+
+#### **UserDetails** - Detalhes do Usuário
+
+**Seções:**
+
+1. **Resumo:**
+   - Avatar, nome, email
+   - Função e equipe
+   - Nível de permissão atual (dropdown customizado)
+   - Situação (ativo/inativo)
+   - Último acesso
+
+2. **Permissões por Módulo:**
+   - Matriz visual de permissões
+   - Módulos: Contratos, Funil, Iniciação, Execução, Relatórios, Configurações
+   - Níveis de acesso: Ver, Criar, Editar, Excluir, Configurar, Nenhum
+   - Badges coloridos por tipo de permissão
+
+3. **Histórico de Mudanças:**
+   - Registro de alterações de nível de permissão
+   - Data, usuário que alterou, motivo (opcional)
+   - Visualização em cards com borda verde
+
+### 🔐 Sistema de Permissões
+
+#### **Níveis Globais:**
+
+| Nível | Nome | Descrição | Cor |
+|-------|------|-----------|-----|
+| **LEVEL_1** | Nível 1 | Operacional - Enxerga apenas projetos alocados | Verde (`bg-green-500`) |
+| **LEVEL_2** | Nível 2 | Coordenador - Enxerga todos os projetos da equipe | Azul (`bg-blue-500`) |
+| **LEVEL_3** | Nível 3 | Administrador - Acesso completo a todos os módulos | Roxo (`bg-purple-500`) |
+
+#### **Permissões por Módulo:**
+
+Cada nível tem permissões específicas por módulo:
+
+- **Contratos**: Ver / Criar / Editar / Excluir / Configurar
+- **Funil de Contratos**: Ver / Editar / Configurar
+- **Iniciação de Projetos**: Ver / Editar / Configurar
+- **Execução de Projetos**: Ver / Editar / Configurar
+- **Relatórios / Dashboards**: Ver / Editar
+- **Configurações da Plataforma**: Nenhum / Configurar
+
+### 🎯 Funcionalidades Implementadas
+
+✅ **Visualização da equipe** - Tabela completa com todos os usuários  
+✅ **Filtros avançados** - Por função, nível, situação, equipe e busca textual  
+✅ **Alteração de nível** - Dropdown customizado para mudar nível de permissão  
+✅ **Ativação/Desativação** - Toggle para ativar/inativar usuários  
+✅ **Detalhes do usuário** - Painel lateral com informações completas  
+✅ **Matriz de permissões** - Visualização clara do que cada usuário pode fazer  
+✅ **Histórico de mudanças** - Auditoria de alterações de acesso  
+✅ **Componente Dropdown** - Reutilizável em toda a aplicação  
+
+### 🎨 Componente Dropdown Customizado
+
+**Localização:** `components/ui/dropdown.tsx`
+
+Componente reutilizável com o mesmo estilo visual do NavBar:
+
+- **Características:**
+  - Animações suaves de abertura/fechamento
+  - Fechamento automático ao clicar fora
+  - Suporte a ícones nas opções
+  - Type-safe com TypeScript
+  - Documentação completa em `components/ui/dropdown.md`
+
+- **Uso:**
+  - Filtros da tabela de usuários
+  - Seleção de nível de permissão na tabela
+  - Seleção de nível de permissão no painel de detalhes
+  - Pode ser usado em qualquer lugar da aplicação
+
+### 📝 Tipos de Dados
+
+```typescript
+// Usuário da equipe
+type TeamUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;                    // COORDENADOR_PROJETOS, ANALISTA_EXECUCAO, etc.
+  team: Team;                    // EXECUCAO, COMERCIAL, FINANCEIRO
+  permissionLevel: PermissionLevel; // LEVEL_1, LEVEL_2, LEVEL_3
+  status: UserStatus;            // ATIVO, INATIVO
+  modulePermissions: ModulePermissions[];
+  lastAccessAt?: string;
+};
+
+// Histórico de mudanças
+type PermissionHistoryEntry = {
+  id: string;
+  userId: string;
+  fromLevel: PermissionLevel | null;
+  toLevel: PermissionLevel;
+  changedAt: string;
+  changedByUserId: string;
+  changedByName: string;
+  reason?: string;
+};
+```
+
+### 🚀 Próximos Passos (Backend)
+
+Quando implementar o backend, criar:
+
+**Endpoints:**
+- `GET /api/admin/team` - Listar estrutura da equipe
+- `GET /api/admin/users/:id` - Detalhes do usuário + permissões
+- `PATCH /api/admin/users/:id/permission-level` - Alterar nível
+- `PATCH /api/admin/users/:id/status` - Ativar/Inativar usuário
+
+**Modelos Prisma:**
+- `User` - Usuários da equipe (integração com Nexus)
+- `PermissionLevel` - Configuração de níveis
+- `UserPermissionHistory` - Histórico de mudanças
+- `ModulePermission` - Permissões por módulo
