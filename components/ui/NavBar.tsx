@@ -35,6 +35,15 @@ interface NavItem {
   href?: string;
   icon?: React.ComponentType<{ className?: string }>;
   children?: NavItem[];
+  submenu?: NavItem[]; // Submenu lateral (nível 2)
+}
+
+interface NavItem {
+  label: string;
+  href?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  children?: NavItem[];
+  submenu?: NavItem[]; // Submenu lateral (nível 2)
 }
 
 const navigationItems: NavItem[] = [
@@ -55,13 +64,19 @@ const navigationItems: NavItem[] = [
     ],
   },
   {
-    label: "Parceiros",
-    href: "/parceiros",
+    label: "Organizações",
+    href: "/organizacoes",
     icon: Users,
     children: [
-      { label: "Todos os Parceiros", href: "/parceiros", icon: Users },
-      { label: "Fundações", href: "/parceiros/fundacoes", icon: FileText },
-      { label: "IFES", href: "/parceiros/ifes", icon: BarChart3 },
+      {
+        label: "Todos os Parceiros",
+        icon: Users,
+        submenu: [
+          { label: "IFES", href: "/parceiros/ifes", icon: BarChart3 },
+          { label: "Fundações", href: "/parceiros/fundacoes", icon: FileText },
+        ],
+      },
+      { label: "Fornecedores", href: "/fornecedores", icon: FolderOpen },
     ],
   },
   {
@@ -78,8 +93,10 @@ export function NavBar() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const navbarRef = useRef<HTMLElement>(null);
+  const submenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Garantir que o componente só renderize após a hidratação no cliente
   useEffect(() => {
@@ -109,12 +126,37 @@ export function NavBar() {
     const handleClickOutside = (event: MouseEvent) => {
       if (navbarRef.current && !navbarRef.current.contains(event.target as Node)) {
         setOpenDropdowns([]);
+        setOpenSubmenu(null);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Handler para ESC fechar menus
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenDropdowns([]);
+        setOpenSubmenu(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
+
+  // Limpar timeout ao desmontar
+  useEffect(() => {
+    return () => {
+      if (submenuTimeoutRef.current) {
+        clearTimeout(submenuTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -157,14 +199,26 @@ export function NavBar() {
           {!isMobile && (
             <div
               className={cn(
-                "absolute top-full left-0 mt-1 w-56 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-hidden transition-all duration-300 ease-out",
+                "absolute top-full left-0 mt-1 w-56 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-visible transition-all duration-300 ease-out",
                 isOpen
                   ? "opacity-100 translate-y-0 scale-100"
                   : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
               )}
+              onMouseLeave={() => {
+                // Delay para fechar quando sair do dropdown
+                if (submenuTimeoutRef.current) {
+                  clearTimeout(submenuTimeoutRef.current);
+                }
+                submenuTimeoutRef.current = setTimeout(() => {
+                  setOpenSubmenu(null);
+                  setOpenDropdowns([]);
+                }, 200);
+              }}
             >
               {item.children?.map((child, index) => {
                 const isModal = child.href?.startsWith('modal:');
+                const hasSubmenu = child.submenu && child.submenu.length > 0;
+                const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
                 
                 if (isModal) {
                   return (
@@ -184,19 +238,100 @@ export function NavBar() {
                 }
 
                 return (
-                  <Link
-                    key={child.href}
-                    href={child.href || "#"}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
-                      index === 0 ? "pt-4" : "",
-                      index === item.children!.length - 1 ? "pb-4" : ""
-                    )}
-                    onClick={() => setOpenDropdowns([])}
+                  <div
+                    key={child.label}
+                    className="relative"
+                    onMouseEnter={() => {
+                      if (hasSubmenu) {
+                        if (submenuTimeoutRef.current) {
+                          clearTimeout(submenuTimeoutRef.current);
+                        }
+                        setOpenSubmenu(`${item.label}-${child.label}`);
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      if (hasSubmenu) {
+                        if (submenuTimeoutRef.current) {
+                          clearTimeout(submenuTimeoutRef.current);
+                        }
+                        submenuTimeoutRef.current = setTimeout(() => {
+                          setOpenSubmenu(null);
+                        }, 200);
+                      }
+                    }}
                   >
-                    {child.icon && <child.icon className="h-4 w-4" />}
-                    <span>{child.label}</span>
-                  </Link>
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
+                        index === 0 ? "pt-4" : "",
+                        index === item.children!.length - 1 ? "pb-4" : "",
+                        hasSubmenu && isSubmenuOpen && "bg-zinc-50"
+                      )}
+                    >
+                      {child.href ? (
+                        <Link
+                          href={child.href}
+                          className="flex items-center gap-3 flex-1"
+                          onClick={() => {
+                            if (!hasSubmenu) {
+                              setOpenDropdowns([]);
+                              setOpenSubmenu(null);
+                            }
+                          }}
+                        >
+                          {child.icon && <child.icon className="h-4 w-4" />}
+                          <span>{child.label}</span>
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-3 flex-1">
+                          {child.icon && <child.icon className="h-4 w-4" />}
+                          <span>{child.label}</span>
+                        </div>
+                      )}
+                      {hasSubmenu && (
+                        <ChevronDown className="h-3.5 w-3.5 text-zinc-400 rotate-[-90deg]" />
+                      )}
+                    </div>
+
+                    {/* Submenu lateral */}
+                    {hasSubmenu && isSubmenuOpen && (
+                      <div
+                        className="absolute left-full top-0 ml-1 w-56 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-hidden animate-in slide-in-from-left-2 duration-200"
+                        onMouseEnter={() => {
+                          if (submenuTimeoutRef.current) {
+                            clearTimeout(submenuTimeoutRef.current);
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          if (submenuTimeoutRef.current) {
+                            clearTimeout(submenuTimeoutRef.current);
+                          }
+                          submenuTimeoutRef.current = setTimeout(() => {
+                            setOpenSubmenu(null);
+                          }, 200);
+                        }}
+                      >
+                        {child.submenu?.map((subItem, subIndex) => (
+                          <Link
+                            key={subItem.href || subItem.label}
+                            href={subItem.href || "#"}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
+                              subIndex === 0 ? "pt-4" : "",
+                              subIndex === child.submenu!.length - 1 ? "pb-4" : ""
+                            )}
+                            onClick={() => {
+                              setOpenDropdowns([]);
+                              setOpenSubmenu(null);
+                            }}
+                          >
+                            {subItem.icon && <subItem.icon className="h-4 w-4" />}
+                            <span>{subItem.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -207,6 +342,8 @@ export function NavBar() {
             <div className="ml-6 mt-2 space-y-1 border-l-2 border-zinc-200 pl-4 animate-in slide-in-from-top-2 duration-300">
               {item.children?.map((child) => {
                 const isModal = child.href?.startsWith('modal:');
+                const hasSubmenu = child.submenu && child.submenu.length > 0;
+                const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
                 
                 if (isModal) {
                   return (
@@ -222,15 +359,56 @@ export function NavBar() {
                 }
 
                 return (
-                  <Link
-                    key={child.href}
-                    href={child.href || "#"}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    {child.icon && <child.icon className="h-4 w-4" />}
-                    <span>{child.label}</span>
-                  </Link>
+                  <div key={child.label || child.href}>
+                    {hasSubmenu ? (
+                      <div>
+                        <button
+                          onClick={() => {
+                            setOpenSubmenu(isSubmenuOpen ? null : `${item.label}-${child.label}`);
+                          }}
+                          className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150 w-full text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            {child.icon && <child.icon className="h-4 w-4" />}
+                            <span>{child.label}</span>
+                          </div>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform duration-200",
+                              isSubmenuOpen ? "rotate-180" : ""
+                            )}
+                          />
+                        </button>
+                        {isSubmenuOpen && child.submenu && (
+                          <div className="ml-6 mt-1 space-y-1 border-l-2 border-zinc-200 pl-4">
+                            {child.submenu.map((subItem) => (
+                              <Link
+                                key={subItem.href || subItem.label}
+                                href={subItem.href || "#"}
+                                className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
+                                onClick={() => {
+                                  setMobileMenuOpen(false);
+                                  setOpenSubmenu(null);
+                                }}
+                              >
+                                {subItem.icon && <subItem.icon className="h-4 w-4" />}
+                                <span>{subItem.label}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Link
+                        href={child.href || "#"}
+                        className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        {child.icon && <child.icon className="h-4 w-4" />}
+                        <span>{child.label}</span>
+                      </Link>
+                    )}
+                  </div>
                 );
               })}
             </div>
