@@ -51,11 +51,14 @@ export default function FunilEditPage() {
     if (!stage || stage.isFinal) return;
 
     const contractCount = getContractCountInStage(stageId);
+
+    // Para desenvolvimento, permite deletar etapas mesmo com contratos
+    // Em produção, isso seria bloqueado
     if (contractCount > 0) {
-      setError(
-        `Não é possível excluir a etapa "${stage.name}" pois há ${contractCount} contrato(s) associado(s).`
+      const confirmDelete = window.confirm(
+        `A etapa "${stage.name}" possui ${contractCount} contrato(s) associado(s). Deseja realmente excluí-la?`
       );
-      return;
+      if (!confirmDelete) return;
     }
 
     setStages(prev => prev.filter(s => s.id !== stageId));
@@ -209,7 +212,7 @@ export default function FunilEditPage() {
                   contractCountInStage={getContractCountInStage(stage.id)}
                   onUpdate={handleUpdateStage}
                   onDelete={handleDeleteStage}
-                  canDelete={getContractCountInStage(stage.id) === 0}
+                  canDelete={!stage.isFinal}
                 />
               ))}
 

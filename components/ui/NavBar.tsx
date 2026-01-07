@@ -69,8 +69,7 @@ const navigationItems: NavItem[] = [
     href: "/equipe",
     icon: Users,
     children: [
-      { label: "Membros", href: "/equipe/membros", icon: Users },
-      { label: "Permissões", href: "/equipe/permissoes", icon: Shield },
+      { label: "Equipe", href: "/equipe", icon: Users },
     ],
   },
 ];

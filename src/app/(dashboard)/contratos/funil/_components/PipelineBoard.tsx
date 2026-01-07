@@ -82,12 +82,12 @@ export function PipelineBoard({ columns, onMoveContract, onStartProject }: Pipel
 
   return (
     <div className="overflow-x-auto pb-4">
-      <div className="flex gap-4 min-w-max">
+      <div className="flex gap-4">
         {columns.map((column) => (
           <div
             key={column.stage.id}
             data-stage-column
-            className={`flex-shrink-0 w-80 bg-gray-50 rounded-xl border transition-all duration-200 ${
+            className={`flex-1 min-w-0 bg-gray-50 rounded-xl border transition-all duration-200 ${
               dragOverStageId === column.stage.id
                 ? "border-[#004225] border-2 bg-green-50/50 shadow-lg"
                 : "border-gray-200"
@@ -104,7 +104,7 @@ export function PipelineBoard({ columns, onMoveContract, onStartProject }: Pipel
             />
 
             {/* Lista de Cards */}
-            <div className="p-3 space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar">
+            <div className="p-3 space-y-3">
               {column.contracts.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
                   {dragOverStageId === column.stage.id ? (
