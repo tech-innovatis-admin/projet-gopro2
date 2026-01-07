@@ -1,17 +1,22 @@
 "use client";
 
-import { Building2, Plus, Download } from "lucide-react";
+import { Building2, Plus, Download, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // =============================================================================
 // HEADER DO MÓDULO DE FORNECEDORES
 // =============================================================================
+
+type ViewMode = "table" | "grid";
 
 interface FornecedoresHeaderProps {
   totalFornecedores: number;
   totalAtivos: number;
   totalInativos: number;
   totalFiltrados: number;
+  viewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
   onNovoFornecedor?: () => void;
 }
 
@@ -20,6 +25,8 @@ export function FornecedoresHeader({
   totalAtivos,
   totalInativos,
   totalFiltrados,
+  viewMode = "table",
+  onViewModeChange,
   onNovoFornecedor,
 }: FornecedoresHeaderProps) {
   return (
@@ -40,6 +47,36 @@ export function FornecedoresHeader({
 
         {/* Ações */}
         <div className="flex items-center gap-3 ml-[52px] sm:ml-0">
+          {/* Toggle de Visualização */}
+          {onViewModeChange && (
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => onViewModeChange("table")}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  viewMode === "table"
+                    ? "bg-white text-[#1F4E79] shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+                title="Visualização em tabela"
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => onViewModeChange("grid")}
+                className={cn(
+                  "p-1.5 rounded transition-colors",
+                  viewMode === "grid"
+                    ? "bg-white text-[#1F4E79] shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+                title="Visualização em grid"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          
           <Button
             variant="outline"
             size="sm"

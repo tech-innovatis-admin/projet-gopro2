@@ -195,8 +195,8 @@ export function FornecedoresTable({
                   </td>
 
                   {/* Categorias */}
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex flex-wrap gap-1 justify-center">
                       {fornecedor.categorias.slice(0, 2).map((cat) => (
                         <span
                           key={cat}
@@ -220,7 +220,7 @@ export function FornecedoresTable({
                   </td>
 
                   {/* Contratos */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     {contratosCount > 0 ? (
                       <Link
                         href={`/fornecedores/${fornecedor.id}/contratos`}
@@ -234,7 +234,7 @@ export function FornecedoresTable({
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     <span
                       className={cn(
                         "inline-flex px-2.5 py-1 text-xs font-medium rounded-full",

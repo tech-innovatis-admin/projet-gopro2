@@ -42,7 +42,7 @@ export function ContractCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`bg-white rounded-lg border shadow-sm cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md ${
+      className={`rounded-lg cursor-grab active:cursor-grabbing transition-all duration-200 liquid-glass-card ${
         isDragging 
           ? "opacity-50 rotate-2 scale-105" 
           : "opacity-100"
@@ -51,7 +51,7 @@ export function ContractCard({
           ? "border-l-4 border-l-red-500" 
           : hasWarnings 
             ? "border-l-4 border-l-yellow-500" 
-            : "border-gray-200"
+            : ""
       }`}
     >
       {/* Handle de Drag */}

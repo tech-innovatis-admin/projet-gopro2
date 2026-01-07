@@ -6,6 +6,7 @@ import {
   FornecedoresHeader,
   FornecedoresFilters,
   FornecedoresTable,
+  FornecedoresGrid,
   NovoFornecedorModal,
 } from "./_components";
 import { MOCK_FORNECEDORES } from "./mockData";
@@ -19,6 +20,8 @@ import {
 // PÁGINA PRINCIPAL DO MÓDULO DE FORNECEDORES
 // =============================================================================
 
+type ViewMode = "table" | "grid";
+
 export default function FornecedoresPage() {
   // Estado local dos fornecedores (simula estado da API)
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>(MOCK_FORNECEDORES);
@@ -28,6 +31,9 @@ export default function FornecedoresPage() {
 
   // Estado do modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Estado da visualização (tabela ou grid)
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   // Filtra e ordena fornecedores
   const filteredFornecedores = useMemo(() => {
@@ -124,7 +130,7 @@ export default function FornecedoresPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+    <div className="min-h-screen liquid-glass-bg">
       <NavBar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -135,6 +141,8 @@ export default function FornecedoresPage() {
             totalAtivos={totalAtivos}
             totalInativos={totalInativos}
             totalFiltrados={totalFiltrados}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
             onNovoFornecedor={() => setIsModalOpen(true)}
           />
 
@@ -144,13 +152,23 @@ export default function FornecedoresPage() {
             onFiltersChange={handleFiltersChange}
           />
 
-          {/* Tabela */}
-          <div className="h-[calc(100vh-380px)] min-h-[400px]">
-            <FornecedoresTable
-              fornecedores={filteredFornecedores}
-              filters={filters}
-              onFiltersChange={handleFiltersChange}
-            />
+          {/* Visualização: Tabela ou Grid */}
+          <div className="h-[calc(100vh-300px)] min-h-[800px]">
+            {viewMode === "table" ? (
+              <FornecedoresTable
+                fornecedores={filteredFornecedores}
+                filters={filters}
+                onFiltersChange={handleFiltersChange}
+              />
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+                <FornecedoresGrid
+                  fornecedores={filteredFornecedores}
+                  filters={filters}
+                  onFiltersChange={handleFiltersChange}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>

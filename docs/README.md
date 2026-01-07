@@ -193,6 +193,31 @@ gopro-2/
 │   │       ├── configuracoes/                  # Página de configurações gerais
 │   │       │   └── page.tsx
 │   │       │
+│   │       ├── fornecedores/                  # Gestão de fornecedores
+│   │       │   ├── page.tsx                    # Listagem de fornecedores (/fornecedores)
+│   │       │   ├── types.ts                    # Tipos TypeScript do módulo
+│   │       │   ├── mockData.ts                 # Dados mock de fornecedores (50+ registros)
+│   │       │   ├── _components/                # Componentes da listagem
+│   │       │   │   ├── FornecedoresHeader.tsx  # Header com métricas e toggle de visualização
+│   │       │   │   ├── FornecedoresFilters.tsx # Sistema de filtros avançados
+│   │       │   │   ├── FornecedoresTable.tsx   # Tabela de fornecedores (visualização tabela)
+│   │       │   │   ├── FornecedoresGrid.tsx    # Grid de cards (visualização grid)
+│   │       │   │   ├── NovoFornecedorModal.tsx # Modal de cadastro de fornecedor
+│   │       │   │   └── index.ts                # Exportações centralizadas
+│   │       │   └── [fornecedorId]/             # Rotas dinâmicas por fornecedor
+│   │       │       ├── layout.tsx              # Layout compartilhado com NavBar
+│   │       │       ├── page.tsx                # Página de detalhes do fornecedor
+│   │       │       ├── contratos/
+│   │       │       │   └── page.tsx            # Contratos vinculados ao fornecedor
+│   │       │       ├── editar/
+│   │       │       │   └── page.tsx            # Edição de dados do fornecedor
+│   │       │       └── _components/             # Componentes de detalhes
+│   │       │           ├── FornecedorSummary.tsx    # Resumo do fornecedor
+│   │       │           ├── FornecedorInfo.tsx       # Informações detalhadas
+│   │       │           ├── FornecedorTags.tsx       # Categorias e serviços (badges)
+│   │       │           ├── FornecedorContractsTable.tsx # Tabela de contratos com rubricas
+│   │       │           └── index.ts                # Exportações
+│   │       │
 │   │       └── parceiros/                      # Gestão de parceiros
 │   │           ├── page.tsx                    # Listagem geral (/parceiros)
 │   │           ├── fundacoes/
@@ -1162,6 +1187,10 @@ O projeto utiliza **Route Groups** (pastas com parênteses) para separar as rota
 | `/parceiros` | `app/(dashboard)/parceiros/page.tsx` | Listagem de parceiros |
 | `/parceiros/fundacoes` | `app/(dashboard)/parceiros/fundacoes/page.tsx` | Fundações parceiras |
 | `/parceiros/ifes` | `app/(dashboard)/parceiros/ifes/page.tsx` | IFES parceiras |
+| `/fornecedores` | `app/(dashboard)/fornecedores/page.tsx` | Listagem de fornecedores |
+| `/fornecedores/[id]` | `app/(dashboard)/fornecedores/[fornecedorId]/page.tsx` | Detalhes do fornecedor |
+| `/fornecedores/[id]/contratos` | `app/(dashboard)/fornecedores/[fornecedorId]/contratos/page.tsx` | Contratos vinculados ao fornecedor |
+| `/fornecedores/[id]/editar` | `app/(dashboard)/fornecedores/[fornecedorId]/editar/page.tsx` | Edição de fornecedor |
 
 #### API Routes
 | Endpoint | Método | Arquivo | Descrição |
@@ -1502,6 +1531,291 @@ Quando implementar o backend, criar:
 - `ContractInitiationStageHistory` - Histórico de movimentação
 - `ContractInitiationActivity` - Atividades de iniciação
 - Adicionar campo `initiationStageId` em `Contract`
+
+---
+
+## 🏢 Módulo de Fornecedores (`/fornecedores`)
+
+O módulo de **Fornecedores** permite gerenciar empresas fornecedoras que prestam serviços ou fornecem produtos para os projetos da plataforma.
+
+### 📋 Objetivos do Módulo
+
+O módulo responde a três perguntas principais:
+
+1. **Quais fornecedores estão cadastrados?** - Visualização completa do cadastro de fornecedores
+2. **Quais contratos estão vinculados a cada fornecedor?** - Rastreamento de relacionamentos comerciais
+3. **Quais rubricas estão vinculadas aos fornecedores?** - Visualização de itens orçamentários por fornecedor
+
+### 🏗️ Estrutura de Arquivos
+
+```
+fornecedores/
+├── page.tsx                    # Página principal (/fornecedores)
+├── types.ts                    # Tipos TypeScript (fornecedor, categorias, serviços)
+├── mockData.ts                 # Dados mock (50+ fornecedores, contratos, rubricas)
+└── _components/                # Componentes da listagem
+    ├── FornecedoresHeader.tsx  # Header com métricas e toggle de visualização
+    ├── FornecedoresFilters.tsx # Sistema de filtros avançados
+    ├── FornecedoresTable.tsx   # Tabela de fornecedores (visualização tabela)
+    ├── FornecedoresGrid.tsx    # Grid de cards (visualização grid)
+    ├── NovoFornecedorModal.tsx # Modal de cadastro de fornecedor
+    └── index.ts                # Exportações centralizadas
+
+└── [fornecedorId]/             # Rotas dinâmicas por fornecedor
+    ├── layout.tsx              # Layout compartilhado com NavBar
+    ├── page.tsx                # Página de detalhes do fornecedor
+    ├── contratos/
+    │   └── page.tsx            # Contratos vinculados ao fornecedor
+    ├── editar/
+    │   └── page.tsx            # Edição de dados do fornecedor
+    └── _components/            # Componentes de detalhes
+        ├── FornecedorSummary.tsx       # Resumo do fornecedor
+        ├── FornecedorInfo.tsx          # Informações detalhadas
+        ├── FornecedorTags.tsx          # Categorias e serviços (badges)
+        ├── FornecedorContractsTable.tsx # Tabela de contratos com rubricas expandíveis
+        └── index.ts                    # Exportações
+```
+
+### 📊 Página Principal (`/fornecedores`)
+
+**Arquivo:** `src/app/(dashboard)/fornecedores/page.tsx`
+
+#### Funcionalidades:
+
+**Header com Métricas:**
+- Total de Fornecedores
+- Total Ativos
+- Total Inativos
+- Total Filtrados (quando há filtros ativos)
+- Toggle de visualização (Tabela/Grid)
+- Botão "Novo Fornecedor"
+
+**Sistema de Filtros Avançados:**
+- **Busca textual**: Por nome, razão social ou CNPJ
+- **Filtro por UF**: Dropdown com todas as UFs brasileiras
+- **Filtro por Município**: Dropdown dinâmico baseado na UF selecionada
+- **Filtro por Status**: Ativo / Inativo
+- **Filtro por Categorias**: Múltipla seleção (OR - fornecedor precisa ter pelo menos uma)
+- **Filtro por Serviços**: Múltipla seleção (OR - fornecedor precisa ter pelo menos um)
+
+**Visualização Dupla:**
+
+1. **Visualização em Tabela** (`FornecedoresTable`):
+   - Colunas: Fornecedor (nome + CNPJ), Categorias, Localização, Contratos, Status
+   - Cabeçalho fixo (sticky) para facilitar navegação
+   - Ordenação por colunas (nome, município, status)
+   - Colunas redimensionáveis (`ResizableTable`)
+   - Paginação com navegação entre páginas
+   - Links para detalhes do fornecedor
+
+2. **Visualização em Grid** (`FornecedoresGrid`):
+   - Cards com efeito Liquid Glass
+   - Layout responsivo (1-4 colunas conforme tamanho da tela)
+   - Informações: Avatar, nome, CNPJ, status, localização, categorias, contratos
+   - Botão "Ver detalhes" em cada card
+   - Paginação compartilhada com tabela
+
+**Modal de Cadastro:**
+- Formulário completo com validações
+- Campos: Nome, Razão Social, CNPJ, Email, Telefone, UF, Município, Endereço
+- Seleção múltipla de categorias e serviços
+- Status inicial (Ativo/Inativo)
+
+### 📄 Página de Detalhes (`/fornecedores/[fornecedorId]`)
+
+**Arquivo:** `src/app/(dashboard)/fornecedores/[fornecedorId]/page.tsx`
+
+#### Componentes:
+
+1. **FornecedorSummary** - Resumo:
+   - Avatar com iniciais
+   - Nome e razão social
+   - CNPJ formatado
+   - Status (badge colorido)
+   - Contato (email, telefone)
+
+2. **FornecedorInfo** - Informações:
+   - Localização completa (UF, município, endereço)
+   - Data de cadastro
+   - Última atualização
+
+3. **FornecedorTags** - Categorias e Serviços:
+   - Badges de categorias (cinza neutro)
+   - Badges de serviços
+   - Layout responsivo com wrap
+
+### 📋 Contratos Vinculados (`/fornecedores/[fornecedorId]/contratos`)
+
+**Arquivo:** `src/app/(dashboard)/fornecedores/[fornecedorId]/contratos/page.tsx`
+
+#### Funcionalidades:
+
+**Métricas:**
+- Total de Contratos
+- Valor Total
+- Status (em andamento, concluídos)
+
+**Tabela de Contratos:**
+- Colunas: Código, Título, Status, Valor Total, Período, Ações
+- Links para página do contrato
+- **Rubricas Expandíveis**: 
+  - Clique no contrato para expandir
+  - Exibe itens de rubricas vinculados ao fornecedor
+  - Mostra subitens com lançamentos por parcela
+  - Total geral vinculado ao fornecedor
+
+**Componente `FornecedorContractsTable`:**
+- Linhas expansíveis com animação
+- Ícone de expansão (chevron) quando há rubricas vinculadas
+- Componente `RubricasVinculadas` para exibir detalhes
+- Busca de rubricas por CNPJ ou nome do fornecedor
+
+### 🎨 Características Visuais
+
+**Efeito Liquid Glass:**
+- Cards do grid com efeito glassmorphism
+- Background translúcido com blur
+- Bordas sutis com alpha
+- Highlights internos para refração
+- Fundo com gradiente para realçar o efeito
+
+**Badges e Status:**
+- Status: Verde (Ativo) / Vermelho (Inativo)
+- Categorias: Badges neutros cinza
+- Contratos: Links azuis institucionais
+
+**Responsividade:**
+- Grid adaptável (1-4 colunas)
+- Tabela com scroll horizontal quando necessário
+- Layout mobile-first
+
+### 📝 Tipos de Dados
+
+```typescript
+// Fornecedor
+interface Fornecedor {
+  id: string;
+  nome: string;
+  razaoSocial?: string;
+  cnpj?: string;
+  email?: string;
+  telefone?: string;
+  uf: string;
+  municipio: string;
+  endereco?: string;
+  categorias: FornecedorCategoria[];
+  servicos: FornecedorServico[];
+  status: FornecedorStatus;
+  observacoes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Contrato vinculado
+interface FornecedorContratoVinculado {
+  id: string;
+  codigo: string;
+  titulo: string;
+  status: "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "CANCELADO";
+  valorTotal: number;
+  dataInicio: string;
+  dataFim?: string;
+  fornecedorId: string;
+}
+
+// Item de rubrica vinculado
+interface ItemRubricaVinculado {
+  id: string;
+  rubricaId: string;
+  rubricaCodigo: string;
+  rubricaNome: string;
+  codigo?: string;
+  descricao: string;
+  quantidade: number;
+  meses: number;
+  valorUnitario: number;
+  valorTotal: number;
+  meta?: string;
+  subitens?: SubitemRubrica[];
+}
+```
+
+### 🔍 Categorias e Serviços
+
+#### **Categorias Disponíveis:**
+- Consultoria
+- Tecnologia
+- Serviços Gerais
+- Equipamentos
+- Laboratório
+- Capacitação
+- Comunicação
+- Transporte
+- Alimentação
+- Infraestrutura
+
+#### **Serviços Disponíveis:**
+- Consultoria Técnica
+- Desenvolvimento de Software
+- Manutenção de Equipamentos
+- Treinamento
+- Pesquisa
+- Análises Laboratoriais
+- Assessoria Jurídica
+- Contabilidade
+- Design Gráfico
+- Marketing Digital
+- Logística
+- Eventos
+- Tradução
+- Auditoria
+
+### 🎯 Funcionalidades Implementadas
+
+✅ **Listagem completa** - Tabela e grid de fornecedores  
+✅ **Filtros avançados** - Por UF, município, status, categorias, serviços e busca textual  
+✅ **Visualização dupla** - Alternância entre tabela e grid de cards  
+✅ **Efeito Liquid Glass** - Cards com glassmorphism premium  
+✅ **Ordenação** - Por nome, município e status  
+✅ **Paginação** - Navegação entre páginas de resultados  
+✅ **Detalhes do fornecedor** - Página completa com informações  
+✅ **Contratos vinculados** - Visualização de contratos por fornecedor  
+✅ **Rubricas expandíveis** - Visualização de itens orçamentários vinculados  
+✅ **Modal de cadastro** - Formulário completo com validações  
+✅ **Cabeçalho fixo** - Títulos de colunas sempre visíveis na tabela  
+
+### 🔗 Integração com Rubricas
+
+O módulo integra-se com o sistema de rubricas para mostrar:
+- Itens de rubricas vinculados a fornecedores dentro de contratos
+- Subitens com lançamentos por parcela
+- Totais vinculados ao fornecedor
+- Busca por CNPJ ou nome do fornecedor
+
+**Função de Busca:**
+- `getRubricasByFornecedor(contratoId, fornecedor)` - Busca rubricas vinculadas
+- Normalização de CNPJ para comparação
+- Busca por nome ou razão social
+- Filtragem de subitens relevantes
+
+### 🚀 Próximos Passos (Backend)
+
+Quando implementar o backend, criar:
+
+**Endpoints:**
+- `GET /api/fornecedores` - Listar fornecedores com filtros
+- `GET /api/fornecedores/:id` - Detalhes do fornecedor
+- `POST /api/fornecedores` - Criar novo fornecedor
+- `PATCH /api/fornecedores/:id` - Atualizar fornecedor
+- `GET /api/fornecedores/:id/contratos` - Contratos vinculados
+- `GET /api/fornecedores/:id/rubricas` - Rubricas vinculadas
+
+**Modelos Prisma:**
+- `Supplier` - Fornecedores
+- `SupplierCategory` - Categorias de fornecedores
+- `SupplierService` - Serviços oferecidos
+- `SupplierContract` - Contratos vinculados
+- `SupplierRubricaItem` - Itens de rubricas vinculados
 
 ---
 
