@@ -12,7 +12,7 @@ export interface UseResizableColumnsOptions {
   columnCount: number;
   defaultWidths?: (number | ColumnWidth)[];
   minColumnWidth?: number;
-  tableRef?: React.RefObject<HTMLTableElement>;
+  tableRef?: React.RefObject<HTMLTableElement | null>;
 }
 
 export function useResizableColumns({
