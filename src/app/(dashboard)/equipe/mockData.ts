@@ -7,6 +7,7 @@ import {
   type PermissionLevelConfig,
   type PermissionHistoryEntry,
   type OrgNode,
+  type Role,
 } from "./types";
 
 // Configuração dos níveis de permissão
@@ -271,7 +272,7 @@ export function buildOrgChart(users: TeamUser[]): OrgNode[] {
         const manager = users.find((m) => m.id === u.managerId);
         return manager?.role;
       })
-      .filter((r): r is string => r !== null);
+      .filter((r): r is Role => r !== null && r !== undefined);
     
     const managerRole = managerRoles.length > 0 
       ? (managerRoles[0] as any)
