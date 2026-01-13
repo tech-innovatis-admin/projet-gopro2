@@ -5,10 +5,10 @@ const remanejamentosMock: any[] = [];
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { contratoId: string } }
+  { params }: { params: Promise<{ contratoId: string }> }
 ) {
   try {
-    const contratoId = params.contratoId;
+    const { contratoId } = await params;
     const body = await request.json();
 
     // Validações
@@ -72,10 +72,10 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { contratoId: string } }
+  { params }: { params: Promise<{ contratoId: string }> }
 ) {
   try {
-    const contratoId = params.contratoId;
+    const { contratoId } = await params;
 
     // Filtrar remanejamentos do contrato (substituir por consulta ao banco)
     const remanejamentos = remanejamentosMock.filter(
