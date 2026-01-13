@@ -284,7 +284,6 @@ export default function IniciacaoPage() {
             onToggleActivityStatus={handleToggleActivityStatus}
             onEditActivity={handleEditActivity}
             onDeleteActivity={handleDeleteActivity}
-            onCreateActivity={() => setShowNewActivityForm(true)}
           />
 
           {/* Painel de Histórico */}
