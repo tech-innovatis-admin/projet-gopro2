@@ -116,9 +116,9 @@ export default function RubricasTab({ contratoId }: RubricasTabProps) {
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>({
     descricao: '',
-    finalidade: '',
     cnpjDestinacao: '',
     quantidade: 1,
+    meses: 1,
     valorUnitario: 0,
   });
 
