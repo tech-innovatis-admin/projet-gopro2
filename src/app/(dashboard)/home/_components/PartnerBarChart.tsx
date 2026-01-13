@@ -91,12 +91,15 @@ export function PartnerBarChart() {
                 borderRadius: "8px",
                 boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
               }}
-              formatter={(value: number, name: string, props: { payload: { valor: number } }) => [
-                <span key="tooltip">
-                  <strong>{value}</strong> contratos • {formatCurrency(props.payload.valor)}
-                </span>,
-                "",
-              ]}
+              formatter={(value: number, name: string, props: any) => {
+                const valor = props?.payload?.valor ?? 0;
+                return [
+                  <span key="tooltip">
+                    <strong>{value}</strong> contratos • {formatCurrency(valor)}
+                  </span>,
+                  "",
+                ];
+              }}
               labelStyle={{ color: "#18181b", fontWeight: 600 }}
               cursor={{ fill: "rgba(0, 66, 37, 0.05)" }}
             />
