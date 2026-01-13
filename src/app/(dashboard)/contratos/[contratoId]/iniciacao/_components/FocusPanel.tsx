@@ -310,11 +310,7 @@ function FocusActivityCard({ activity, isPastDue, onToggleStatus, onEdit, onDele
 // EMPTY FOCUS STATE - Estado vazio quando não há atividades pendentes
 // =============================================================================
 
-type EmptyFocusStateProps = {
-  // onCreateActivity removido
-};
-
-function EmptyFocusState({ onCreateActivity }: EmptyFocusStateProps) {
+function EmptyFocusState() {
   return (
     <div className="text-center py-4">
       <p className="text-gray-500 text-sm mb-3">
