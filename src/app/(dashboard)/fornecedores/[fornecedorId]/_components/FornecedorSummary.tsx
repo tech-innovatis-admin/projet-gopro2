@@ -2,7 +2,9 @@
 
 import { Building2, Mail, Phone, MapPin, Calendar } from "lucide-react";
 import { type Fornecedor, STATUS_CONFIG } from "../../types";
+import { StarRating } from "@/components/ui/StarRating";
 import { cn } from "@/lib/utils";
+import { getContratosByFornecedor } from "../../mockData";
 
 // =============================================================================
 // COMPONENTE DE RESUMO/CARD DO FORNECEDOR
@@ -15,6 +17,16 @@ interface FornecedorSummaryProps {
 
 export function FornecedorSummary({ fornecedor, contratosCount }: FornecedorSummaryProps) {
   const statusConfig = STATUS_CONFIG[fornecedor.status];
+
+  // Calcula média de avaliações
+  const contratos = getContratosByFornecedor(fornecedor.id);
+  const avaliacoes = contratos
+    .map((c) => c.avaliacao?.nota)
+    .filter((nota): nota is number => nota !== undefined && nota > 0);
+  
+  const mediaAvaliacoes = avaliacoes.length > 0
+    ? avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length
+    : 0;
 
   // Formata data
   const formatDate = (dateString: string): string => {
@@ -98,13 +110,23 @@ export function FornecedorSummary({ fornecedor, contratosCount }: FornecedorSumm
         </div>
 
         {/* Métricas rápidas */}
-        <div className="hidden lg:flex flex-col items-end gap-2">
+        <div className="hidden lg:flex flex-col items-end gap-4">
           <div className="text-right">
             <p className="text-2xl font-bold text-[#1F4E79]">{contratosCount}</p>
             <p className="text-xs text-gray-500">
               contrato{contratosCount !== 1 ? "s" : ""} vinculado{contratosCount !== 1 ? "s" : ""}
             </p>
           </div>
+          {mediaAvaliacoes > 0 && (
+            <div className="text-right">
+              <div className="flex items-center justify-end gap-1 mb-1">
+                <StarRating nota={mediaAvaliacoes} readonly size="sm" />
+              </div>
+              <p className="text-xs text-gray-500">
+                {mediaAvaliacoes.toFixed(1)} ({avaliacoes.length} avaliação{avaliacoes.length !== 1 ? "ões" : ""})
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

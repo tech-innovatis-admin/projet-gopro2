@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, Building2, Eye, Pencil, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavBar } from "@/components/ui/NavBar";
-import { getFornecedorById } from "../mockData";
+import { StarRating } from "@/components/ui/StarRating";
+import { getFornecedorById, getContratosByFornecedor } from "../mockData";
 import { STATUS_CONFIG } from "../types";
 
 // =============================================================================
@@ -22,6 +23,16 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
   const fornecedorId = params.fornecedorId as string;
 
   const fornecedor = getFornecedorById(fornecedorId);
+
+  // Calcula média de avaliações
+  const contratos = fornecedor ? getContratosByFornecedor(fornecedorId) : [];
+  const avaliacoes = contratos
+    .map((c) => c.avaliacao?.nota)
+    .filter((nota): nota is number => nota !== undefined && nota > 0);
+  
+  const mediaAvaliacoes = avaliacoes.length > 0
+    ? avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length
+    : 0;
 
   if (!fornecedor) {
     return (
@@ -117,6 +128,14 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
                   >
                     {statusConfig.label}
                   </span>
+                  {mediaAvaliacoes > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <StarRating nota={mediaAvaliacoes} readonly size="sm" />
+                      <span className="text-xs font-medium text-gray-600">
+                        {mediaAvaliacoes.toFixed(1)}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
                   <span>

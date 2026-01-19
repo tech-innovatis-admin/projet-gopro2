@@ -100,6 +100,14 @@ export interface Fornecedor {
   updatedAt?: string; // ISO date
 }
 
+// Avaliação de contrato
+export interface ContratoAvaliacao {
+  nota: number; // 1-5
+  comentario?: string;
+  avaliadoPor?: string;
+  dataAvaliacao?: string; // ISO date
+}
+
 // Contrato vinculado ao fornecedor
 export interface FornecedorContratoVinculado {
   id: string;
@@ -110,6 +118,7 @@ export interface FornecedorContratoVinculado {
   dataInicio: string; // ISO date
   dataFim?: string; // ISO date
   fornecedorId: string;
+  avaliacao?: ContratoAvaliacao;
 }
 
 // Estado dos filtros da listagem

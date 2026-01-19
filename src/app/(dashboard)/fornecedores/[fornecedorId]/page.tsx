@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import { getFornecedorById, getContratosByFornecedor } from "../mockData";
+import { StarRating } from "@/components/ui/StarRating";
 import {
   FornecedorSummary,
   FornecedorInfo,
@@ -65,29 +66,37 @@ export default function FornecedorPage() {
 
           {/* Preview dos 3 primeiros contratos */}
           <div className="space-y-3">
-            {contratos.slice(0, 3).map((contrato) => (
-              <div
-                key={contrato.id}
-                className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-[#1F4E79]">
-                      {contrato.codigo}
-                    </span>
-                    <span className="text-sm text-gray-900 truncate">
-                      {contrato.titulo}
-                    </span>
+            {contratos.slice(0, 3).map((contrato) => {
+              const avaliacaoNota = contrato.avaliacao?.nota || 0;
+              return (
+                <div
+                  key={contrato.id}
+                  className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-[#1F4E79]">
+                        {contrato.codigo}
+                      </span>
+                      <span className="text-sm text-gray-900 truncate">
+                        {contrato.titulo}
+                      </span>
+                    </div>
+                    {avaliacaoNota > 0 && (
+                      <div className="mt-1.5">
+                        <StarRating nota={avaliacaoNota} readonly size="sm" />
+                      </div>
+                    )}
                   </div>
+                  <span className="text-sm font-medium text-gray-700 ml-4">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(contrato.valorTotal)}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-gray-700 ml-4">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(contrato.valorTotal)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

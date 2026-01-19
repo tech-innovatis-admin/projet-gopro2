@@ -931,6 +931,12 @@ export const MOCK_CONTRATOS_POR_FORNECEDOR: Record<string, FornecedorContratoVin
       valorTotal: 190000,
       dataInicio: "2024-04-15",
       fornecedorId: "forn_034",
+      avaliacao: {
+        nota: 4,
+        comentario: "Bom desempenho até o momento, entregas no prazo",
+        avaliadoPor: "Admin",
+        dataAvaliacao: "2024-05-10",
+      },
     },
     {
       id: "cont_015",
@@ -941,6 +947,12 @@ export const MOCK_CONTRATOS_POR_FORNECEDOR: Record<string, FornecedorContratoVin
       dataInicio: "2023-09-01",
       dataFim: "2023-11-30",
       fornecedorId: "forn_034",
+      avaliacao: {
+        nota: 5,
+        comentario: "Excelente trabalho, sistema entregue com qualidade superior",
+        avaliadoPor: "Admin",
+        dataAvaliacao: "2023-12-05",
+      },
     },
   ],
   forn_037: [

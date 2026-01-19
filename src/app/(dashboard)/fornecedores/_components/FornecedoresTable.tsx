@@ -13,7 +13,8 @@ import {
   STATUS_CONFIG,
   type FornecedorCategoria,
 } from "../types";
-import { getContratosCountByFornecedor } from "../mockData";
+import { getContratosCountByFornecedor, getContratosByFornecedor } from "../mockData";
+import { StarRating } from "@/components/ui/StarRating";
 
 // =============================================================================
 // TABELA DE FORNECEDORES
@@ -85,6 +86,17 @@ export function FornecedoresTable({
       .toUpperCase();
   };
 
+  // Calcula média de avaliações de um fornecedor
+  const getMediaAvaliacoes = (fornecedorId: string): number => {
+    const contratos = getContratosByFornecedor(fornecedorId);
+    const avaliacoes = contratos
+      .map((c) => c.avaliacao?.nota)
+      .filter((nota): nota is number => nota !== undefined && nota > 0);
+    
+    if (avaliacoes.length === 0) return 0;
+    return avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length;
+  };
+
   // Estado vazio
   if (fornecedores.length === 0) {
     return (
@@ -104,6 +116,7 @@ export function FornecedoresTable({
   const defaultColumnWidths = [
     250, // Fornecedor (nome + CNPJ)
     180, // Categorias
+    120, // Avaliação
     150, // Localização
     120, // Contratos
     100, // Status
@@ -114,7 +127,7 @@ export function FornecedoresTable({
       {/* Tabela com scroll */}
       <div className="flex-1 overflow-auto custom-scrollbar">
         <ResizableTable
-          columnCount={5}
+          columnCount={6}
           defaultWidths={defaultColumnWidths}
           minColumnWidth={80}
           className="w-full"
@@ -133,6 +146,11 @@ export function FornecedoresTable({
               <th className="text-center px-4 py-3">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
                   Categorias
+                </span>
+              </th>
+              <th className="text-center px-4 py-3">
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  Avaliação
                 </span>
               </th>
               <th className="text-center px-4 py-3">
@@ -211,6 +229,20 @@ export function FornecedoresTable({
                         </span>
                       )}
                     </div>
+                  </td>
+
+                  {/* Avaliação */}
+                  <td className="px-4 py-3 text-center">
+                    {(() => {
+                      const media = getMediaAvaliacoes(fornecedor.id);
+                      return media > 0 ? (
+                        <div className="flex items-center justify-center">
+                          <StarRating nota={media} readonly size="sm" showValue />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Sem avaliação</span>
+                      );
+                    })()}
                   </td>
 
                   {/* Localização */}

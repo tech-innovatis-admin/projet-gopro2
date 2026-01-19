@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FileText, ExternalLink, ChevronDown, ChevronRight, Tag, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StarRating } from "@/components/ui/StarRating";
 import { type FornecedorContratoVinculado, type Fornecedor, CONTRATO_STATUS_CONFIG } from "../../types";
 import { getRubricasByFornecedor, type ItemRubricaVinculado } from "../../mockData";
 
@@ -14,10 +15,43 @@ import { getRubricasByFornecedor, type ItemRubricaVinculado } from "../../mockDa
 interface FornecedorContractsTableProps {
   contratos: FornecedorContratoVinculado[];
   fornecedor: Fornecedor;
+  onAvaliacaoChange?: (contratoId: string, nota: number) => void;
 }
 
-export function FornecedorContractsTable({ contratos, fornecedor }: FornecedorContractsTableProps) {
+export function FornecedorContractsTable({ 
+  contratos, 
+  fornecedor,
+  onAvaliacaoChange 
+}: FornecedorContractsTableProps) {
   const [expandedContratos, setExpandedContratos] = useState<Set<string>>(new Set());
+  const [localContratos, setLocalContratos] = useState<FornecedorContratoVinculado[]>(contratos);
+
+  // Sincroniza estado local quando contratos mudam
+  useEffect(() => {
+    setLocalContratos(contratos);
+  }, [contratos]);
+
+  // Atualiza avaliação localmente e chama callback se fornecido
+  const handleAvaliacaoChange = (contratoId: string, nota: number) => {
+    setLocalContratos((prev) =>
+      prev.map((c) =>
+        c.id === contratoId
+          ? {
+              ...c,
+              avaliacao: {
+                nota,
+                avaliadoPor: "Admin",
+                dataAvaliacao: new Date().toISOString(),
+              },
+            }
+          : c
+      )
+    );
+    
+    if (onAvaliacaoChange) {
+      onAvaliacaoChange(contratoId, nota);
+    }
+  };
 
   const toggleExpand = (contratoId: string) => {
     setExpandedContratos((prev) => {
@@ -81,6 +115,9 @@ export function FornecedorContractsTable({ contratos, fornecedor }: FornecedorCo
                 Status
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Avaliação
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 Valor Total
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">
@@ -92,11 +129,12 @@ export function FornecedorContractsTable({ contratos, fornecedor }: FornecedorCo
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {contratos.map((contrato) => {
+            {localContratos.map((contrato) => {
               const statusConfig = CONTRATO_STATUS_CONFIG[contrato.status];
               const rubricasVinculadas = getRubricasVinculadas(contrato.id);
               const hasRubricas = rubricasVinculadas.length > 0;
               const isExpanded = expandedContratos.has(contrato.id);
+              const avaliacaoNota = contrato.avaliacao?.nota || 0;
 
               return (
                 <>
@@ -144,6 +182,17 @@ export function FornecedorContractsTable({ contratos, fornecedor }: FornecedorCo
                     </td>
 
                     <td className="px-4 py-3">
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <StarRating
+                          nota={avaliacaoNota}
+                          onRatingChange={(nota) => handleAvaliacaoChange(contrato.id, nota)}
+                          size="sm"
+                          showValue={avaliacaoNota > 0}
+                        />
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
                       <span className="text-sm font-medium text-gray-900">
                         {formatCurrency(contrato.valorTotal)}
                       </span>
@@ -173,7 +222,7 @@ export function FornecedorContractsTable({ contratos, fornecedor }: FornecedorCo
                   {/* Linha expandida com rubricas */}
                   {isExpanded && hasRubricas && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 bg-gray-50">
+                      <td colSpan={7} className="px-4 py-4 bg-gray-50">
                         <RubricasVinculadas rubricas={rubricasVinculadas} />
                       </td>
                     </tr>
