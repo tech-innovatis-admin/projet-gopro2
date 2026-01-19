@@ -1017,6 +1017,14 @@ export function getMunicipiosByUF(uf: string): string[] {
   return [...new Set([...predefinidos, ...dosFornecedores])].sort();
 }
 
+/**
+ * Retorna lista de todos os municípios únicos de todos os fornecedores
+ */
+export function getAllMunicipios(): string[] {
+  const municipios = MOCK_FORNECEDORES.map((f) => f.municipio);
+  return [...new Set(municipios)].sort();
+}
+
 // Importando constantes de tipos para uso no mock
 import { MUNICIPIOS_POR_UF } from "./types";
 
