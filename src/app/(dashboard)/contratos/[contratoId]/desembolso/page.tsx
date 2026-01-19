@@ -7,11 +7,14 @@ import { ResizableTable } from "@/components/ui/resizable-table";
 import { mockContrato } from "../types";
 import { MoneyInput } from "./_components/MoneyImput";
 
+type StatusDesembolso = 0 | 1 | 2 | 3; // 0=previsto, 1=parcial, 2=recebido, 3=cancelado
+
 type ParcelaPrevista = {
   id: string;
   numero: number;
   dataPrevista: string; // yyyy-mm-dd
   valorPrevisto: number;
+  status: StatusDesembolso;
   observacao?: string;
 };
 
@@ -22,6 +25,7 @@ const parcelasMock: ParcelaPrevista[] = [
     numero: 1,
     dataPrevista: "2025-02-15",
     valorPrevisto: 350000,
+    status: 2, // recebido
     observacao: "Parcela inicial",
   },
   {
@@ -29,6 +33,7 @@ const parcelasMock: ParcelaPrevista[] = [
     numero: 2,
     dataPrevista: "2025-06-15",
     valorPrevisto: 450000,
+    status: 1, // parcial
     observacao: "Parcela intermediária",
   },
   {
@@ -36,6 +41,7 @@ const parcelasMock: ParcelaPrevista[] = [
     numero: 3,
     dataPrevista: "2025-12-15",
     valorPrevisto: 450000,
+    status: 0, // previsto
     observacao: "Parcela final",
   },
 ];
@@ -52,6 +58,29 @@ const formatDate = (dateStr: string | null) => {
 const formatOrdinal = (num: number): string => {
   return `${num}º`;
 };
+
+const statusOptions: { value: StatusDesembolso; label: string; color: string }[] = [
+  { value: 0, label: "Previsto", color: "bg-gray-100 text-gray-800" },
+  { value: 1, label: "Parcial", color: "bg-blue-100 text-blue-800" },
+  { value: 2, label: "Recebido", color: "bg-green-100 text-green-800" },
+  { value: 3, label: "Cancelado", color: "bg-red-100 text-red-800" },
+];
+
+const getStatusLabel = (status: StatusDesembolso): string => {
+  return statusOptions.find((opt) => opt.value === status)?.label || "Desconhecido";
+};
+
+const getStatusColor = (status: StatusDesembolso): string => {
+  return statusOptions.find((opt) => opt.value === status)?.color || "bg-gray-100 text-gray-800";
+};
+
+function StatusBadge({ status }: { status: StatusDesembolso }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+      {getStatusLabel(status)}
+    </span>
+  );
+}
 
 const parseNumber = (v: unknown) => {
   const n = typeof v === "number" ? v : Number(v);
@@ -92,6 +121,7 @@ export default function DesembolsoPage() {
   const [newParcela, setNewParcela] = useState<Partial<ParcelaPrevista>>({
     dataPrevista: "",
     valorPrevisto: 0,
+    status: 0, // previsto por padrão
     observacao: "",
   });
 
@@ -123,7 +153,7 @@ export default function DesembolsoPage() {
     setIsAdding(false);
     setEditingId(null);
     setEditForm(null);
-    setNewParcela({ dataPrevista: "", valorPrevisto: 0, observacao: "" });
+    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
   };
 
   const handleSave = async () => {
@@ -147,11 +177,12 @@ export default function DesembolsoPage() {
       numero: editParcelas.length + 1,
       dataPrevista: newParcela.dataPrevista!,
       valorPrevisto: parseNumber(newParcela.valorPrevisto),
+      status: newParcela.status ?? 0,
       observacao: newParcela.observacao || "",
     };
 
     setEditParcelas(sortAndRenumber([...editParcelas, novaParcela]));
-    setNewParcela({ dataPrevista: "", valorPrevisto: 0, observacao: "" });
+    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
     setIsAdding(false);
   };
 
@@ -318,12 +349,12 @@ export default function DesembolsoPage() {
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
               <h4 className="font-medium text-[#004225]">Nova Desembolso</h4>
-              <p className="text-xs text-[#004225]/80 mt-0.5">Informe data e valor previsto. Observação é opcional.</p>
+              <p className="text-xs text-[#004225]/80 mt-0.5">Informe data, valor previsto e status. Observação é opcional.</p>
             </div>
             <button
               onClick={() => {
                 setIsAdding(false);
-                setNewParcela({ dataPrevista: "", valorPrevisto: 0, observacao: "" });
+                setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
               }}
               className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
@@ -357,6 +388,23 @@ export default function DesembolsoPage() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={newParcela.status ?? 0}
+                onChange={(e) => setNewParcela({ ...newParcela, status: Number(e.target.value) as StatusDesembolso })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
+              >
+                {statusOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="md:col-span-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Observação</label>
               <input
@@ -373,7 +421,7 @@ export default function DesembolsoPage() {
             <button
               onClick={() => {
                 setIsAdding(false);
-                setNewParcela({ dataPrevista: "", valorPrevisto: 0, observacao: "" });
+                setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
               }}
               className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
             >
@@ -406,8 +454,8 @@ export default function DesembolsoPage() {
         </div>
       ) : (
         <ResizableTable
-          columnCount={isEditing ? 6 : 5}
-          defaultWidths={[80, 160, 180, 140, 320, ...(isEditing ? [120] : [])]}
+          columnCount={isEditing ? 7 : 6}
+          defaultWidths={[80, 160, 180, 140, 140, 320, ...(isEditing ? [120] : [])]}
           minColumnWidth={90}
         >
           <thead>
@@ -415,6 +463,7 @@ export default function DesembolsoPage() {
               <th className="text-center py-3 px-4 font-medium text-gray-600">Desembolsos</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Data prevista</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
+              <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">% do total</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
               {isEditing && <th className="text-center py-3 px-4 font-medium text-gray-600">Ações</th>}
@@ -445,6 +494,19 @@ export default function DesembolsoPage() {
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                         />
                       </td>
+                      <td className="py-3 px-4 text-center">
+                        <select
+                          value={editForm.status}
+                          onChange={(e) => setEditForm({ ...editForm, status: Number(e.target.value) as StatusDesembolso })}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
+                        >
+                          {statusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="py-3 px-4 text-center text-gray-700 font-medium">
                         {valorTotalContrato > 0 ? `${((editForm.valorPrevisto / valorTotalContrato) * 100).toFixed(1)}%` : "—"}
                       </td>
@@ -474,6 +536,9 @@ export default function DesembolsoPage() {
                       <td className="py-3 px-4 font-medium text-gray-500 text-center">{formatOrdinal(parcela.numero)}</td>
                       <td className="py-3 px-4 text-center text-gray-700">{formatDate(parcela.dataPrevista)}</td>
                       <td className="py-3 px-4 text-center font-semibold text-gray-900">{formatCurrency(parcela.valorPrevisto)}</td>
+                      <td className="py-3 px-4 text-center">
+                        <StatusBadge status={parcela.status} />
+                      </td>
                       <td className="py-3 px-4 text-center text-gray-700 font-medium">{valorTotalContrato > 0 ? `${parcelaPercentual.toFixed(1)}%` : "—"}</td>
                       <td className="py-3 px-4 text-gray-700">{parcela.observacao ? parcela.observacao : <span className="text-gray-400">—</span>}</td>
                       {isEditing && (
@@ -509,6 +574,7 @@ export default function DesembolsoPage() {
                 Totais:
               </td>
               <td className="py-3 px-4 text-center text-gray-900">{formatCurrency(totalPrevisto)}</td>
+              <td className="py-3 px-4 text-center text-gray-500">—</td>
               <td className="py-3 px-4 text-center text-gray-700">
                 {valorTotalContrato > 0 ? `${Math.min(percentualPrevisto, 999).toFixed(1)}%` : "—"}
               </td>
