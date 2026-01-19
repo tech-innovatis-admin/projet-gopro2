@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,14 +29,6 @@ import {
   Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface NavItem {
-  label: string;
-  href?: string;
-  icon?: React.ComponentType<{ className?: string }>;
-  children?: NavItem[];
-  submenu?: NavItem[]; // Submenu lateral (nível 2)
-}
 
 interface NavItem {
   label: string;
@@ -91,6 +83,7 @@ const navigationItems: NavItem[] = [
 
 export function NavBar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -163,6 +156,25 @@ export function NavBar() {
   const NavItemComponent = ({ item, isMobile = false }: { item: NavItem; isMobile?: boolean }) => {
     const hasChildren = item.children && item.children.length > 0;
     const isOpen = openDropdowns.includes(item.label);
+    
+    // Verifica se o item está ativo
+    const isActive = item.href 
+      ? pathname === item.href || (item.href !== "/home" && pathname.startsWith(item.href))
+      : false;
+    
+    // Verifica se algum child está ativo (para itens com dropdown)
+    const hasActiveChild = hasChildren && item.children?.some(child => {
+      if (child.href && !child.href.startsWith('modal:')) {
+        return pathname === child.href || pathname.startsWith(child.href);
+      }
+      // Verifica submenu também
+      if (child.submenu) {
+        return child.submenu.some(subItem => 
+          subItem.href && (pathname === subItem.href || pathname.startsWith(subItem.href))
+        );
+      }
+      return false;
+    });
 
     const handleClick = (href: string) => {
       if (href.startsWith('modal:')) {
@@ -182,7 +194,7 @@ export function NavBar() {
             className={cn(
               "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-900 group",
               isMobile ? "w-full justify-between" : "",
-              isOpen ? "bg-zinc-100 text-zinc-900" : "text-zinc-600"
+              isOpen || hasActiveChild ? "bg-[#004225]/10 text-[#004225] font-semibold" : "text-zinc-600"
             )}
           >
             {item.icon && <item.icon className="h-4 w-4" />}
@@ -219,6 +231,11 @@ export function NavBar() {
                 const isModal = child.href?.startsWith('modal:');
                 const hasSubmenu = child.submenu && child.submenu.length > 0;
                 const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
+                
+                // Verifica se o child está ativo
+                const isChildActive = child.href && !isModal
+                  ? pathname === child.href || pathname.startsWith(child.href)
+                  : false;
                 
                 if (isModal) {
                   return (
@@ -262,10 +279,13 @@ export function NavBar() {
                   >
                     <div
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
+                        "flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150",
                         index === 0 ? "pt-4" : "",
                         index === item.children!.length - 1 ? "pb-4" : "",
-                        hasSubmenu && isSubmenuOpen && "bg-zinc-50"
+                        isChildActive 
+                          ? "bg-[#004225]/10 text-[#004225] font-semibold" 
+                          : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900",
+                        hasSubmenu && isSubmenuOpen && !isChildActive && "bg-zinc-50"
                       )}
                     >
                       {child.href ? (
@@ -311,14 +331,22 @@ export function NavBar() {
                           }, 200);
                         }}
                       >
-                        {child.submenu?.map((subItem, subIndex) => (
+                        {child.submenu?.map((subItem, subIndex) => {
+                          const isSubItemActive = subItem.href 
+                            ? pathname === subItem.href || pathname.startsWith(subItem.href)
+                            : false;
+                          
+                          return (
                           <Link
                             key={subItem.href || subItem.label}
                             href={subItem.href || "#"}
                             className={cn(
-                              "flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150",
+                              "flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150",
                               subIndex === 0 ? "pt-4" : "",
-                              subIndex === child.submenu!.length - 1 ? "pb-4" : ""
+                              subIndex === child.submenu!.length - 1 ? "pb-4" : "",
+                              isSubItemActive
+                                ? "bg-[#004225]/10 text-[#004225] font-semibold"
+                                : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
                             )}
                             onClick={() => {
                               setOpenDropdowns([]);
@@ -328,7 +356,8 @@ export function NavBar() {
                             {subItem.icon && <subItem.icon className="h-4 w-4" />}
                             <span>{subItem.label}</span>
                           </Link>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -344,6 +373,11 @@ export function NavBar() {
                 const isModal = child.href?.startsWith('modal:');
                 const hasSubmenu = child.submenu && child.submenu.length > 0;
                 const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
+                
+                // Verifica se o child está ativo (mobile)
+                const isChildActiveMobile = child.href && !isModal
+                  ? pathname === child.href || pathname.startsWith(child.href)
+                  : false;
                 
                 if (isModal) {
                   return (
@@ -381,11 +415,21 @@ export function NavBar() {
                         </button>
                         {isSubmenuOpen && child.submenu && (
                           <div className="ml-6 mt-1 space-y-1 border-l-2 border-zinc-200 pl-4">
-                            {child.submenu.map((subItem) => (
+                            {child.submenu.map((subItem) => {
+                              const isSubItemActiveMobile = subItem.href 
+                                ? pathname === subItem.href || pathname.startsWith(subItem.href)
+                                : false;
+                              
+                              return (
                               <Link
                                 key={subItem.href || subItem.label}
                                 href={subItem.href || "#"}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
+                                className={cn(
+                                  "flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors duration-150",
+                                  isSubItemActiveMobile
+                                    ? "text-[#004225] font-semibold bg-[#004225]/10"
+                                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+                                )}
                                 onClick={() => {
                                   setMobileMenuOpen(false);
                                   setOpenSubmenu(null);
@@ -394,14 +438,20 @@ export function NavBar() {
                                 {subItem.icon && <subItem.icon className="h-4 w-4" />}
                                 <span>{subItem.label}</span>
                               </Link>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
                     ) : (
                       <Link
                         href={child.href || "#"}
-                        className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-md transition-colors duration-150"
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors duration-150",
+                          isChildActiveMobile
+                            ? "text-[#004225] font-semibold bg-[#004225]/10"
+                            : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                        )}
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         {child.icon && <child.icon className="h-4 w-4" />}
@@ -422,7 +472,8 @@ export function NavBar() {
         href={item.href || "#"}
         className={cn(
           "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-900",
-          isMobile ? "w-full" : ""
+          isMobile ? "w-full" : "",
+          isActive && "text-[#004225] font-semibold bg-[#004225]/10"
         )}
         onClick={() => isMobile && setMobileMenuOpen(false)}
       >
@@ -471,7 +522,7 @@ export function NavBar() {
                     variant="ghost"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg transition-colors duration-200"
                   >
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold text-sm">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#004225] to-[#00B894] flex items-center justify-center text-white font-semibold text-sm">
                       A
                     </div>
                     <span className="hidden sm:block">Admin</span>
