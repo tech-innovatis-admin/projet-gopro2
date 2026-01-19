@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from "@radix-ui/react-dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   Command,
   ChevronDown,
@@ -27,6 +27,8 @@ import {
   Shield,
   FileCodeIcon,
   Bell,
+  Lock,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +82,57 @@ const navigationItems: NavItem[] = [
     ],
   },
 ];
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Verifica se uma rota está ativa baseada no pathname atual
+ * @param href - URL a ser verificada
+ * @param pathname - Pathname atual da rota
+ * @returns true se a rota está ativa
+ */
+function isActive(href: string | undefined, pathname: string): boolean {
+  if (!href) return false;
+  if (href.startsWith('modal:')) return false;
+  
+  // Para /home, apenas match exato
+  if (href === "/home") {
+    return pathname === href;
+  }
+  
+  // Para outras rotas, match exato ou começa com o href
+  return pathname === href || pathname.startsWith(href);
+}
+
+/**
+ * Verifica se algum child está ativo
+ */
+function hasActiveChild(children: NavItem[] | undefined, pathname: string): boolean {
+  if (!children) return false;
+  
+  return children.some(child => {
+    if (child.href && !child.href.startsWith('modal:')) {
+      return isActive(child.href, pathname);
+    }
+    // Verifica submenu também
+    if (child.submenu) {
+      return child.submenu.some(subItem => isActive(subItem.href, pathname));
+    }
+    return false;
+  });
+}
+
+/**
+ * Dispara evento customizado para abrir modal
+ * @param modalName - Nome do modal a ser aberto
+ */
+function openModal(modalName: string): void {
+  window.dispatchEvent(new CustomEvent('open-modal', { 
+    detail: { modalName } 
+  }));
+}
 
 export function NavBar() {
   const router = useRouter();
@@ -156,31 +209,13 @@ export function NavBar() {
   const NavItemComponent = ({ item, isMobile = false }: { item: NavItem; isMobile?: boolean }) => {
     const hasChildren = item.children && item.children.length > 0;
     const isOpen = openDropdowns.includes(item.label);
-    
-    // Verifica se o item está ativo
-    const isActive = item.href 
-      ? pathname === item.href || (item.href !== "/home" && pathname.startsWith(item.href))
-      : false;
-    
-    // Verifica se algum child está ativo (para itens com dropdown)
-    const hasActiveChild = hasChildren && item.children?.some(child => {
-      if (child.href && !child.href.startsWith('modal:')) {
-        return pathname === child.href || pathname.startsWith(child.href);
-      }
-      // Verifica submenu também
-      if (child.submenu) {
-        return child.submenu.some(subItem => 
-          subItem.href && (pathname === subItem.href || pathname.startsWith(subItem.href))
-        );
-      }
-      return false;
-    });
+    const itemIsActive = isActive(item.href, pathname);
+    const itemHasActiveChild = hasActiveChild(item.children, pathname);
 
     const handleClick = (href: string) => {
       if (href.startsWith('modal:')) {
         const modalName = href.replace('modal:', '');
-        // Dispara evento customizado para abrir o modal
-        window.dispatchEvent(new CustomEvent('open-modal', { detail: { modalName } }));
+        openModal(modalName);
         setOpenDropdowns([]);
         if (isMobile) setMobileMenuOpen(false);
       }
@@ -194,7 +229,7 @@ export function NavBar() {
             className={cn(
               "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-900 group",
               isMobile ? "w-full justify-between" : "",
-              isOpen || hasActiveChild ? "bg-[#004225]/10 text-[#004225] font-semibold" : "text-zinc-600"
+              isOpen || itemHasActiveChild ? "bg-[#004225]/10 text-[#004225] font-semibold" : "text-zinc-600"
             )}
           >
             {item.icon && <item.icon className="h-4 w-4" />}
@@ -231,11 +266,7 @@ export function NavBar() {
                 const isModal = child.href?.startsWith('modal:');
                 const hasSubmenu = child.submenu && child.submenu.length > 0;
                 const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
-                
-                // Verifica se o child está ativo
-                const isChildActive = child.href && !isModal
-                  ? pathname === child.href || pathname.startsWith(child.href)
-                  : false;
+                const childIsActive = isActive(child.href, pathname);
                 
                 if (isModal) {
                   return (
@@ -282,10 +313,10 @@ export function NavBar() {
                         "flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150",
                         index === 0 ? "pt-4" : "",
                         index === item.children!.length - 1 ? "pb-4" : "",
-                        isChildActive 
+                        childIsActive 
                           ? "bg-[#004225]/10 text-[#004225] font-semibold" 
                           : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900",
-                        hasSubmenu && isSubmenuOpen && !isChildActive && "bg-zinc-50"
+                        hasSubmenu && isSubmenuOpen && !childIsActive && "bg-zinc-50"
                       )}
                     >
                       {child.href ? (
@@ -332,9 +363,7 @@ export function NavBar() {
                         }}
                       >
                         {child.submenu?.map((subItem, subIndex) => {
-                          const isSubItemActive = subItem.href 
-                            ? pathname === subItem.href || pathname.startsWith(subItem.href)
-                            : false;
+                          const subItemIsActive = isActive(subItem.href, pathname);
                           
                           return (
                           <Link
@@ -344,7 +373,7 @@ export function NavBar() {
                               "flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150",
                               subIndex === 0 ? "pt-4" : "",
                               subIndex === child.submenu!.length - 1 ? "pb-4" : "",
-                              isSubItemActive
+                              subItemIsActive
                                 ? "bg-[#004225]/10 text-[#004225] font-semibold"
                                 : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
                             )}
@@ -373,11 +402,7 @@ export function NavBar() {
                 const isModal = child.href?.startsWith('modal:');
                 const hasSubmenu = child.submenu && child.submenu.length > 0;
                 const isSubmenuOpen = openSubmenu === `${item.label}-${child.label}`;
-                
-                // Verifica se o child está ativo (mobile)
-                const isChildActiveMobile = child.href && !isModal
-                  ? pathname === child.href || pathname.startsWith(child.href)
-                  : false;
+                const childIsActiveMobile = isActive(child.href, pathname);
                 
                 if (isModal) {
                   return (
@@ -416,9 +441,7 @@ export function NavBar() {
                         {isSubmenuOpen && child.submenu && (
                           <div className="ml-6 mt-1 space-y-1 border-l-2 border-zinc-200 pl-4">
                             {child.submenu.map((subItem) => {
-                              const isSubItemActiveMobile = subItem.href 
-                                ? pathname === subItem.href || pathname.startsWith(subItem.href)
-                                : false;
+                              const subItemIsActiveMobile = isActive(subItem.href, pathname);
                               
                               return (
                               <Link
@@ -426,7 +449,7 @@ export function NavBar() {
                                 href={subItem.href || "#"}
                                 className={cn(
                                   "flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors duration-150",
-                                  isSubItemActiveMobile
+                                  subItemIsActiveMobile
                                     ? "text-[#004225] font-semibold bg-[#004225]/10"
                                     : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
                                 )}
@@ -448,7 +471,7 @@ export function NavBar() {
                         href={child.href || "#"}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors duration-150",
-                          isChildActiveMobile
+                          childIsActiveMobile
                             ? "text-[#004225] font-semibold bg-[#004225]/10"
                             : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
                         )}
@@ -473,7 +496,7 @@ export function NavBar() {
         className={cn(
           "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-900",
           isMobile ? "w-full" : "",
-          isActive && "text-[#004225] font-semibold bg-[#004225]/10"
+          itemIsActive && "text-[#004225] font-semibold bg-[#004225]/10"
         )}
         onClick={() => isMobile && setMobileMenuOpen(false)}
       >
@@ -506,6 +529,7 @@ export function NavBar() {
           <div className="flex items-center gap-3">
             {/* Notifications */}
             <button
+              onClick={() => router.push("/notificacoes")}
               className="relative p-2 text-[#004225] hover:text-white hover:bg-[#31938A] rounded-lg transition-colors duration-200"
               aria-label="Notificações"
             >
@@ -531,23 +555,48 @@ export function NavBar() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-56 mt-2 bg-white border border-zinc-200 rounded-lg shadow-lg p-1 animate-in slide-in-from-top-2 duration-200"
+                  className="w-56 bg-white border border-zinc-200 rounded-lg shadow-lg p-1"
                 >
                   <DropdownMenuItem 
                     onClick={() => router.push("/perfil")}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150"
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
                   >
                     <User className="h-4 w-4" />
                     <span>Perfil</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 rounded-md cursor-pointer transition-colors duration-150">
+                  <DropdownMenuItem 
+                    onClick={() => router.push("/configuracoes")}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
+                  >
                     <Settings className="h-4 w-4" />
                     <span>Configurações</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator className="my-1 h-px bg-zinc-200" />
+                  <DropdownMenuItem 
+                    onClick={() => router.push("/notificacoes")}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span>Notificações</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => router.push("/perfil/alterar-senha")}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
+                  >
+                    <Lock className="h-4 w-4" />
+                    <span>Alterar senha</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => router.push("/suporte")}
+                    className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Suporte</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-1" />
                   <DropdownMenuItem
                     onClick={handleLogout}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md cursor-pointer transition-colors duration-150"
+                    variant="destructive"
+                    className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>Sair</span>
