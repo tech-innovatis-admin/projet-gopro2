@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { X, FileText, Calendar, MapPin, User, Building2, Tag, AlertCircle } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { X, FileText, Calendar, MapPin, User, Building2, Tag, AlertCircle, DollarSign, FileText as FileTextIcon } from "lucide-react";
+import { getOrganizationsFinanciadoras, getOrganizationsParceiras } from "../mockData";
 
 // Tipos
 type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
@@ -12,13 +13,15 @@ type NovoContratoForm = {
   govIf: "IF" | "Gov" | "";
   status: ContratoStatus | "";
   coordenador: string;
-  parceiro: string;
-  orgaoFinanciador: string;
+  parceiroId: string; // MUDADO: agora é ID em vez de string
+  orgaoFinanciadorId: string; // MUDADO: agora é ID em vez de string
   segmentos: string[];
   tipo: ContratoTipo | "";
   dataInicio: string;
   dataFim: string;
   localidade: string;
+  scope: string; // Objeto do Contrato
+  contract_value: string; // Valor do Projeto (formato de moeda)
 };
 
 type FormErrors = Partial<Record<keyof NovoContratoForm, string>>;
@@ -29,17 +32,8 @@ interface NovoContratoModalProps {
   onSubmit?: (data: NovoContratoForm) => Promise<void> | void;
 }
 
-// Lista de parceiros (mock - pode ser substituída por dados da API)
-const parceirosDisponiveis = [
-  "Fapto",
-  "Fadex",
-  "IFMA",
-  "Fundação de Apoio à Pesquisa",
-  "Fundação Araucária",
-  "Fundação UFRGS",
-  "Fundação XYZ",
-  "IFES-MG",
-];
+// Organizações disponíveis (agora usando IDs)
+// Serão carregadas via useMemo dentro do componente
 
 const statusOptions: { value: ContratoStatus; label: string }[] = [
   { value: "EM_ANDAMENTO", label: "Em Execução" },
@@ -75,13 +69,15 @@ const initialFormState: NovoContratoForm = {
   govIf: "",
   status: "",
   coordenador: "",
-  parceiro: "",
-  orgaoFinanciador: "",
+  parceiroId: "", // MUDADO
+  orgaoFinanciadorId: "", // MUDADO
   segmentos: [],
   tipo: "",
   dataInicio: "",
   dataFim: "",
   localidade: "",
+  scope: "",
+  contract_value: "",
 };
 
 export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoModalProps) {
@@ -92,6 +88,10 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
   
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Carregar organizações disponíveis
+  const organizacoesFinanciadoras = useMemo(() => getOrganizationsFinanciadoras(), []);
+  const organizacoesParceiras = useMemo(() => getOrganizationsParceiras(), []);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -148,11 +148,11 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
       case "coordenador":
         if (typeof value !== "string" || !value.trim()) return "O nome do coordenador é obrigatório";
         return "";
-      case "parceiro":
+      case "parceiroId":
         if (typeof value !== "string" || !value.trim()) return "Selecione um parceiro";
         return "";
-      case "orgaoFinanciador":
-        if (typeof value !== "string" || !value.trim()) return "Informe o órgão financiador";
+      case "orgaoFinanciadorId":
+        if (typeof value !== "string" || !value.trim()) return "Selecione o órgão financiador";
         return "";
       case "segmentos":
         if (!Array.isArray(value) || value.length === 0) return "Selecione ao menos um segmento";
@@ -167,6 +167,16 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
         return "";
       case "localidade":
         if (typeof value !== "string" || !value.trim()) return "A localidade é obrigatória";
+        return "";
+      case "scope":
+        if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
+        if (value.trim().length < 10) return "O objeto do contrato deve ter pelo menos 10 caracteres";
+        return "";
+      case "contract_value":
+        if (typeof value !== "string" || !value.trim()) return "O valor do projeto é obrigatório";
+        // Verificar se o valor formatado contém números
+        const numericValue = value.replace(/\D/g, "");
+        if (!numericValue || parseInt(numericValue, 10) <= 0) return "Informe um valor válido maior que zero";
         return "";
       default:
         return "";
@@ -189,13 +199,46 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
     return isValid;
   };
 
-  const handleChange = (name: keyof NovoContratoForm, value: string) => {
-    setForm((prev) => ({ ...prev, [name]: value }));
+  // Função para formatar valor monetário
+  const formatCurrency = (value: string): string => {
+    // Remove tudo que não é dígito
+    const onlyNumbers = value.replace(/\D/g, "");
+    if (!onlyNumbers) return "";
+
+    // Converte para número e divide por 100 para ter centavos
+    const numberValue = parseInt(onlyNumbers, 10) / 100;
     
-    // Clear error when user starts typing
-    if (touched.has(name)) {
-      const error = validateField(name, value);
-      setErrors((prev) => ({ ...prev, [name]: error }));
+    // Formata como moeda brasileira
+    return numberValue.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  // Função para converter valor formatado para número (em centavos)
+  const parseCurrencyToCents = (formattedValue: string): number => {
+    const onlyNumbers = formattedValue.replace(/\D/g, "");
+    return parseInt(onlyNumbers, 10) || 0;
+  };
+
+  const handleChange = (name: keyof NovoContratoForm, value: string) => {
+    // Se for contract_value, formata como moeda
+    if (name === "contract_value") {
+      const formatted = formatCurrency(value);
+      setForm((prev) => ({ ...prev, [name]: formatted }));
+      
+      if (touched.has(name)) {
+        const error = validateField(name, formatted);
+        setErrors((prev) => ({ ...prev, [name]: error }));
+      }
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+      
+      // Clear error when user starts typing
+      if (touched.has(name)) {
+        const error = validateField(name, value);
+        setErrors((prev) => ({ ...prev, [name]: error }));
+      }
     }
   };
 
@@ -431,15 +474,15 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
             <FormField
               label="Parceiro"
               required
-              error={errors.parceiro}
+              error={errors.parceiroId}
               icon={<Building2 className="h-4 w-4" />}
             >
               <select
-                value={form.parceiro}
-                onChange={(e) => handleChange("parceiro", e.target.value)}
-                onBlur={() => handleBlur("parceiro")}
+                value={form.parceiroId}
+                onChange={(e) => handleChange("parceiroId", e.target.value)}
+                onBlur={() => handleBlur("parceiroId")}
                 className={`w-full h-11 px-4 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 transition-colors appearance-none cursor-pointer ${
-                  errors.parceiro
+                  errors.parceiroId
                     ? "border-red-300 focus:border-red-500"
                     : "border-gray-300 focus:border-[#004225]"
                 }`}
@@ -452,9 +495,9 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                 }}
               >
                 <option value="">Selecione um parceiro...</option>
-                {parceirosDisponiveis.map((parceiro) => (
-                  <option key={parceiro} value={parceiro}>
-                    {parceiro}
+                {organizacoesParceiras.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name} {org.cnpj && `(${org.cnpj})`}
                   </option>
                 ))}
               </select>
@@ -464,21 +507,33 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
             <FormField
               label="Órgão Financiador"
               required
-              error={errors.orgaoFinanciador}
+              error={errors.orgaoFinanciadorId}
               icon={<Building2 className="h-4 w-4" />}
             >
-              <input
-                type="text"
-                value={form.orgaoFinanciador}
-                onChange={(e) => handleChange("orgaoFinanciador", e.target.value)}
-                onBlur={() => handleBlur("orgaoFinanciador")}
-                placeholder="Ex.: Ministério da Ciência ou Prefeitura de São Paulo"
-                className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                  errors.orgaoFinanciador
+              <select
+                value={form.orgaoFinanciadorId}
+                onChange={(e) => handleChange("orgaoFinanciadorId", e.target.value)}
+                onBlur={() => handleBlur("orgaoFinanciadorId")}
+                className={`w-full h-11 px-4 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 transition-colors appearance-none cursor-pointer ${
+                  errors.orgaoFinanciadorId
                     ? "border-red-300 focus:border-red-500"
                     : "border-gray-300 focus:border-[#004225]"
                 }`}
-              />
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: "right 0.75rem center",
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "1.25rem",
+                  paddingRight: "2.5rem",
+                }}
+              >
+                <option value="">Selecione o órgão financiador...</option>
+                {organizacoesFinanciadoras.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name} {org.cnpj && `(${org.cnpj})`}
+                  </option>
+                ))}
+              </select>
             </FormField>
 
             {/* Segmento do Contrato */}
@@ -571,6 +626,51 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                     : "border-gray-300 focus:border-[#004225]"
                 }`}
               />
+            </FormField>
+
+            {/* Objeto do Contrato (Scope) */}
+            <FormField
+              label="Objeto do Contrato"
+              required
+              error={errors.scope}
+              icon={<FileTextIcon className="h-4 w-4" />}
+            >
+              <textarea
+                value={form.scope}
+                onChange={(e) => handleChange("scope", e.target.value)}
+                onBlur={() => handleBlur("scope")}
+                placeholder="Descreva o objeto/escopo do contrato..."
+                rows={4}
+                className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 resize-none ${
+                  errors.scope
+                    ? "border-red-300 focus:border-red-500"
+                    : "border-gray-300 focus:border-[#004225]"
+                }`}
+              />
+            </FormField>
+
+            {/* Valor do Projeto */}
+            <FormField
+              label="Valor do Projeto"
+              required
+              error={errors.contract_value}
+              icon={<DollarSign className="h-4 w-4" />}
+            >
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">R$</span>
+                <input
+                  type="text"
+                  value={form.contract_value}
+                  onChange={(e) => handleChange("contract_value", e.target.value)}
+                  onBlur={() => handleBlur("contract_value")}
+                  placeholder="0,00"
+                  className={`w-full h-11 pl-10 pr-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                    errors.contract_value
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
+                />
+              </div>
             </FormField>
           </div>
 
