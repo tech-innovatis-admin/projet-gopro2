@@ -265,6 +265,22 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
+  // Função auxiliar para transformar dados do formulário para formato do backend
+  const transformFormToBackend = (formData: NovoContratoForm) => {
+    return {
+      ...formData,
+      // Converter segmentos de array para string
+      segmentos: formData.segmentos.join(", "),
+      // Converter contract_value de string formatada para número (em centavos)
+      contract_value: parseFloat(
+        formData.contract_value.replace(/\./g, "").replace(",", ".")
+      ) || 0,
+      // Converter IDs de string para número
+      parceiroId: parseInt(formData.parceiroId),
+      orgaoFinanciadorId: parseInt(formData.orgaoFinanciadorId),
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -275,8 +291,12 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
 
     setIsSubmitting(true);
     try {
+      // Transformar dados para formato do backend
+      const transformedData = transformFormToBackend(form);
+
       if (onSubmit) {
-        await onSubmit(form);
+        // Passar dados transformados (fazendo cast para compatibilidade com tipo esperado)
+        await onSubmit(transformedData as unknown as NovoContratoForm);
       }
       // Simular delay de envio se não houver onSubmit
       await new Promise((resolve) => setTimeout(resolve, 500));
