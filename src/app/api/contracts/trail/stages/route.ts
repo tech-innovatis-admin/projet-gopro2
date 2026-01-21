@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // =============================================================================
-// GET /api/contracts/initiation/stages
+// GET /api/contracts/trail/stages
 // Retorna todas as etapas do funil de iniciação ordenadas por order
+// Tabela: contract_initiation_stages
 // =============================================================================
 
 export async function GET(request: NextRequest) {
@@ -81,8 +82,9 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================================================
-// PUT /api/contracts/initiation/stages
+// PUT /api/contracts/trail/stages
 // Atualiza as etapas do funil (criar, editar, deletar)
+// Tabela: contract_initiation_stages
 // =============================================================================
 
 export async function PUT(request: NextRequest) {

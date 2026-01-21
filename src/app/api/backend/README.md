@@ -23,55 +23,132 @@ src/app/api/
 │   └── types.ts                    # Tipos TypeScript compartilhados
 │
 └── backend/                         # Proxies para recursos do Swagger
-    ├── projects/                   # Projetos
+    │
+    ├── # ===== RECURSOS PRINCIPAIS =====
+    │
+    ├── projects/                   # Projetos/Contratos
     │   ├── route.ts               # GET, POST /api/backend/projects
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/projects/:id
+    │   └── [id]/route.ts          # GET, PUT, DELETE /api/backend/projects/:id
     │
     ├── organizations/              # Organizações (parceiros, financiadores)
     │   ├── route.ts               # GET, POST /api/backend/organizations
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/organizations/:id
+    │   └── [id]/route.ts          # GET, PUT, DELETE /api/backend/organizations/:id
     │
     ├── peoples/                    # Pessoas (equipe técnica, membros)
     │   ├── route.ts               # GET, POST /api/backend/peoples
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/peoples/:id
-    │
-    ├── budget-categories/         # Categorias orçamentárias
-    │   ├── route.ts               # GET, POST /api/backend/budget-categories
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/budget-categories/:id
-    │
-    ├── budget-item/               # Itens de orçamento (rubricas)
-    │   ├── route.ts               # GET, POST /api/backend/budget-item
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/budget-item/:id
+    │   └── [id]/route.ts          # GET, PUT, DELETE /api/backend/peoples/:id
     │
     ├── documents/                 # Documentos anexados
     │   ├── route.ts               # GET, POST /api/backend/documents
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/documents/:id
+    │   └── [id]/route.ts         # GET, PUT, DELETE /api/backend/documents/:id
+    │
+    ├── # ===== FINANCEIRO =====
+    │
+    ├── budget-categories/         # Categorias orçamentárias
+    │   ├── route.ts               # GET, POST /api/backend/budget-categories
+    │   └── [id]/route.ts         # GET, PUT, DELETE /api/backend/budget-categories/:id
+    │
+    ├── budget-item/               # Itens de orçamento (rubricas)
+    │   ├── route.ts               # GET, POST /api/backend/budget-item
+    │   └── [id]/route.ts         # GET, PUT, DELETE /api/backend/budget-item/:id
     │
     ├── disbursement-schedule/    # Cronograma de desembolsos
     │   ├── route.ts               # GET, POST /api/backend/disbursement-schedule
-    │   └── [id]/
-    │       └── route.ts           # GET, PUT, DELETE /api/backend/disbursement-schedule/:id
+    │   └── [id]/route.ts         # GET, PUT, DELETE /api/backend/disbursement-schedule/:id
+    │
+    ├── income/                   # Receitas/Entradas financeiras
+    │   ├── route.ts              # GET, POST /api/backend/income
+    │   └── [id]/route.ts         # GET, PUT, DELETE /api/backend/income/:id
+    │
+    ├── expenses/                 # Despesas
+    │   ├── route.ts              # GET, POST /api/backend/expenses
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/expenses/:id
+    │
+    ├── budget-transfers/         # Remanejamentos orçamentários
+    │   ├── route.ts              # GET, POST /api/backend/budget-transfers
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/budget-transfers/:id
+    │
+    ├── # ===== RELACIONAMENTOS =====
     │
     ├── project-people/           # Relacionamento Projeto ↔ Pessoa
     │   ├── route.ts              # GET, POST /api/backend/project-people
-    │   └── [id]/
-    │       └── route.ts          # GET, PUT, DELETE /api/backend/project-people/:id
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/project-people/:id
     │
     ├── project_organization/     # Relacionamento Projeto ↔ Organização
     │   ├── route.ts              # GET, POST /api/backend/project_organization
-    │   └── [id]/                 # (mantido underscore conforme Swagger)
-    │       └── route.ts          # GET, PUT, DELETE /api/backend/project_organization/:id
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/project_organization/:id
+    │                              # (mantido underscore conforme Swagger)
     │
-    └── income/                   # Receitas/Entradas financeiras
-        ├── route.ts              # GET, POST /api/backend/income
+    ├── project-organization-budget-links/  # Vínculo Organização-Rubrica
+    │   ├── route.ts              # GET, POST /api/backend/project-organization-budget-links
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/project-organization-budget-links/:id
+    │
+    ├── # ===== EXECUÇÃO TÉCNICA =====
+    │
+    ├── goals/                    # Metas do projeto
+    │   ├── route.ts              # GET, POST /api/backend/goals
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/goals/:id
+    │
+    ├── stages/                   # Etapas das metas
+    │   ├── route.ts              # GET, POST /api/backend/stages
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/stages/:id
+    │
+    ├── phases/                   # Fases das etapas
+    │   ├── route.ts              # GET, POST /api/backend/phases
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/phases/:id
+    │
+    ├── milestones/               # Marcos do projeto
+    │   ├── route.ts              # GET, POST /api/backend/milestones
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/milestones/:id
+    │
+    ├── tasks/                    # Tarefas do projeto
+    │   ├── route.ts              # GET, POST /api/backend/tasks
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/tasks/:id
+    │
+    ├── # ===== CATÁLOGOS DE ORGANIZAÇÃO =====
+    │
+    ├── organization-categories-master/  # Catálogo de categorias
+    │   ├── route.ts              # GET, POST /api/backend/organization-categories-master
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/organization-categories-master/:id
+    │
+    ├── organization-services-master/    # Catálogo de serviços
+    │   ├── route.ts              # GET, POST /api/backend/organization-services-master
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/organization-services-master/:id
+    │
+    ├── organization-categories/  # Vínculo Organização-Categoria
+    │   ├── route.ts              # GET, POST /api/backend/organization-categories
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/organization-categories/:id
+    │
+    ├── organization-services/    # Vínculo Organização-Serviço
+    │   ├── route.ts              # GET, POST /api/backend/organization-services
+    │   └── [id]/route.ts        # GET, PUT, DELETE /api/backend/organization-services/:id
+    │
+    ├── # ===== AUDITORIA =====
+    │
+    ├── audit-log/                # Log de auditoria (somente leitura)
+    │   ├── route.ts              # GET /api/backend/audit-log
+    │   └── [id]/route.ts        # GET /api/backend/audit-log/:id
+    │
+    └── # ===== TRILHA DE CONTRATOS (Placeholders) =====
+    │
+    └── contracts/                # Rotas especiais de trilha de contratos
+        ├── trail/
+        │   └── pipeline/
+        │       └── route.ts      # GET /api/backend/contracts/trail/pipeline (501)
+        │                          # Tabela: contract_initiation_stages
+        │
         └── [id]/
-            └── route.ts          # GET, PUT, DELETE /api/backend/income/:id
+            └── trail/
+                ├── move/
+                │   └── route.ts  # PATCH/POST /api/backend/contracts/:id/trail/move (501)
+                │                  # Tabela: contract_initiation_stage_history
+                │
+                └── activities/
+                    ├── route.ts  # GET, POST /api/backend/contracts/:id/trail/activities (501)
+                    │             # Tabela: contract_initiation_activities
+                    └── [activityId]/
+                        └── route.ts  # PATCH, PUT /api/backend/contracts/:id/trail/activities/:activityId (501)
+                                      # Tabela: contract_initiation_activities
 ```
 
 ## 📁 Detalhamento das Pastas
@@ -192,13 +269,13 @@ Cada pasta representa um recurso do Swagger e segue o padrão REST:
 |---------|-----------|-----------|
 | **audit-log** | Log de auditoria | `/api/backend/audit-log` (GET)<br>`/api/backend/audit-log/:id` (GET) |
 
-##### Iniciação de Contratos (Placeholders)
-| Recurso | Descrição | Endpoints | Status |
-|---------|-----------|-----------|--------|
-| **contracts/initiation/pipeline** | Pipeline de iniciação | `/api/backend/contracts/initiation/pipeline` (GET) | ⏳ 501 Not Implemented |
-| **contracts/[id]/initiation/move** | Mover entre etapas | `/api/backend/contracts/:id/initiation/move` (PATCH/POST) | ⏳ 501 Not Implemented |
-| **contracts/[id]/initiation/activities** | Atividades de iniciação | `/api/backend/contracts/:id/initiation/activities` (GET, POST) | ⏳ 501 Not Implemented |
-| **contracts/[id]/initiation/activities/[activityId]** | Atividade específica | `/api/backend/contracts/:id/initiation/activities/:activityId` (PATCH, PUT) | ⏳ 501 Not Implemented |
+##### Trilha de Contratos (Placeholders)
+| Recurso | Descrição | Endpoints | Tabela | Status |
+|---------|-----------|-----------|--------|--------|
+| **contracts/trail/pipeline** | Pipeline de trilha | `/api/backend/contracts/trail/pipeline` (GET) | `contract_initiation_stages` | ⏳ 501 Not Implemented |
+| **contracts/[id]/trail/move** | Mover entre etapas | `/api/backend/contracts/:id/trail/move` (PATCH/POST) | `contract_initiation_stage_history` | ⏳ 501 Not Implemented |
+| **contracts/[id]/trail/activities** | Atividades da trilha | `/api/backend/contracts/:id/trail/activities` (GET, POST) | `contract_initiation_activities` | ⏳ 501 Not Implemented |
+| **contracts/[id]/trail/activities/[activityId]** | Atividade específica | `/api/backend/contracts/:id/trail/activities/:activityId` (PATCH, PUT) | `contract_initiation_activities` | ⏳ 501 Not Implemented |
 
 ## 🔄 Fluxo de Requisição
 
@@ -319,53 +396,44 @@ export async function GET(req: NextRequest) {
 
 // POST /api/backend/projects
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  return proxyToJava(req, '/api/projects', {
-    method: 'POST',
-    body,
-  });
+  return proxyToJava(req, '/api/projects', { method: 'POST' });
 }
 ```
 
 ### Exemplo Completo: `projects/[id]/route.ts`
 
 ```typescript
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { proxyToJava } from '@/app/api/_shared/backend';
 
 // GET /api/backend/projects/:id
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params;
-  return proxyToJava(req, `/api/projects/${id}`);
+  return proxyToJava(req, `/api/projects/${params.id}`);
 }
 
 // PUT /api/backend/projects/:id
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params;
-  const body = await req.json();
-  return proxyToJava(req, `/api/projects/${id}`, {
-    method: 'PUT',
-    body,
-  });
+  return proxyToJava(req, `/api/projects/${params.id}`, { method: 'PUT' });
 }
 
 // DELETE /api/backend/projects/:id
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params;
-  return proxyToJava(req, `/api/projects/${id}`, {
-    method: 'DELETE',
-  });
+  return proxyToJava(req, `/api/projects/${params.id}`, { method: 'DELETE' });
 }
 ```
+
+**Nota Importante:** 
+- `params` é um objeto direto (não Promise) conforme padrão Next.js 15+
+- O `proxyToJava` gerencia automaticamente o body da requisição, não é necessário fazer `await req.json()` manualmente
 
 ## ⚙️ Variáveis de Ambiente
 
@@ -437,14 +505,15 @@ Para cada recurso, implementar:
 ## 🎯 Próximos Passos
 
 1. ✅ Estrutura de pastas criada
-2. ⏳ Implementar `_shared/backend.ts` com função `proxyToJava()`
-3. ⏳ Implementar `_shared/errors.ts` para normalização de erros
-4. ⏳ Implementar `_shared/response.ts` com helpers
-5. ⏳ Implementar `_shared/types.ts` com tipos compartilhados
-6. ⏳ Preencher route handlers de cada recurso
-7. ⏳ Configurar autenticação (Bearer token)
+2. ✅ Implementar `_shared/backend.ts` com função `proxyToJava()`
+3. ✅ Implementar `_shared/errors.ts` para normalização de erros
+4. ✅ Implementar `_shared/response.ts` com helpers
+5. ✅ Implementar `_shared/types.ts` com tipos compartilhados
+6. ✅ Preencher route handlers de cada recurso (27 recursos CRUD + 4 rotas especiais)
+7. ✅ Configurar autenticação (Bearer token via cookies)
 8. ⏳ Testar integração com API Java
 9. ⏳ Migrar frontend de mocks para chamadas ao BFF
+10. ⏳ Implementar rotas de iniciação de contratos quando backend Java estiver pronto
 
 ## 📋 Resumo da Estrutura
 
@@ -497,13 +566,13 @@ Para cada recurso, implementar:
 |---|---------|----------|--------|
 | 23 | `audit-log` | `route.ts` + `[id]/route.ts` | ✅ Implementado (somente leitura) |
 
-#### Iniciação de Contratos (4 rotas especiais)
-| # | Recurso | Arquivos | Status |
-|---|---------|----------|--------|
-| 24 | `contracts/initiation/pipeline` | `route.ts` | ⏳ Placeholder (501) |
-| 25 | `contracts/[id]/initiation/move` | `route.ts` | ⏳ Placeholder (501) |
-| 26 | `contracts/[id]/initiation/activities` | `route.ts` | ⏳ Placeholder (501) |
-| 27 | `contracts/[id]/initiation/activities/[activityId]` | `route.ts` | ⏳ Placeholder (501) |
+#### Trilha de Contratos (4 rotas especiais)
+| # | Recurso | Arquivos | Tabela | Status |
+|---|---------|----------|--------|--------|
+| 24 | `contracts/trail/pipeline` | `route.ts` | `contract_initiation_stages` | ⏳ Placeholder (501) |
+| 25 | `contracts/[id]/trail/move` | `route.ts` | `contract_initiation_stage_history` | ⏳ Placeholder (501) |
+| 26 | `contracts/[id]/trail/activities` | `route.ts` | `contract_initiation_activities` | ⏳ Placeholder (501) |
+| 27 | `contracts/[id]/trail/activities/[activityId]` | `route.ts` | `contract_initiation_activities` | ⏳ Placeholder (501) |
 
 ### Utilitários Compartilhados (4 arquivos)
 

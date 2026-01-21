@@ -35,7 +35,7 @@ function getProxyConfig(): ProxyConfig {
 
   proxyConfig = {
     baseUrl: baseUrl.replace(/\/$/, ''),
-    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '15000', 10), // 15s default
+    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '30000', 10), // 15s default
     isDevelopment: process.env.NODE_ENV === 'development',
     defaultHeaders: {
       Accept: 'application/json',
@@ -123,7 +123,19 @@ async function getRequestBody(
     }
   }
 
-  if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
+  // multipart/form-data: usar arrayBuffer para preservar binários (PDF, imagens, etc.)
+  // IMPORTANTE: não usar req.text() pois corrompe o boundary e payload binário
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const arrayBuffer = await req.arrayBuffer();
+      return arrayBuffer.byteLength > 0 ? arrayBuffer : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // application/x-www-form-urlencoded: pode usar text
+  if (contentType.includes('application/x-www-form-urlencoded')) {
     try {
       return await req.text();
     } catch {
@@ -131,6 +143,7 @@ async function getRequestBody(
     }
   }
 
+  // Fallback: qualquer outro content-type, tratar como binário
   try {
     const arrayBuffer = await req.arrayBuffer();
     return arrayBuffer.byteLength > 0 ? arrayBuffer : undefined;

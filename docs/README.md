@@ -252,6 +252,13 @@ gopro-2/
 │   ├── hooks/                  # Hooks customizados React (vazio - pronto para uso)
 │   │
 │   ├── lib/                    # Bibliotecas e utilitários
+│   │   ├── api.ts              # Cliente HTTP centralizado para consumir BFF
+│   │   │                        # - Métodos: get, post, put, patch, delete, upload, download
+│   │   │                        # - Tipagem genérica com TS
+│   │   │                        # - Tratamento centralizado de erros com ApiException
+│   │   │                        # - Suporte a query params, headers customizados, AbortSignal
+│   │   │                        # - Auto-redireção para login em 401
+│   │   │
 │   │   ├── auth.ts             # Funções de autenticação
 │   │   ├── jwt.ts              # Utilitários JWT (tokens)
 │   │   └── prisma.ts           # Instância singleton do Prisma Client
