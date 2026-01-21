@@ -35,7 +35,7 @@ function getProxyConfig(): ProxyConfig {
 
   proxyConfig = {
     baseUrl: baseUrl.replace(/\/$/, ''),
-    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '30000', 10),
+    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '15000', 10), // 15s default
     isDevelopment: process.env.NODE_ENV === 'development',
     defaultHeaders: {
       Accept: 'application/json',

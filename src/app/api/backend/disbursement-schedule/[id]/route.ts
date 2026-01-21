@@ -1,3 +1,23 @@
-// GET /api/backend/disbursement-schedule/:id
-// PUT /api/backend/disbursement-schedule/:id
-// DELETE /api/backend/disbursement-schedule/:id
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../../_shared';
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/disbursement-schedule/${params.id}`);
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/disbursement-schedule/${params.id}`, { method: 'PUT' });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/disbursement-schedule/${params.id}`, { method: 'DELETE' });
+}

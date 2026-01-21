@@ -5,19 +5,19 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  return proxyToJava(req, `/api/peoples/${params.id}`);
+  return proxyToJava(req, `/api/stages/${params.id}`);
 }
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  return proxyToJava(req, `/api/peoples/${params.id}`, { method: 'PUT' });
+  return proxyToJava(req, `/api/stages/${params.id}`, { method: 'PUT' });
 }
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  return proxyToJava(req, `/api/peoples/${params.id}`, { method: 'DELETE' });
+  return proxyToJava(req, `/api/stages/${params.id}`, { method: 'DELETE' });
 }

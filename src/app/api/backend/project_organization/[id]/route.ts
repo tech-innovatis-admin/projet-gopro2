@@ -1,3 +1,23 @@
-// GET /api/backend/project_organization/:id
-// PUT /api/backend/project_organization/:id
-// DELETE /api/backend/project_organization/:id
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../../_shared';
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project_organization/${params.id}`);
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project_organization/${params.id}`, { method: 'PUT' });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project_organization/${params.id}`, { method: 'DELETE' });
+}

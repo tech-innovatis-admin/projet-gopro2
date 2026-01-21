@@ -1,3 +1,23 @@
-// GET /api/backend/project-people/:id
-// PUT /api/backend/project-people/:id
-// DELETE /api/backend/project-people/:id
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../../_shared';
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project-people/${params.id}`);
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project-people/${params.id}`, { method: 'PUT' });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyToJava(req, `/api/project-people/${params.id}`, { method: 'DELETE' });
+}
