@@ -61,15 +61,6 @@ const papelLabels: Record<Papel, string> = {
   OUTRO: "Outro",
 };
 
-const papelColors: Record<Papel, { bg: string; text: string }> = {
-  COORDENADOR: { bg: "bg-emerald-100", text: "text-emerald-800" },
-  VICE_COORDENADOR: { bg: "bg-teal-100", text: "text-teal-800" },
-  SECRETARIO: { bg: "bg-blue-100", text: "text-blue-800" },
-  PESQUISADOR: { bg: "bg-purple-100", text: "text-purple-800" },
-  BOLSISTA: { bg: "bg-orange-100", text: "text-orange-800" },
-  TECNICO: { bg: "bg-gray-100", text: "text-gray-800" },
-  OUTRO: { bg: "bg-slate-100", text: "text-slate-800" },
-};
 
 // Mock de dados
 const mockMembros: Membro[] = [
@@ -400,9 +391,7 @@ export default function EquipeTecnicaPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        papelColors[membro.papel].bg
-                      } ${papelColors[membro.papel].text}`}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
                     >
                       {membro.papel === "OUTRO" && membro.papelCustom
                         ? membro.papelCustom

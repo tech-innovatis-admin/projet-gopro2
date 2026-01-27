@@ -3,21 +3,24 @@ import { proxyToJava } from '../../../_shared';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyToJava(req, `/api/budget-categories/${params.id}`);
+  const { id } = await params;
+  return proxyToJava(req, `/api/budget-categories/${id}`);
 }
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyToJava(req, `/api/budget-categories/${params.id}`, { method: 'PUT' });
+  const { id } = await params;
+  return proxyToJava(req, `/api/budget-categories/${id}`, { method: 'PUT' });
 }
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyToJava(req, `/api/budget-categories/${params.id}`, { method: 'DELETE' });
+  const { id } = await params;
+  return proxyToJava(req, `/api/budget-categories/${id}`, { method: 'DELETE' });
 }

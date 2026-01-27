@@ -3,8 +3,9 @@ import { proxyToJava } from '../../../../../_shared';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  await params;
   // Placeholder até o Java implementar
   // Quando implementado, usar: return proxyToJava(req, `/api/contracts/${params.id}/trail/move`, { method: 'PATCH' });
   // Tabela: contract_initiation_stage_history
@@ -16,8 +17,9 @@ export async function PATCH(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  await params;
   // Placeholder até o Java implementar
   // Quando implementado, usar: return proxyToJava(req, `/api/contracts/${params.id}/trail/move`, { method: 'POST' });
   // Tabela: contract_initiation_stage_history

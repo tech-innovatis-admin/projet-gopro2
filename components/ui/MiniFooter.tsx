@@ -1,5 +1,18 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+
 const MiniFooter = () => {
   const currentYear = new Date().getFullYear();
+  const pathname = usePathname();
+  
+  // Não exibir footer em páginas de autenticação
+  const authRoutes = ["/login", "/register", "/forgot-password", "/reset-password"];
+  const isAuthPage = authRoutes.some(route => pathname?.startsWith(route));
+  
+  if (isAuthPage) {
+    return null;
+  }
   
   return (
     <footer className="w-full bg-white border-t border-gray-200 relative z-10">

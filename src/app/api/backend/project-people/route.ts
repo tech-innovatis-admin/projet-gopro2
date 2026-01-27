@@ -1,2 +1,10 @@
-// GET /api/backend/project-people
-// POST /api/backend/project-people
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../_shared';
+
+export async function GET(req: NextRequest) {
+  return proxyToJava(req, '/api/project-people');
+}
+
+export async function POST(req: NextRequest) {
+  return proxyToJava(req, '/api/project-people', { method: 'POST' });
+}

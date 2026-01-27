@@ -1,2 +1,10 @@
-// GET /api/backend/budget-categories
-// POST /api/backend/budget-categories
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../_shared';
+
+export async function GET(req: NextRequest) {
+  return proxyToJava(req, '/api/budget-categories');
+}
+
+export async function POST(req: NextRequest) {
+  return proxyToJava(req, '/api/budget-categories', { method: 'POST' });
+}

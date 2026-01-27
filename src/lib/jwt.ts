@@ -2,7 +2,13 @@ import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET não configurado. Defina JWT_SECRET no .env/.env.local (sem fallback).'
+  )
+}
+const JWT_SECRET_VALUE: string = JWT_SECRET
 
 export type TokenPayload = {
   email: string
@@ -11,11 +17,11 @@ export type TokenPayload = {
 }
 
 function signAccessToken(email: string) {
-  return jwt.sign({ email, type: 'access' }, JWT_SECRET, { expiresIn: '15m' })
+  return jwt.sign({ email, type: 'access' }, JWT_SECRET_VALUE, { expiresIn: '15m' })
 }
 
 function signRefreshToken(email: string) {
-  return jwt.sign({ email, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' })
+  return jwt.sign({ email, type: 'refresh' }, JWT_SECRET_VALUE, { expiresIn: '7d' })
 }
 
 export function generateTokenPair(email: string) {
@@ -27,7 +33,16 @@ export function generateTokenPair(email: string) {
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload
+    const decoded = jwt.verify(token, JWT_SECRET_VALUE)
+    if (typeof decoded !== 'object' || decoded === null) return null
+
+    const payload = decoded as jwt.JwtPayload
+    const email = payload.email
+    const type = payload.type
+    if (typeof email !== 'string') return null
+    if (type !== 'access' && type !== 'refresh') return null
+
+    return { email, type, exp: payload.exp }
   } catch {
     return null
   }

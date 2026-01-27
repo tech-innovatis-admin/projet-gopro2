@@ -463,7 +463,9 @@ export default function MetaEtapaFasePage() {
                     <ChevronRight className="h-5 w-5 text-emerald-700" />
                   )}
                 </button>
-                <Target className="h-5 w-5 text-emerald-600" />
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="h-5 w-5 text-emerald-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                </svg>
                 <span className="text-sm font-bold text-emerald-800">
                   Meta {meta.numero}:
                 </span>
@@ -620,22 +622,22 @@ export default function MetaEtapaFasePage() {
                       {meta.etapas.map((etapa) => (
                         <div
                           key={etapa.id}
-                          className="ml-4 border-l-2 border-blue-200 pl-4"
+                          className="ml-4 border-l-2 border-gray-200 pl-4"
                         >
                           {/* Header da Etapa */}
                           <div className="flex items-center gap-3 py-2">
                             <button
                               onClick={() => toggleEtapa(etapa.id)}
-                              className="p-1 hover:bg-blue-50 rounded transition-colors"
+                              className="p-1 hover:bg-gray-50 rounded transition-colors"
                             >
                               {expandedEtapas.has(etapa.id) ? (
-                                <ChevronDown className="h-4 w-4 text-blue-600" />
+                                <ChevronDown className="h-4 w-4 text-black" />
                               ) : (
-                                <ChevronRight className="h-4 w-4 text-blue-600" />
+                                <ChevronRight className="h-4 w-4 text-black" />
                               )}
                             </button>
-                            <Milestone className="h-4 w-4 text-blue-500" />
-                            <span className="text-sm font-semibold text-blue-700">
+                            <Milestone className="h-4 w-4 text-black" />
+                            <span className="text-sm font-semibold text-black">
                               Etapa {etapa.numero}:
                             </span>
                             {isEditing && editingId === etapa.id ? (
@@ -644,7 +646,7 @@ export default function MetaEtapaFasePage() {
                                   type="text"
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                   autoFocus
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter")
@@ -713,7 +715,7 @@ export default function MetaEtapaFasePage() {
                                 ) : (
                                   <button
                                     onClick={() => startEditDate("etapa", "dataInicio", [meta.id, etapa.id], etapa.dataInicio)}
-                                    className="text-xs text-gray-400 hover:text-gray-600 hover:bg-blue-50 px-2 py-0.5 rounded"
+                                    className="text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 px-2 py-0.5 rounded"
                                     title="Editar data de início"
                                   >
                                     {etapa.dataInicio ? formatDate(etapa.dataInicio) : "Sem data"}
@@ -970,7 +972,7 @@ export default function MetaEtapaFasePage() {
                   {isEditing && (
                     <button
                       onClick={() => addEtapa(meta.id)}
-                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-black hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
                     >
                       <Plus className="h-4 w-4" />
                       Adicionar Etapa

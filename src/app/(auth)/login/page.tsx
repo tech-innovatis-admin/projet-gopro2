@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Command, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Command, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginPage() {
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,7 +58,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-full">
       {/* Painel Esquerdo - Área com Imagem de Fundo */}
       <div
         // Classes para layout, posicionamento e controle da imagem
@@ -122,7 +123,7 @@ export default function LoginPage() {
 
       {/* Painel Direito - Formulário de login */}
       <div className="flex w-full lg:w-1/2 flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-zinc-100 p-8">
-        <div className="w-full max-w-lg space-y-8">
+        <div className="w-full max-w-md space-y-8">
           {/* Card de Login */}
           <Card className="border-0 shadow-2xl shadow-zinc-200/50 bg-white/80 backdrop-blur-xl rounded-2xl overflow-hidden transform hover:scale-101 transition-all duration-200 hover:shadow-3xl"
                 style={{
@@ -189,15 +190,28 @@ export default function LoginPage() {
                   <div className="relative group">
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={isLoading}
                       required
-                      className="pl-11 pr-4 h-12 rounded-xl border-zinc-200 bg-zinc-50/50 focus:bg-white focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20 transition-all duration-200"
+                      className="pl-11 pr-12 h-12 rounded-xl border-zinc-200 bg-zinc-50/50 focus:bg-white focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20 transition-all duration-200"
                     />
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 group-focus-within:text-[#1F4E79] transition-colors" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      disabled={isLoading}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-[#1F4E79] transition-colors focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/20 rounded p-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -246,26 +260,17 @@ export default function LoginPage() {
                   )}
                 </Button>
               </form>
-
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-zinc-200"></div>
-                </div>
-              </div>
-
-              {/* Link de Registro */}
             </CardContent>
           </Card>
 
           {/* Termos e Política */}
           <p className="text-center text-xs text-zinc-400 leading-relaxed">
             Ao continuar, você concorda com nossos{" "}
-            <Link href="/terms" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
+            <Link href="/termos" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
               Termos de Serviço
             </Link>{" "}
             e{" "}
-            <Link href="/privacy" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
+            <Link href="/privacidade" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
               Política de Privacidade
             </Link>
           </p>

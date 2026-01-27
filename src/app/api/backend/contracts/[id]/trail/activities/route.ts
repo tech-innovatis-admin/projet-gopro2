@@ -3,8 +3,9 @@ import { proxyToJava } from '../../../../../_shared';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  await params;
   // Placeholder até o Java implementar
   // Quando implementado, usar: return proxyToJava(req, `/api/contracts/${params.id}/trail/activities`);
   // Tabela: contract_initiation_activities
@@ -16,8 +17,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  await params;
   // Placeholder até o Java implementar
   // Quando implementado, usar: return proxyToJava(req, `/api/contracts/${params.id}/trail/activities`, { method: 'POST' });
   // Tabela: contract_initiation_activities

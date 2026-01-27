@@ -89,14 +89,9 @@ export default function ContratoLayout({
       description: "Resumo e informações principais",
     },
     {
-      label: "Iniciação",
-      href: `/contratos/${contratoId}/iniciacao`,
+      label: "Trilha",
+      href: `/contratos/${contratoId}/trilha`,
       description: "Funil de preparação do contrato",
-    },
-    {
-      label: "Execução",
-      href: `/contratos/${contratoId}/execucao`,
-      description: "Cronograma, marcos e entregas",
     },
     {
       label: "Metas",
@@ -124,8 +119,8 @@ export default function ContratoLayout({
       description: "Membros",
     },
     {
-      label: "Incubadas",
-      href: `/contratos/${contratoId}/incubadas`,
+      label: "Empresas",
+      href: `/contratos/${contratoId}/empresas`,
       description: "Empresas vinculadas",
     },
     {
@@ -654,8 +649,44 @@ export default function ContratoLayout({
                     </div>
                   </div>
 
-                  {/* Coluna 4 - Vazia (na parte expandida) */}
+                  {/* Coluna 4 - Datas Reais de Execução */}
                   <div className="space-y-3">
+                    <div className="flex items-start gap-3 group">
+                      <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Início</p>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editContrato.dataRealInicio || ""}
+                            onChange={(e) => handleChange({ dataRealInicio: e.target.value || undefined })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900">
+                            {contrato.dataRealInicio ? formatDate(contrato.dataRealInicio) : "—"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 group">
+                      <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Término</p>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editContrato.dataRealTermino || ""}
+                            onChange={(e) => handleChange({ dataRealTermino: e.target.value || undefined })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900">
+                            {contrato.dataRealTermino ? formatDate(contrato.dataRealTermino) : "—"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

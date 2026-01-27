@@ -9,58 +9,7 @@ import {
   FileText,
   ArrowRight,
 } from "lucide-react";
-
-// Mock de dados (substituir por fetch real baseado no contratoId)
-const mockResumo = {
-  financeiro: {
-    valorContratado: 1250000,
-    valorEmpenhado: 950000,
-    valorLiquidado: 812500,
-    valorPago: 750000,
-  },
-  cronograma: {
-    percentualExecucao: 65,
-    dataAtual: new Date().toISOString(),
-    dataFinal: "2025-12-31",
-    diasRestantes: 26,
-    status: "NO_PRAZO" as const,
-  },
-  riscos: [
-    { id: 1, descricao: "Atraso na entrega de equipamentos pelo fornecedor", severidade: "ALTA" },
-    { id: 2, descricao: "Pendência de aprovação do Termo Aditivo nº 02", severidade: "MEDIA" },
-    { id: 3, descricao: "Necessidade de remanejamento de rubrica", severidade: "BAIXA" },
-  ],
-  movimentacoes: [
-    {
-      id: 1,
-      data: "2025-12-03",
-      tipo: "CONTRATACAO",
-      descricao: "Nova ordem de serviço OS-005 criada",
-      usuario: "Maria Santos",
-    },
-    {
-      id: 2,
-      data: "2025-12-01",
-      tipo: "FINANCEIRO",
-      descricao: "Pagamento de R$ 125.000,00 realizado",
-      usuario: "Sistema",
-    },
-    {
-      id: 3,
-      data: "2025-11-28",
-      tipo: "STATUS",
-      descricao: "Marco 'Entrega Fase 2' concluído",
-      usuario: "João Silva",
-    },
-    {
-      id: 4,
-      data: "2025-11-25",
-      tipo: "DOCUMENTO",
-      descricao: "Relatório de Acompanhamento anexado",
-      usuario: "Ana Costa",
-    },
-  ],
-};
+import { mockResumo } from "./types";
 
 export default function ContratoVisaoGeralPage() {
   const { financeiro, cronograma, riscos, movimentacoes } = mockResumo;

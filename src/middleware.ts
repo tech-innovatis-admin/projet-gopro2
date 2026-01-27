@@ -1,7 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
 
-// Simple token validation for dev
-function isValidToken(token: string): boolean {
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET não configurado. Defina JWT_SECRET no .env/.env.local para habilitar autenticação.'
+  );
+}
+
+const JWT_KEY = new TextEncoder().encode(JWT_SECRET);
+
+async function isValidAccessToken(token: string): Promise<boolean> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_KEY);
+    // Regras mínimas: token deve ser do tipo access e conter email
+    return payload?.type === 'access' && typeof payload?.email === 'string';
+  } catch {
+    return false;
+  }
+}
+
+// Compatibilidade temporária (somente DEV): token base64 antigo
+function isValidLegacyToken(token: string): boolean {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
     return decoded.exp > Date.now();
@@ -10,20 +30,41 @@ function isValidToken(token: string): boolean {
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Obtém o token de autenticação
-  const token = request.cookies.get('token')?.value ||
-                request.headers.get('authorization')?.replace('Bearer ', '');
+  const isApiRoute = pathname.startsWith('/api');
 
-  // Verifica se o token é válido
-  const isAuthenticated = token ? isValidToken(token) : false;
+  // Tokens suportados:
+  // - access_token (JWT) [PREFERIDO]
+  // - Authorization: Bearer <JWT> (para chamadas API)
+  // - token (LEGACY base64) [SOMENTE DEV]
+  const accessTokenCookie = request.cookies.get('access_token')?.value;
+  const bearerToken = request.headers.get('authorization')?.replace('Bearer ', '');
+  const legacyToken = request.cookies.get('token')?.value;
 
-  console.log(`🔒 [Middleware] ${pathname} | token: ${token ? 'presente' : 'ausente'} | auth: ${isAuthenticated}`);
+  let isAuthenticated = false;
+
+  // 1) Preferir JWT
+  const candidateJwt = accessTokenCookie || bearerToken;
+  if (candidateJwt) {
+    isAuthenticated = await isValidAccessToken(candidateJwt);
+  } else if (process.env.NODE_ENV !== 'production' && legacyToken) {
+    // 2) Compatibilidade DEV com token base64 antigo
+    isAuthenticated = isValidLegacyToken(legacyToken);
+    if (isAuthenticated) {
+      console.warn(
+        '[Middleware] Autenticação via cookie legacy "token" (base64) em uso. Migre para JWT (access_token).'
+      );
+    }
+  }
+
+  console.log(
+    `🔒 [Middleware] ${pathname} | jwt: ${candidateJwt ? 'presente' : 'ausente'} | legacy: ${legacyToken ? 'presente' : 'ausente'} | auth: ${isAuthenticated}`
+  );
 
   // Rotas públicas (não requerem autenticação)
-  const publicRoutes = ['/login', '/register', '/forgot-password'];
+  const publicRoutes = ['/login', '/termos', '/privacidade'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
   // Rotas de API de autenticação (sempre públicas)
@@ -36,8 +77,12 @@ export function middleware(request: NextRequest) {
 
   // Usuário NÃO autenticado tentando acessar rota protegida
   if (!isAuthenticated && !isPublicRoute) {
+    // Para APIs, retornar 401 (não redirecionar)
+    if (isApiRoute) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     console.log(`🔒 [Middleware] Redirecionando para /login (não autenticado)`);
-    // Redireciona para /login
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

@@ -403,4 +403,35 @@ export function handleApiError(error: unknown): string {
   return getErrorMessage(error);
 }
 
+/**
+ * Extrai erros de campo de um ApiException (útil para validação de formulários)
+ * 
+ * @param error - Erro capturado do try/catch
+ * @returns Record<campo, mensagem> ou null se não houver erros de campo
+ * 
+ * @example
+ * ```typescript
+ * try {
+ *   await api.post('/api/backend/projects', { body: data });
+ * } catch (error) {
+ *   const fieldErrors = getFieldErrors(error);
+ *   if (fieldErrors) {
+ *     // { name: 'Campo obrigatório', cpf: 'CPF inválido' }
+ *     setFormErrors(fieldErrors);
+ *   }
+ * }
+ * ```
+ */
+export function getFieldErrors(error: unknown): Record<string, string> | null {
+  if (!isApiException(error) || !error.details) return null;
+  
+  const details = error.details as { fieldErrors?: Array<{ field: string; message: string }> };
+  if (!Array.isArray(details.fieldErrors)) return null;
+  
+  return details.fieldErrors.reduce((acc, { field, message }) => {
+    acc[field] = message;
+    return acc;
+  }, {} as Record<string, string>);
+}
+
 export default api;

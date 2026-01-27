@@ -3,7 +3,8 @@ import { proxyToJava } from '../../../_shared';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyToJava(req, `/api/audit-log/${params.id}`);
+  const { id } = await params;
+  return proxyToJava(req, `/api/audit-log/${id}`);
 }

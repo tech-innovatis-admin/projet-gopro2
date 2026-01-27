@@ -194,8 +194,8 @@ export default function IniciacaoPage() {
     if (!canStartProject) return;
     
     // Na vida real, chamaria a API
-    alert(`Projeto ${contract.title} iniciado com sucesso! Redirecionando para a aba de Execução...`);
-    router.push(`/contratos/${contratoId}/execucao`);
+    alert(`Projeto ${contract.title} iniciado com sucesso! Redirecionando para a página do contrato...`);
+    router.push(`/contratos/${contratoId}`);
   };
 
   // Estado para controlar abertura do form de nova atividade

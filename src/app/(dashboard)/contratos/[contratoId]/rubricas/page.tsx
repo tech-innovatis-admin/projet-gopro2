@@ -224,7 +224,7 @@ export default function RubricasPage() {
     valorUnitario: 0,
   });
   const [isAddingRubrica, setIsAddingRubrica] = useState(false);
-  const [newRubrica, setNewRubrica] = useState({ codigo: '', nome: '' });
+  const [newRubrica, setNewRubrica] = useState({ nome: '' });
   
   // Estado para remanejamentos
   const [remanejamentos, setRemanejamentos] = useState<Remanejamento[]>([]);
@@ -374,24 +374,27 @@ export default function RubricasPage() {
 
   // Adicionar nova rubrica
   const handleAddRubrica = () => {
-    if (!newRubrica.codigo.trim() || !newRubrica.nome.trim()) return;
+    if (!newRubrica.nome.trim()) return;
+
+    // Gerar código automático baseado no número sequencial
+    const proximoCodigo = `RUB-${rubricas.length + 1}`;
 
     const novaRubrica: Rubrica = {
       id: String(Date.now()),
-      codigo: newRubrica.codigo.toUpperCase(),
+      codigo: proximoCodigo,
       nome: newRubrica.nome,
       itens: [],
       expanded: true,
     };
 
     setRubricas([...rubricas, novaRubrica]);
-    setNewRubrica({ codigo: '', nome: '' });
+    setNewRubrica({ nome: '' });
     setIsAddingRubrica(false);
   };
 
   // Cancelar adição de rubrica
   const handleCancelAddRubrica = () => {
-    setNewRubrica({ codigo: '', nome: '' });
+    setNewRubrica({ nome: '' });
     setIsAddingRubrica(false);
   };
 
@@ -510,21 +513,7 @@ export default function RubricasPage() {
             <Plus className="w-5 h-5 text-emerald-700" />
             <h4 className="font-medium text-emerald-900">Nova Rubrica</h4>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Código <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newRubrica.codigo}
-                onChange={(e) => setNewRubrica({ ...newRubrica, codigo: e.target.value.toUpperCase() })}
-                placeholder="Ex: MC, PP, OST-PJ"
-                className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                maxLength={20}
-                autoFocus
-              />
-            </div>
+          <div className="mb-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Nome <span className="text-red-500">*</span>
@@ -536,13 +525,14 @@ export default function RubricasPage() {
                 placeholder="Ex: Material de Consumo"
                 className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                 maxLength={100}
+                autoFocus
               />
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleAddRubrica}
-              disabled={!newRubrica.codigo.trim() || !newRubrica.nome.trim()}
+              disabled={!newRubrica.nome.trim()}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />

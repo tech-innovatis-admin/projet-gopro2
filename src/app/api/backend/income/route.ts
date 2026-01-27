@@ -1,2 +1,10 @@
-// GET /api/backend/income
-// POST /api/backend/income
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../_shared';
+
+export async function GET(req: NextRequest) {
+  return proxyToJava(req, '/api/income');
+}
+
+export async function POST(req: NextRequest) {
+  return proxyToJava(req, '/api/income', { method: 'POST' });
+}

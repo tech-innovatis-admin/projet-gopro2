@@ -1,2 +1,10 @@
-// GET /api/backend/disbursement-schedule
-// POST /api/backend/disbursement-schedule
+import { NextRequest } from 'next/server';
+import { proxyToJava } from '../../_shared';
+
+export async function GET(req: NextRequest) {
+  return proxyToJava(req, '/api/disbursement-schedule');
+}
+
+export async function POST(req: NextRequest) {
+  return proxyToJava(req, '/api/disbursement-schedule', { method: 'POST' });
+}
