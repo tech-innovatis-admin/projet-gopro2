@@ -1,7 +1,7 @@
 "use client";
 
-import { type TeamUser } from "../../equipe/types";
-import { PERMISSION_LEVELS, ROLE_LABELS } from "../../equipe/mockData";
+import { type TeamUser } from "../../recursos-humanos/equipe/types";
+import { PERMISSION_LEVELS, ROLE_LABELS } from "../../recursos-humanos/equipe/mockData";
 import { formatHumanDate, getInitials } from "./utils";
 import { Building, Shield, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";

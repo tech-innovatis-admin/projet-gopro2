@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   UserCircle,
+  ArrowUpDown,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import {
@@ -26,76 +27,7 @@ import {
   unformatPhone,
   validatePhoneComplete,
 } from "./_components/PhoneValidator";
-
-// Tipos
-type Papel =
-  | "COORDENADOR"
-  | "VICE_COORDENADOR"
-  | "SECRETARIO"
-  | "PESQUISADOR"
-  | "BOLSISTA"
-  | "TECNICO"
-  | "OUTRO";
-
-type Membro = {
-  id: string;
-  nome: string;
-  papel: Papel;
-  papelCustom?: string;
-  email?: string;
-  telefone?: string;
-  cpf?: string;
-  avatarUrl?: string;
-  endereco?: string;
-  vinculo?: string;
-  cargaHoraria?: number;
-};
-
-const papelLabels: Record<Papel, string> = {
-  COORDENADOR: "Coordenador",
-  VICE_COORDENADOR: "Vice-Coordenador",
-  SECRETARIO: "Secretário",
-  PESQUISADOR: "Pesquisador",
-  BOLSISTA: "Bolsista",
-  TECNICO: "Técnico",
-  OUTRO: "Outro",
-};
-
-
-// Mock de dados
-const mockMembros: Membro[] = [
-  {
-    id: "1",
-    nome: "João Silva",
-    papel: "COORDENADOR",
-    email: "joao.silva@email.com",
-    telefone: "11999991234",
-    cpf: "12345678901",
-    vinculo: "Professor Associado",
-    cargaHoraria: 20,
-  },
-  {
-    id: "2",
-    nome: "Maria Santos",
-    papel: "VICE_COORDENADOR",
-    email: "maria.santos@email.com",
-    telefone: "11999995678",
-    cpf: "98765432101",
-    vinculo: "Professora Adjunta",
-    cargaHoraria: 15,
-  },
-  {
-    id: "3",
-    nome: "Pedro Costa",
-    papel: "PESQUISADOR",
-    email: "pedro.costa@email.com",
-    cpf: "11122233344",
-    vinculo: "Doutorando",
-    cargaHoraria: 40,
-  },
-];
-
-// Funções de formatação (removidas - usando PhoneValidator)
+import { mockMembros, papelLabels, type Papel, type Membro } from "./data";
 
 export default function EquipeTecnicaPage() {
   const params = useParams();
@@ -112,6 +44,8 @@ export default function EquipeTecnicaPage() {
   const [savedMessage, setSavedMessage] = useState(false);
   const [cpfError, setCpfError] = useState<string>("");
   const [phoneError, setPhoneError] = useState<string>("");
+  const [sortBy, setSortBy] = useState<keyof Membro | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const handleEdit = () => {
     setEditMembros(JSON.parse(JSON.stringify(membros)));
@@ -245,8 +179,52 @@ export default function EquipeTecnicaPage() {
     }
   };
 
+  // Função para ordenar dados
+  const getSortedMembros = (data: Membro[]): Membro[] => {
+    if (!sortBy) return data;
+
+    const sorted = [...data].sort((a, b) => {
+      const valueA = a[sortBy];
+      const valueB = b[sortBy];
+
+      // Lidar com valores undefined/null
+      if (valueA === undefined || valueA === null) return 1;
+      if (valueB === undefined || valueB === null) return -1;
+
+      // Comparação numérica
+      if (typeof valueA === "number" && typeof valueB === "number") {
+        return sortDirection === "asc" ? valueA - valueB : valueB - valueA;
+      }
+
+      // Comparação de string
+      const strA = String(valueA).toLowerCase();
+      const strB = String(valueB).toLowerCase();
+      
+      if (sortDirection === "asc") {
+        return strA.localeCompare(strB, "pt-BR");
+      } else {
+        return strB.localeCompare(strA, "pt-BR");
+      }
+    });
+
+    return sorted;
+  };
+
+  // Função para lidar com clique no header
+  const handleSort = (column: keyof Membro) => {
+    if (sortBy === column) {
+      // Se já está ordenado por esta coluna, inverte a direção
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // Se é uma coluna diferente, começa com asc
+      setSortBy(column);
+      setSortDirection("asc");
+    }
+  };
+
   // Dados a exibir (edição ou visualização)
   const currentMembros = isEditing ? editMembros : membros;
+  const sortedMembros = getSortedMembros(currentMembros);
   const totalHoras = currentMembros.reduce((acc, m) => acc + (m.cargaHoraria || 0), 0);
 
   return (
@@ -334,7 +312,7 @@ export default function EquipeTecnicaPage() {
             defaultWidths={[
               250, // Nome
               150, // Papel
-              200, // Contato
+              300, // Contato
               140, // CPF
               180, // Vínculo
               130, // Carga Horária
@@ -345,23 +323,59 @@ export default function EquipeTecnicaPage() {
           >
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  Nome
+                <th 
+                  onClick={() => handleSort("nome")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Nome</span>
+                    <SortIcon column="nome" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  Papel
+                <th 
+                  onClick={() => handleSort("papel")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Papel</span>
+                    <SortIcon column="papel" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  Contato
+                <th 
+                  onClick={() => handleSort("email")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Contato</span>
+                    <SortIcon column="email" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  CPF
+                <th 
+                  onClick={() => handleSort("cpf")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>CPF</span>
+                    <SortIcon column="cpf" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  Vínculo
+                <th 
+                  onClick={() => handleSort("vinculo")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Vínculo</span>
+                    <SortIcon column="vinculo" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                  Carga Horária
+                <th 
+                  onClick={() => handleSort("cargaHoraria")}
+                  className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Carga Horária</span>
+                    <SortIcon column="cargaHoraria" sortConfig={{ key: sortBy, direction: sortDirection }} />
+                  </div>
                 </th>
                 {isEditing && (
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
@@ -371,7 +385,7 @@ export default function EquipeTecnicaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {currentMembros.map((membro) => (
+              {sortedMembros.map((membro) => (
                 <tr key={membro.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -486,6 +500,18 @@ export default function EquipeTecnicaPage() {
         />
       )}
     </div>
+  );
+}
+
+// Componente para ícone de ordenação
+function SortIcon({ column, sortConfig }: { column: string; sortConfig: { key: keyof Membro | null; direction: "asc" | "desc" } }) {
+  if (sortConfig.key !== column) {
+    return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+  }
+  return (
+    <ArrowUpDown
+      className={`h-3 w-3 text-[#004225] ${sortConfig.direction === "desc" ? "rotate-180" : ""}`}
+    />
   );
 }
 

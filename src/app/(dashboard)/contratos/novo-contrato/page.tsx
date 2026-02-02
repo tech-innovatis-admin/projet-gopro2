@@ -21,15 +21,18 @@ import {
   Target,
   Milestone,
   Flag,
+  X,
 } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { getOrganizationsFinanciadoras, getOrganizationsParceiras } from "../mockData";
+import { SuccessToast } from "./_components/SuccessToast";
 
 // Tipos
 type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
 type ContratoTipo = "PROJETO" | "PRODUTO";
+type StatusDesembolso = 0 | 1 | 2 | 3; // 0=previsto, 1=parcial, 2=recebido, 3=cancelado
 
 // Tipos para Metas, Etapas e Fases
 type Fase = {
@@ -61,6 +64,15 @@ type Meta = {
   etapas: Etapa[];
 };
 
+type ParcelaDesembolso = {
+  id: string;
+  numero: number;
+  dataPrevista: string;
+  valorPrevisto: number;
+  status: StatusDesembolso;
+  observacao?: string;
+};
+
 type NovoContratoForm = {
   titulo: string;
   govIf: "IF" | "Gov" | "";
@@ -80,6 +92,7 @@ type NovoContratoForm = {
   scope: string;
   contract_value: string;
   metas: Meta[];
+  parcelas: ParcelaDesembolso[];
 };
 
 type FormErrors = Partial<Record<keyof NovoContratoForm, string>>;
@@ -113,6 +126,13 @@ const segmentoOptions = [
   "Outro",
 ];
 
+const statusDesembolsoOptions: { value: StatusDesembolso; label: string; color: string }[] = [
+  { value: 0, label: "Previsto", color: "bg-gray-100 text-gray-800" },
+  { value: 1, label: "Parcial", color: "bg-blue-100 text-blue-800" },
+  { value: 2, label: "Recebido", color: "bg-green-100 text-green-800" },
+  { value: 3, label: "Cancelado", color: "bg-red-100 text-red-800" },
+];
+
 const initialFormState: NovoContratoForm = {
   titulo: "",
   govIf: "",
@@ -132,6 +152,7 @@ const initialFormState: NovoContratoForm = {
   scope: "",
   contract_value: "",
   metas: [],
+  parcelas: [],
 };
 
 export default function NovoContratoPage() {
@@ -143,6 +164,15 @@ export default function NovoContratoPage() {
   const [showMetasSection, setShowMetasSection] = useState(false);
   const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showParcelasSection, setShowParcelasSection] = useState(false);
+  const [isAddingParcela, setIsAddingParcela] = useState(false);
+  const [newParcela, setNewParcela] = useState<Partial<ParcelaDesembolso>>({
+    dataPrevista: "",
+    valorPrevisto: 0,
+    status: 0,
+    observacao: "",
+  });
   
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -267,6 +297,9 @@ export default function NovoContratoPage() {
         return "";
       case "metas":
         // Metas são opcionais, não precisam de validação obrigatória
+        return "";
+      case "parcelas":
+        // Parcelas são opcionais, não precisam de validação obrigatória
         return "";
       default:
         return "";
@@ -533,6 +566,62 @@ export default function NovoContratoPage() {
     }));
   };
 
+  // ============================================================================
+  // Funções para gerenciar Parcelas de Desembolso
+  // ============================================================================
+
+  const sortAndRenumberParcelas = (items: ParcelaDesembolso[]) =>
+    [...items].sort((a, b) => a.numero - b.numero).map((p, idx) => ({ ...p, numero: idx + 1 }));
+
+  const validateParcela = (p: Partial<ParcelaDesembolso>) => {
+    const valor = typeof p.valorPrevisto === "number" ? p.valorPrevisto : 0;
+    return Boolean(p.dataPrevista && valor > 0);
+  };
+
+  const addParcela = () => {
+    if (!validateParcela(newParcela)) return;
+
+    const novaParcela: ParcelaDesembolso = {
+      id: generateId(),
+      numero: form.parcelas.length + 1,
+      dataPrevista: newParcela.dataPrevista!,
+      valorPrevisto: newParcela.valorPrevisto || 0,
+      status: newParcela.status ?? 0,
+      observacao: newParcela.observacao || "",
+    };
+
+    setForm((prev) => ({
+      ...prev,
+      parcelas: sortAndRenumberParcelas([...prev.parcelas, novaParcela]),
+    }));
+
+    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+    setIsAddingParcela(false);
+  };
+
+  const removeParcela = (id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      parcelas: sortAndRenumberParcelas(prev.parcelas.filter((p) => p.id !== id)),
+    }));
+  };
+
+  const formatCurrencyDisplay = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    const date = new Date(dateStr + "T00:00:00");
+    return date.toLocaleDateString("pt-BR");
+  };
+
+  const valorTotalContrato = form.contract_value
+    ? parseFloat(form.contract_value.replace(/\./g, "").replace(",", ".")) || 0
+    : 0;
+  const totalPrevisto = form.parcelas.reduce((acc, p) => acc + (p.valorPrevisto || 0), 0);
+  const restante = Math.max(valorTotalContrato - totalPrevisto, 0);
+  const excedente = Math.max(totalPrevisto - valorTotalContrato, 0);
+
   // Função auxiliar para transformar dados do formulário para formato do backend
   const transformFormToBackend = (formData: NovoContratoForm) => {
     return {
@@ -565,9 +654,22 @@ export default function NovoContratoPage() {
       // Dispara evento para notificar outras páginas sobre o novo contrato
       window.dispatchEvent(new CustomEvent('contrato-criado', { detail: transformedData }));
       
-      // Redireciona para a página de contratos
-      router.push('/contratos');
-      router.refresh();
+      // Mostrar mensagem de sucesso
+      setShowSuccessMessage(true);
+      
+      // Reset do formulário para criar um novo contrato
+      setForm(initialFormState);
+      setErrors({});
+      setTouched(new Set());
+      setShowMetasSection(false);
+      setExpandedMetas(new Set());
+      setExpandedEtapas(new Set());
+      setShowParcelasSection(false);
+      setIsAddingParcela(false);
+      setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+      
+      // Focus no primeiro campo para facilitar a criação de um novo contrato
+      setTimeout(() => firstInputRef.current?.focus(), 100);
     } catch (error) {
       console.error("Erro ao criar contrato:", error);
     } finally {
@@ -582,6 +684,15 @@ export default function NovoContratoPage() {
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
+      
+      {/* Toast de Sucesso */}
+      <SuccessToast
+        show={showSuccessMessage}
+        onClose={() => setShowSuccessMessage(false)}
+        title="Criado com sucesso"
+        message="O contrato foi cadastrado no sistema"
+        duration={4000}
+      />
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6">
         {/* Breadcrumb */}
@@ -944,6 +1055,284 @@ export default function NovoContratoPage() {
               </FormField>
 
               {/* ================================================================ */}
+              {/* Seção de Cronograma de Desembolso (Opcional) */}
+              {/* ================================================================ */}
+              <div className="border-t border-gray-200 pt-5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowParcelasSection(!showParcelasSection)}
+                  className="w-full flex items-center justify-between p-4 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-100 transition-all duration-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-left">
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        Cronograma de Desembolso
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {form.parcelas.length > 0
+                          ? `${form.parcelas.length} parcela${form.parcelas.length > 1 ? "s" : ""} cadastrada${form.parcelas.length > 1 ? "s" : ""} - Total: ${formatCurrencyDisplay(totalPrevisto)}`
+                          : "Opcional - Cadastre os desembolsos previstos"}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-700 transition-transform duration-200 ${
+                      showParcelasSection ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {showParcelasSection && (
+                  <div className="mt-4 space-y-4">
+                    {/* Resumo do valor total */}
+                    {valorTotalContrato > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 mb-1">Valor Total do Projeto</p>
+                          <p className="text-lg font-bold text-gray-900">{formatCurrencyDisplay(valorTotalContrato)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 mb-1">Total Previsto</p>
+                          <p className="text-lg font-bold text-gray-900">{formatCurrencyDisplay(totalPrevisto)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 mb-1">{excedente > 0 ? "Excedente" : "Restante"}</p>
+                          <p className={`text-lg font-bold ${excedente > 0 ? "text-red-600" : "text-[#004225]"}`}>
+                            {formatCurrencyDisplay(excedente > 0 ? excedente : restante)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Alerta de validação */}
+                    {valorTotalContrato > 0 && (excedente > 0 || restante > 0) && (
+                      <div
+                        className={`rounded-lg border p-3 ${
+                          excedente > 0
+                            ? "bg-red-50 border-red-200"
+                            : "bg-[#00C48B]/10 border-[#00C48B]/30"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <AlertCircle
+                            className={`${excedente > 0 ? "text-red-600" : "text-[#00C48B]"} w-4 h-4 mt-0.5`}
+                          />
+                          <p className={`text-xs font-medium ${excedente > 0 ? "text-red-900" : "text-[#004225]"}`}>
+                            {excedente > 0
+                              ? `O cronograma excede o valor total do projeto em ${formatCurrencyDisplay(excedente)}.`
+                              : `Faltam ${formatCurrencyDisplay(restante)} para completar o valor total do projeto.`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botão Adicionar Parcela */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingParcela(true)}
+                        disabled={isAddingParcela}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Adicionar Parcela
+                      </button>
+                    </div>
+
+                    {/* Form para nova parcela */}
+                    {isAddingParcela && (
+                      <div className="bg-gray-50 border-2 border-[#004225]/20 rounded-lg p-4">
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <div>
+                            <h4 className="font-medium text-sm text-black">Nova Parcela</h4>
+                            <p className="text-xs text-gray-600 mt-0.5">Informe data, valor previsto e status</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingParcela(false);
+                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+                            }}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Data prevista <span className="text-red-500">*</span>
+                            </label>
+                            <DatePicker
+                              value={newParcela.dataPrevista || ""}
+                              onChange={(value) => setNewParcela({ ...newParcela, dataPrevista: value })}
+                              placeholder="Selecione a data"
+                              minDate={form.dataInicio || undefined}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Valor previsto <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">R$</span>
+                              <input
+                                type="text"
+                                value={newParcela.valorPrevisto ? formatCurrency(String(newParcela.valorPrevisto * 100)) : ""}
+                                onChange={(e) => {
+                                  const formatted = formatCurrency(e.target.value);
+                                  const numericValue = parseFloat(formatted.replace(/\./g, "").replace(",", ".")) || 0;
+                                  setNewParcela({ ...newParcela, valorPrevisto: numericValue });
+                                }}
+                                placeholder="0,00"
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Status <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={newParcela.status ?? 0}
+                              onChange={(e) => setNewParcela({ ...newParcela, status: Number(e.target.value) as StatusDesembolso })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
+                            >
+                              {statusDesembolsoOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Observação</label>
+                            <input
+                              type="text"
+                              value={newParcela.observacao || ""}
+                              onChange={(e) => setNewParcela({ ...newParcela, observacao: e.target.value })}
+                              placeholder="Opcional"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 mt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingParcela(false);
+                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+                            }}
+                            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={addParcela}
+                            disabled={!validateParcela(newParcela)}
+                            className="px-4 py-2 text-sm bg-[#004225] text-white rounded-lg hover:bg-[#003319] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Adicionar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lista de parcelas */}
+                    {form.parcelas.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-gray-200 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-2">
+                          Nenhuma parcela cadastrada
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingParcela(true)}
+                          className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                        >
+                          + Adicionar primeira parcela
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Parcela</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Data prevista</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {form.parcelas.map((parcela) => (
+                              <tr key={parcela.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                <td className="py-3 px-4 font-medium text-gray-500 text-center">{parcela.numero}º</td>
+                                <td className="py-3 px-4 text-center text-gray-700">{formatDate(parcela.dataPrevista)}</td>
+                                <td className="py-3 px-4 text-center font-semibold text-gray-900">
+                                  {formatCurrencyDisplay(parcela.valorPrevisto)}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span
+                                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                      statusDesembolsoOptions.find((opt) => opt.value === parcela.status)?.color ||
+                                      "bg-gray-100 text-gray-800"
+                                    }`}
+                                  >
+                                    {statusDesembolsoOptions.find((opt) => opt.value === parcela.status)?.label ||
+                                      "Desconhecido"}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-gray-700">
+                                  {parcela.observacao ? parcela.observacao : <span className="text-gray-400">—</span>}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeParcela(parcela.id)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Remover"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-gray-50 font-medium">
+                            <tr>
+                              <td colSpan={2} className="py-3 px-4 text-right text-gray-600">
+                                Totais:
+                              </td>
+                              <td className="py-3 px-4 text-center text-gray-900">
+                                {formatCurrencyDisplay(totalPrevisto)}
+                              </td>
+                              <td colSpan={3} className="py-3 px-4 text-left text-gray-500">
+                                {excedente > 0
+                                  ? `Excede em ${formatCurrencyDisplay(excedente)}`
+                                  : restante > 0
+                                  ? `Falta ${formatCurrencyDisplay(restante)}`
+                                  : "Fechado"}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ================================================================ */}
               {/* Seção de Metas, Etapas e Fases (Opcional) */}
               {/* ================================================================ */}
               <div className="border-t border-gray-200 pt-5 mt-2">
@@ -1048,22 +1437,20 @@ export default function NovoContratoPage() {
                                     <label className="text-xs font-medium text-gray-600 mb-1 block">
                                       Data Início
                                     </label>
-                                    <input
-                                      type="date"
+                                    <DatePicker
                                       value={meta.dataInicio || ""}
-                                      onChange={(e) => updateMeta(meta.id, "dataInicio", e.target.value)}
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                      onChange={(value) => updateMeta(meta.id, "dataInicio", value)}
+                                      placeholder="Selecione a data"
                                     />
                                   </div>
                                   <div>
                                     <label className="text-xs font-medium text-gray-600 mb-1 block">
                                       Data Fim
                                     </label>
-                                    <input
-                                      type="date"
+                                    <DatePicker
                                       value={meta.dataFim || ""}
-                                      onChange={(e) => updateMeta(meta.id, "dataFim", e.target.value)}
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                      onChange={(value) => updateMeta(meta.id, "dataFim", value)}
+                                      placeholder="Selecione a data"
                                     />
                                   </div>
                                 </div>
@@ -1152,26 +1539,24 @@ export default function NovoContratoPage() {
                                                   <label className="text-xs text-gray-500 mb-1 block">
                                                     Data Início
                                                   </label>
-                                                  <input
-                                                    type="date"
+                                                  <DatePicker
                                                     value={etapa.dataInicio || ""}
-                                                    onChange={(e) =>
-                                                      updateEtapa(meta.id, etapa.id, "dataInicio", e.target.value)
+                                                    onChange={(value) =>
+                                                      updateEtapa(meta.id, etapa.id, "dataInicio", value)
                                                     }
-                                                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                    placeholder="Selecione a data"
                                                   />
                                                 </div>
                                                 <div>
                                                   <label className="text-xs text-gray-500 mb-1 block">
                                                     Data Fim
                                                   </label>
-                                                  <input
-                                                    type="date"
+                                                  <DatePicker
                                                     value={etapa.dataFim || ""}
-                                                    onChange={(e) =>
-                                                      updateEtapa(meta.id, etapa.id, "dataFim", e.target.value)
+                                                    onChange={(value) =>
+                                                      updateEtapa(meta.id, etapa.id, "dataFim", value)
                                                     }
-                                                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                    placeholder="Selecione a data"
                                                   />
                                                 </div>
                                               </div>
@@ -1223,36 +1608,36 @@ export default function NovoContratoPage() {
                                                           placeholder="Título da fase..."
                                                           className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                                         />
-                                                        <input
-                                                          type="date"
-                                                          value={fase.dataInicio || ""}
-                                                          onChange={(e) =>
-                                                            updateFase(
-                                                              meta.id,
-                                                              etapa.id,
-                                                              fase.id,
-                                                              "dataInicio",
-                                                              e.target.value
-                                                            )
-                                                          }
-                                                          className="w-28 px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
-                                                          title="Data início"
-                                                        />
-                                                        <input
-                                                          type="date"
-                                                          value={fase.dataFim || ""}
-                                                          onChange={(e) =>
-                                                            updateFase(
-                                                              meta.id,
-                                                              etapa.id,
-                                                              fase.id,
-                                                              "dataFim",
-                                                              e.target.value
-                                                            )
-                                                          }
-                                                          className="w-28 px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
-                                                          title="Data fim"
-                                                        />
+                                                        <div className="w-32">
+                                                          <DatePicker
+                                                            value={fase.dataInicio || ""}
+                                                            onChange={(value) =>
+                                                              updateFase(
+                                                                meta.id,
+                                                                etapa.id,
+                                                                fase.id,
+                                                                "dataInicio",
+                                                                value
+                                                              )
+                                                            }
+                                                            placeholder="Início"
+                                                          />
+                                                        </div>
+                                                        <div className="w-32">
+                                                          <DatePicker
+                                                            value={fase.dataFim || ""}
+                                                            onChange={(value) =>
+                                                              updateFase(
+                                                                meta.id,
+                                                                etapa.id,
+                                                                fase.id,
+                                                                "dataFim",
+                                                                value
+                                                              )
+                                                            }
+                                                            placeholder="Fim"
+                                                          />
+                                                        </div>
                                                         <button
                                                           type="button"
                                                           onClick={() =>

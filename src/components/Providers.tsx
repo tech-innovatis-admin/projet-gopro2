@@ -1,8 +1,6 @@
 "use client";
 
 import { ReactNode } from "react";
-import { NotificationProvider } from "@/contexts/NotificationContext";
-import { NotificationDrawer } from "@/src/app/(dashboard)/perfil/notificacoes/_components";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -14,9 +12,8 @@ interface ProvidersProps {
  */
 export function Providers({ children }: ProvidersProps) {
   return (
-    <NotificationProvider>
+    <>
       {children}
-      <NotificationDrawer />
-    </NotificationProvider>
+    </>
   );
 }

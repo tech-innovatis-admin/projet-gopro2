@@ -6,6 +6,7 @@ import { PERMISSION_LEVELS, ROLE_LABELS, MODULE_LABELS } from "../mockData";
 import { ChevronDown, Search, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { ResizableTable } from "@/components/ui/resizable-table";
 
 // =============================================================================
 // TABELA DE USUÁRIOS - Painel central
@@ -52,16 +53,6 @@ export function UsersTable({
       return true;
     });
   }, [users, filters]);
-
-  // Função para obter iniciais do nome
-  const getInitials = (name: string): string => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-  };
 
   // Formata data de último acesso
   const formatLastAccess = (dateString?: string): string => {
@@ -331,7 +322,17 @@ export function UsersTable({
 
       {/* Tabela */}
       <div className="flex-1 overflow-y-auto">
-        <table className="w-full">
+        <ResizableTable
+          columnCount={5}
+          defaultWidths={[
+            { defaultWidth: 220, minWidth: 140 }, // Nome
+            { defaultWidth: 110, minWidth: 80 },  // Função
+            { defaultWidth: 90, minWidth: 60 },   // Equipe
+            { defaultWidth: 150, minWidth: 100 }, // Nível
+            { defaultWidth: 110, minWidth: 90 },   // Situação
+          ]}
+          className="w-full"
+        >
           <thead className="sticky top-0 bg-white border-b border-gray-200">
             <tr>
               <th className="text-center py-3 px-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -349,15 +350,12 @@ export function UsersTable({
               <th className="text-center py-3 px-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Situação
               </th>
-              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Último acesso
-              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-500">
+                <td colSpan={5} className="py-8 text-center text-gray-500">
                   Nenhum usuário encontrado
                 </td>
               </tr>
@@ -377,22 +375,9 @@ export function UsersTable({
                     }`}
                   >
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#004225] text-white flex items-center justify-center text-xs font-medium">
-                          {user.photo ? (
-                            <img
-                              src={user.photo}
-                              alt={user.name}
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
-                            getInitials(user.name)
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
-                        </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                        <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -406,7 +391,7 @@ export function UsersTable({
                     <td className="py-3 px-4">
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-block min-w-[120px]"
+                        className="inline-block min-w-[90px]"
                       >
                         <Dropdown
                           options={permissionLevelOptions}
@@ -418,7 +403,7 @@ export function UsersTable({
                             }
                           }}
                           className={cn(
-                            "text-xs font-medium text-white border-0 rounded-full px-3 py-1",
+                            "text-xs font-medium text-white border-0 rounded-full px-2 py-0.5",
                             levelConfig.badgeColor,
                             // Remove hover effect - mantém a mesma cor no hover
                             levelConfig.badgeColor === "bg-green-500" && "hover:bg-green-500",
@@ -429,37 +414,31 @@ export function UsersTable({
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={user.status === "ATIVO"}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            onStatusToggle?.(
-                              user.id,
-                              e.target.checked ? "ATIVO" : "INATIVO"
-                            );
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#004225] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#004225]"></div>
-                        <span className="ml-3 text-sm text-gray-700">
-                          {user.status === "ATIVO" ? "Ativo" : "Inativo"}
-                        </span>
-                      </label>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm text-gray-600">
-                        {formatLastAccess(user.lastAccessAt)}
-                      </span>
+                      <div className="flex justify-center">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={user.status === "ATIVO"}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              onStatusToggle?.(
+                                user.id,
+                                e.target.checked ? "ATIVO" : "INATIVO"
+                              );
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#004225] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#004225]"></div>
+                        </label>
+                      </div>
                     </td>
                   </tr>
                 );
               })
             )}
           </tbody>
-        </table>
+        </ResizableTable>
       </div>
 
       {/* Contador */}

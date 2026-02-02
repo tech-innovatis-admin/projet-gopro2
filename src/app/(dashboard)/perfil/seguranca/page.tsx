@@ -152,9 +152,9 @@ export default function SegurancaPage() {
               <Shield className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Segurança da Conta</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Privacidade da Conta</h1>
               <p className="text-sm text-gray-500">
-                Gerencie as configurações de segurança da sua conta
+                Gerencie as configurações de segurança e privacidade da sua conta
               </p>
             </div>
           </div>

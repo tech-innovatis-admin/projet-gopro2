@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { NavBar } from "@/components/ui/NavBar";
 import { ProfileHeader } from "./_components";
-import { type TeamUser } from "../equipe/types";
-import { MOCK_TEAM_USERS } from "../equipe/mockData";
+import { type TeamUser } from "../recursos-humanos/equipe/types";
+import { MOCK_TEAM_USERS } from "../recursos-humanos/equipe/mockData";
 import { User } from "lucide-react";
 
 // =============================================================================

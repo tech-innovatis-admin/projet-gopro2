@@ -1,0 +1,324 @@
+"use client";
+
+import { useMemo } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { NavBar } from "@/components/ui/NavBar";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  FileText,
+  Clock,
+  Building2,
+  Briefcase,
+  User,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getPersonById, formatDate, formatCurrency } from "../data";
+import {
+  PROJECT_PERSON_STATUS_CONFIG,
+  CONTRACT_TYPE_LABELS,
+  type ProjectPerson,
+} from "../types";
+
+// =============================================================================
+// PÁGINA DE DETALHES DA PESSOA
+// =============================================================================
+
+export default function PessoaDetalhesPage() {
+  const params = useParams();
+  const pessoaId = params.pessoasId as string;
+
+  const person = useMemo(() => getPersonById(pessoaId), [pessoaId]);
+
+  // Ordena projetos: ativos primeiro, depois pendentes, depois encerrados
+  const sortedProjects = useMemo(() => {
+    if (!person) return [];
+    return [...person.projects].sort((a, b) => {
+      const statusOrder = { 1: 0, 0: 1, 2: 2 };
+      return statusOrder[a.status] - statusOrder[b.status];
+    });
+  }, [person]);
+
+  // Calcula totais
+  const totals = useMemo(() => {
+    if (!person) return { activeHours: 0, activeAmount: 0 };
+    const activeProjects = person.projects.filter((p) => p.status === 1);
+    return {
+      activeHours: activeProjects.reduce((sum, p) => sum + (p.workloadHours || 0), 0),
+      activeAmount: activeProjects.reduce((sum, p) => sum + (p.baseAmount || 0), 0),
+    };
+  }, [person]);
+
+  // Função para obter iniciais do nome
+  const getInitials = (name: string): string => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+  };
+
+  if (!person) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+        <NavBar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col items-center justify-center py-20">
+            <User className="h-16 w-16 text-gray-300 mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              Pessoa não encontrada
+            </h2>
+            <p className="text-gray-500 mb-6">
+              A pessoa solicitada não existe ou foi removida.
+            </p>
+            <Link
+              href="/recursos-humanos/pessoas"
+              className="flex items-center gap-2 text-[#004225] hover:underline"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para lista
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+      <NavBar />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
+          {/* Breadcrumb */}
+          <Link
+            href="/recursos-humanos/pessoas"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para pessoas
+          </Link>
+
+          {/* Header */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-start gap-4">
+              {/* Avatar */}
+              <div className="h-20 w-20 rounded-full bg-[#004225]/10 flex items-center justify-center">
+                <span className="text-2xl font-bold text-[#004225]">
+                  {getInitials(person.fullName)}
+                </span>
+              </div>
+
+              {/* Info */}
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {person.fullName}
+                </h1>
+                {person.cpf && (
+                  <p className="text-sm text-gray-500 mt-1">CPF: {person.cpf}</p>
+                )}
+
+                {/* Contato */}
+                <div className="flex flex-wrap gap-4 mt-4">
+                  {person.email && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <a
+                        href={`mailto:${person.email}`}
+                        className="hover:text-[#004225] hover:underline"
+                      >
+                        {person.email}
+                      </a>
+                    </div>
+                  )}
+                  {person.phone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      <span>{person.phone}</span>
+                    </div>
+                  )}
+                  {person.city && person.state && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <MapPin className="h-4 w-4 text-gray-400" />
+                      <span>
+                        {person.city}, {person.state}
+                      </span>
+                    </div>
+                  )}
+                  {person.birthDate && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      <span>{formatDate(person.birthDate)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards de resumo */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-green-600 font-medium mb-1">
+                Projetos Ativos
+              </p>
+              <p className="text-2xl font-bold text-green-700">
+                {person.activeProjectsCount}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-gray-600 font-medium mb-1">
+                Total de Projetos
+              </p>
+              <p className="text-2xl font-bold text-gray-700">
+                {person.totalProjectsCount}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-blue-600 font-medium mb-1">
+                Carga Horária Ativa
+              </p>
+              <p className="text-2xl font-bold text-blue-700">
+                {totals.activeHours}h
+              </p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-purple-600 font-medium mb-1">
+                Valor Total Ativo
+              </p>
+              <p className="text-xl font-bold text-purple-700">
+                {formatCurrency(totals.activeAmount)}
+              </p>
+            </div>
+          </div>
+
+          {/* Tabela de projetos */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Vínculos com Projetos
+              </h2>
+            </div>
+
+            {sortedProjects.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>Nenhum vínculo com projeto</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Projeto
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Função
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Vínculo
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Contrato
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Carga Horária
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Período
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Valor
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sortedProjects.map((project) => (
+                      <ProjectRow key={project.id} project={project} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Observações */}
+          {person.notes && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">
+                Observações
+              </h2>
+              <p className="text-sm text-gray-700">{person.notes}</p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// =============================================================================
+// LINHA DA TABELA DE PROJETOS
+// =============================================================================
+
+function ProjectRow({ project }: { project: ProjectPerson }) {
+  const statusConfig = PROJECT_PERSON_STATUS_CONFIG[project.status];
+
+  return (
+    <tr className="hover:bg-gray-50 transition-colors">
+      <td className="px-6 py-4">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{project.projectName}</p>
+          <p className="text-xs text-[#004225]">{project.projectCode}</p>
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <Briefcase className="h-4 w-4 text-gray-400" />
+          <span>{project.role || "-"}</span>
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <Building2 className="h-4 w-4 text-gray-400" />
+          <span>{project.institutionalLink || "-"}</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 text-sm text-gray-700">
+        {project.contractType ? CONTRACT_TYPE_LABELS[project.contractType] : "-"}
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <Clock className="h-4 w-4 text-gray-400" />
+          <span>{project.workloadHours ? `${project.workloadHours}h` : "-"}</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 text-sm text-gray-700">
+        {formatDate(project.startDate)}
+        {project.endDate ? ` - ${formatDate(project.endDate)}` : " - Atual"}
+      </td>
+      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+        {project.baseAmount ? formatCurrency(project.baseAmount) : "-"}
+      </td>
+      <td className="px-6 py-4">
+        <span
+          className={cn(
+            "inline-flex px-2.5 py-1 text-xs font-medium rounded-full",
+            statusConfig.bg,
+            statusConfig.text
+          )}
+        >
+          {statusConfig.label}
+        </span>
+      </td>
+    </tr>
+  );
+}

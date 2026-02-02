@@ -32,7 +32,7 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useNotification } from "@/contexts/NotificationContext";
+import { NotificationDropdown } from "../../src/app/(dashboard)/perfil/notificacoes/_components";
 
 interface NavItem {
   label: string;
@@ -44,7 +44,7 @@ interface NavItem {
 
 const navigationItems: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Home",
     href: "/home",
     icon: Home,
   },
@@ -76,11 +76,12 @@ const navigationItems: NavItem[] = [
     ],
   },
   {
-    label: "Equipe",
-    href: "/equipe",
+    label: "Recursos Humanos",
+    href: "/recursos-humanos",
     icon: Users,
     children: [
-      { label: "Membros e Permissões", href: "/equipe", icon: Users },
+      { label: "Equipe Interna", href: "/recursos-humanos/equipe", icon: Users },
+      { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
     ],
   },
 ];
@@ -139,7 +140,6 @@ function openModal(modalName: string): void {
 export function NavBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { openDrawer: openNotificationDrawer } = useNotification();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -531,15 +531,7 @@ export function NavBar() {
           {/* User Menu & Mobile Toggle */}
           <div className="flex items-center gap-3">
             {/* Notifications */}
-            <button
-              onClick={openNotificationDrawer}
-              className="relative p-2 text-[#004225] hover:text-white hover:bg-[#31938A] rounded-lg transition-colors duration-200"
-              aria-label="Abrir notificações"
-            >
-              <Bell className="h-5 w-5" />
-              {/* Badge de notificações não lidas - visível quando há notificações */}
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-[#00C48B] rounded-full animate-pulse" />
-            </button>
+            <NotificationDropdown />
 
             {/* User Dropdown */}
             {mounted ? (
@@ -560,14 +552,14 @@ export function NavBar() {
                   align="end"
                   className="w-56 bg-white border border-zinc-200 rounded-lg shadow-lg p-1"
                 >
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => router.push("/perfil")}
                     className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
                   >
                     <User className="h-4 w-4" />
                     <span>Perfil</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => router.push("/perfil/atividades")}
                     className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
                   >
@@ -582,7 +574,7 @@ export function NavBar() {
                     <span>Configurações</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    onClick={openNotificationDrawer}
+                    onClick={() => router.push("/perfil/notificacoes")}
                     className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-700 cursor-pointer"
                   >
                     <Bell className="h-4 w-4" />
