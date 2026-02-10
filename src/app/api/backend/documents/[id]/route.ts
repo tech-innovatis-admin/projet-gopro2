@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+﻿import { NextRequest } from 'next/server';
 import { proxyToJava } from '../../../_shared';
 
 export async function GET(
@@ -6,15 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToJava(req, `/api/documents/${id}`);
-}
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  return proxyToJava(req, `/api/documents/${id}`, { method: 'PUT' });
+  return proxyToJava(req, `/documents/${id}`);
 }
 
 export async function DELETE(
@@ -22,5 +14,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToJava(req, `/api/documents/${id}`, { method: 'DELETE' });
+  return proxyToJava(req, `/documents/${id}`, { method: 'DELETE' });
 }
+

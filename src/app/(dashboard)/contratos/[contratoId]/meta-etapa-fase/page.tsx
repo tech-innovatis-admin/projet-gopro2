@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Edit,
   Save,
   X,
   CheckCircle,
+  CalendarClock,
   Plus,
   Trash2,
   ChevronDown,
@@ -17,103 +18,489 @@ import {
   Edit2,
   Check,
 } from "lucide-react";
+import {
+  createGoal,
+  createPhase,
+  createStage,
+  concludeGoal,
+  concludePhase,
+  concludeStage,
+  deleteGoal,
+  deletePhase,
+  deleteStage,
+  listGoals,
+  listPhases,
+  listStages,
+  reopenGoal,
+  reopenPhase,
+  reopenStage,
+  updateGoal,
+  updatePhase,
+  updateStage,
+} from "@/src/lib/api/endpoints";
+import {
+  type GoalRequestDTO,
+  HttpError,
+  type GoalResponseDTO,
+  type GoalUpdateDTO,
+  type PageResponseDTO,
+  type PhaseRequestDTO,
+  type PhaseResponseDTO,
+  type PhaseUpdateDTO,
+  type StageRequestDTO,
+  type StageResponseDTO,
+  type StageUpdateDTO,
+} from "@/src/lib/api/types";
 
 // Tipos
 type Fase = {
   id: string;
+  backendId?: number;
+  stageId?: number;
   numero: number;
   titulo: string;
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  concluida?: boolean;
+  dataConclusao?: string;
 };
 
 type Etapa = {
   id: string;
+  backendId?: number;
+  goalId?: number;
   numero: number;
   titulo: string;
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  concluida?: boolean;
+  dataConclusao?: string;
   fases: Fase[];
 };
 
 type Meta = {
   id: string;
+  backendId?: number;
+  projectId?: number;
   numero: number;
   titulo: string;
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  concluida?: boolean;
+  dataConclusao?: string;
   etapas: Etapa[];
 };
 
-// Mock de dados
-const mockMetas: Meta[] = [
-  {
-    id: "1",
-    numero: 1,
-    titulo: "Levantamento de Requisitos",
-    descricao: "Análise e documentação dos requisitos do sistema",
-    dataInicio: "2025-01-15",
-    dataFim: "2025-03-15",
-    etapas: [
-      {
-        id: "1-1",
-        numero: 1,
-        titulo: "Entrevistas com Stakeholders",
-        dataInicio: "2025-01-15",
-        dataFim: "2025-02-15",
-        fases: [
-          { id: "1-1-1", numero: 1, titulo: "Preparação do roteiro", dataInicio: "2025-01-15", dataFim: "2025-01-31" },
-          { id: "1-1-2", numero: 2, titulo: "Realização das entrevistas", dataInicio: "2025-02-01", dataFim: "2025-02-15" },
-        ],
-      },
-      {
-        id: "1-2",
-        numero: 2,
-        titulo: "Documentação de Requisitos",
-        dataInicio: "2025-02-16",
-        dataFim: "2025-03-15",
-        fases: [],
-      },
-    ],
-  },
-  {
-    id: "2",
-    numero: 2,
-    titulo: "Desenvolvimento do Sistema",
-    descricao: "Implementação das funcionalidades principais",
-    dataInicio: "2025-03-16",
-    dataFim: "2025-09-30",
-    etapas: [],
-  },
-];
+type TimelineStatus =
+  | "SEM_DATA"
+  | "NAO_INICIADO"
+  | "EM_ANDAMENTO"
+  | "ATRASADO"
+  | "CONCLUIDO";
+
+function toDateOnly(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.slice(0, 10);
+}
+
+function toLocalDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateOnly(value?: string | null): Date | null {
+  if (!value) return null;
+  const normalized = value.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Nao foi possivel carregar metas, etapas e fases.";
+}
+
+async function fetchAllPages<T>(
+  fetcher: (params: { page: number; size: number }) => Promise<PageResponseDTO<T>>
+): Promise<T[]> {
+  const pageSize = 100;
+  let page = 0;
+  const all: T[] = [];
+
+  while (true) {
+    const response = await fetcher({ page, size: pageSize });
+    all.push(...response.content);
+
+    if (response.last || page >= response.totalPages - 1) {
+      break;
+    }
+    page += 1;
+  }
+
+  return all;
+}
 
 function formatDate(iso?: string) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR");
-  } catch {
-    return iso;
+  if (!iso) return "-";
+  const parsed = parseDateOnly(iso);
+  if (!parsed) return iso;
+  return parsed.toLocaleDateString("pt-BR");
+}
+
+const STATUS_STYLES: Record<
+  TimelineStatus,
+  { label: string; chip: string; dot: string; progress: string }
+> = {
+  SEM_DATA: {
+    label: "Sem data",
+    chip: "border-slate-200 bg-slate-100 text-slate-700",
+    dot: "bg-slate-500",
+    progress: "bg-slate-400",
+  },
+  NAO_INICIADO: {
+    label: "Não iniciado",
+    chip: "border-zinc-200 bg-zinc-100 text-zinc-700",
+    dot: "bg-zinc-500",
+    progress: "bg-zinc-500",
+  },
+  EM_ANDAMENTO: {
+    label: "Em andamento",
+    chip: "border-blue-200 bg-blue-50 text-blue-700",
+    dot: "bg-blue-500",
+    progress: "bg-blue-500",
+  },
+  ATRASADO: {
+    label: "Atrasado",
+    chip: "border-amber-200 bg-amber-50 text-amber-700",
+    dot: "bg-amber-500",
+    progress: "bg-amber-500",
+  },
+  CONCLUIDO: {
+    label: "Concluido",
+    chip: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    dot: "bg-emerald-500",
+    progress: "bg-emerald-500",
+  },
+};
+
+function parseDay(value?: string) {
+  return parseDateOnly(value);
+}
+
+function todayStart() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function getDateStatus(dataInicio?: string, dataFim?: string): TimelineStatus {
+  const now = todayStart();
+  const inicio = parseDay(dataInicio);
+  const fim = parseDay(dataFim);
+
+  if (!inicio && !fim) return "SEM_DATA";
+  if (inicio && now < inicio) return "NAO_INICIADO";
+  if (fim && now > fim) return "ATRASADO";
+  return "EM_ANDAMENTO";
+}
+
+function getDateProgress(dataInicio?: string, dataFim?: string) {
+  const now = todayStart();
+  const inicio = parseDay(dataInicio);
+  const fim = parseDay(dataFim);
+
+  if (!inicio && !fim) return 0;
+  if (inicio && !fim) return now >= inicio ? 55 : 0;
+  if (!inicio && fim) return now > fim ? 100 : 45;
+  if (!inicio || !fim) return 0;
+  if (now <= inicio) return 0;
+  if (now >= fim) return 100;
+
+  const duration = fim.getTime() - inicio.getTime();
+  if (duration <= 0) return 100;
+  const elapsed = now.getTime() - inicio.getTime();
+  return Math.max(0, Math.min(100, Math.round((elapsed / duration) * 100)));
+}
+
+function avg(values: number[], fallback: number) {
+  if (values.length === 0) return fallback;
+  const total = values.reduce((acc, value) => acc + value, 0);
+  return Math.round(total / values.length);
+}
+
+function resolveFaseIndicators(fase: Fase) {
+  if (fase.concluida) {
+    return {
+      status: "CONCLUIDO" as TimelineStatus,
+      progress: 100,
+    };
   }
+
+  return {
+    status: getDateStatus(fase.dataInicio, fase.dataFim),
+    progress: getDateProgress(fase.dataInicio, fase.dataFim),
+  };
+}
+
+function resolveEtapaIndicators(etapa: Etapa) {
+  if (etapa.concluida) {
+    return {
+      status: "CONCLUIDO" as TimelineStatus,
+      progress: 100,
+    };
+  }
+
+  const ownStatus = getDateStatus(etapa.dataInicio, etapa.dataFim);
+  const ownProgress = getDateProgress(etapa.dataInicio, etapa.dataFim);
+  if (etapa.fases.length === 0) {
+    return { status: ownStatus, progress: ownProgress };
+  }
+
+  const faseIndicators = etapa.fases.map((fase) => resolveFaseIndicators(fase));
+  if (faseIndicators.every((item) => item.status === "CONCLUIDO")) {
+    return {
+      status: "CONCLUIDO" as TimelineStatus,
+      progress: 100,
+    };
+  }
+
+  const status = faseIndicators.some((item) => item.status === "ATRASADO")
+    ? "ATRASADO"
+    : faseIndicators.every((item) => item.status === "SEM_DATA")
+      ? ownStatus
+      : faseIndicators.every(
+            (item) =>
+              item.status === "NAO_INICIADO" || item.status === "SEM_DATA"
+          )
+        ? "NAO_INICIADO"
+        : "EM_ANDAMENTO";
+  return {
+    status,
+    progress: avg(
+      faseIndicators.map((item) => item.progress),
+      ownProgress
+    ),
+  };
+}
+
+function resolveMetaIndicators(meta: Meta) {
+  if (meta.concluida) {
+    return { status: "CONCLUIDO" as TimelineStatus, progress: 100 };
+  }
+
+  const ownStatus = getDateStatus(meta.dataInicio, meta.dataFim);
+  const ownProgress = getDateProgress(meta.dataInicio, meta.dataFim);
+  if (meta.etapas.length === 0) {
+    return { status: ownStatus, progress: ownProgress };
+  }
+
+  const etapaIndicators = meta.etapas.map((etapa) => resolveEtapaIndicators(etapa));
+  if (etapaIndicators.every((item) => item.status === "CONCLUIDO")) {
+    return {
+      status: "CONCLUIDO" as TimelineStatus,
+      progress: 100,
+    };
+  }
+
+  const status = etapaIndicators.some((item) => item.status === "ATRASADO")
+    ? "ATRASADO"
+    : etapaIndicators.every((item) => item.status === "SEM_DATA")
+      ? ownStatus
+      : etapaIndicators.every(
+            (item) =>
+              item.status === "NAO_INICIADO" || item.status === "SEM_DATA"
+          )
+        ? "NAO_INICIADO"
+        : "EM_ANDAMENTO";
+  return {
+    status,
+    progress: avg(
+      etapaIndicators.map((item) => item.progress),
+      ownProgress
+    ),
+  };
+}
+
+function StatusChip({ status }: { status: TimelineStatus }) {
+  const style = STATUS_STYLES[status];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${style.chip}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+      {style.label}
+    </span>
+  );
+}
+
+function ProgressBar({
+  value,
+  status,
+}: {
+  value: number;
+  status: TimelineStatus;
+}) {
+  return (
+    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+      <div
+        className={`h-full rounded-full transition-all duration-300 ${STATUS_STYLES[status].progress}`}
+        style={{ width: `${value}%` }}
+      />
+    </div>
+  );
 }
 
 export default function MetaEtapaFasePage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
+  const projectId = Number(contratoId);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [metas, setMetas] = useState<Meta[]>(mockMetas);
-  const [editMetas, setEditMetas] = useState<Meta[]>(mockMetas);
-  const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set(["1"]));
-  const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set(["1-1"]));
+  const [metas, setMetas] = useState<Meta[]>([]);
+  const [editMetas, setEditMetas] = useState<Meta[]>([]);
+  const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
+  const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editingDate, setEditingDate] = useState<{ id: string; type: "meta" | "etapa" | "fase"; field: "dataInicio" | "dataFim"; ids: string[] } | null>(null);
   const [editDateValue, setEditDateValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadHierarchy = useCallback(async () => {
+    if (!Number.isFinite(projectId) || projectId <= 0) {
+      setLoadError("ID do contrato invalido para carregar metas.");
+      setMetas([]);
+      setEditMetas([]);
+      return;
+    }
+
+    setIsLoadingData(true);
+    setLoadError(null);
+
+    try {
+      const [goals, stages, phases] = await Promise.all([
+        fetchAllPages<GoalResponseDTO>((query) => listGoals({ ...query, projectId })),
+        fetchAllPages<StageResponseDTO>((query) => listStages({ ...query, projectId })),
+        fetchAllPages<PhaseResponseDTO>((query) => listPhases({ ...query, projectId })),
+      ]);
+
+      const activeGoals = goals
+        .filter((goal) => goal.isActive)
+        .sort((a, b) => a.numero - b.numero);
+      const activeStages = stages
+        .filter((stage) => stage.isActive)
+        .sort((a, b) => a.numero - b.numero);
+      const activePhases = phases
+        .filter((phase) => phase.isActive)
+        .sort((a, b) => a.numero - b.numero);
+
+      const phasesByStage = new Map<number, PhaseResponseDTO[]>();
+      for (const phase of activePhases) {
+        const list = phasesByStage.get(phase.stageId) ?? [];
+        list.push(phase);
+        phasesByStage.set(phase.stageId, list);
+      }
+
+      const stagesByGoal = new Map<number, StageResponseDTO[]>();
+      for (const stage of activeStages) {
+        const list = stagesByGoal.get(stage.goalId) ?? [];
+        list.push(stage);
+        stagesByGoal.set(stage.goalId, list);
+      }
+
+      const nextMetas: Meta[] = activeGoals.map((goal) => {
+        const nextEtapas: Etapa[] = (stagesByGoal.get(goal.id) ?? []).map((stage) => {
+          const nextFases: Fase[] = (phasesByStage.get(stage.id) ?? []).map((phase) => ({
+            id: `phase-${phase.id}`,
+            backendId: phase.id,
+            stageId: phase.stageId,
+            numero: phase.numero,
+            titulo: phase.titulo,
+            descricao: phase.descricao ?? undefined,
+            dataInicio: toDateOnly(phase.dataInicio),
+            dataFim: toDateOnly(phase.dataFim),
+            concluida: Boolean(phase.dataConclusao),
+            dataConclusao: toDateOnly(phase.dataConclusao),
+          }));
+
+          return {
+            id: `stage-${stage.id}`,
+            backendId: stage.id,
+            goalId: stage.goalId,
+            numero: stage.numero,
+            titulo: stage.titulo,
+            descricao: stage.descricao ?? undefined,
+            dataInicio: toDateOnly(stage.dataInicio),
+            dataFim: toDateOnly(stage.dataFim),
+            concluida: Boolean(stage.dataConclusao),
+            dataConclusao: toDateOnly(stage.dataConclusao),
+            fases: nextFases,
+          };
+        });
+
+        return {
+          id: `goal-${goal.id}`,
+          backendId: goal.id,
+          projectId: goal.projectId,
+          numero: goal.numero,
+          titulo: goal.titulo,
+          descricao: goal.descricao ?? undefined,
+          dataInicio: toDateOnly(goal.dataInicio),
+          dataFim: toDateOnly(goal.dataFim),
+          concluida: Boolean(goal.dataConclusao),
+          dataConclusao: toDateOnly(goal.dataConclusao),
+          etapas: nextEtapas,
+        };
+      });
+
+      setMetas(nextMetas);
+      setEditMetas(JSON.parse(JSON.stringify(nextMetas)));
+      setExpandedMetas(new Set(nextMetas.slice(0, 1).map((meta) => meta.id)));
+      setExpandedEtapas(
+        new Set(
+          nextMetas
+            .flatMap((meta) => meta.etapas)
+            .slice(0, 1)
+            .map((etapa) => etapa.id)
+        )
+      );
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+      setMetas([]);
+      setEditMetas([]);
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadHierarchy();
+  }, [loadHierarchy]);
 
   const handleEdit = () => {
     setEditMetas(JSON.parse(JSON.stringify(metas)));
@@ -129,14 +516,309 @@ export default function MetaEtapaFasePage() {
     setIsEditing(false);
   };
 
+  const normalizeOptionalText = (value?: string) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+
+  const normalizeOptionalDate = (value?: string) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+
+  const normalizeRequiredTitle = (value: string, fallback: string) => {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  };
+
+  const persistHierarchyChanges = async () => {
+    if (!Number.isFinite(projectId) || projectId <= 0) {
+      throw new Error("ID do contrato invalido para salvar metas.");
+    }
+
+    const metasOrdered = [...editMetas].sort((a, b) => a.numero - b.numero);
+
+    for (const meta of metasOrdered) {
+      const goalCreatePayload: GoalRequestDTO = {
+        projectId,
+        numero: meta.numero,
+        titulo: normalizeRequiredTitle(meta.titulo, `Meta ${meta.numero}`),
+        descricao: normalizeOptionalText(meta.descricao),
+        dataInicio: normalizeOptionalDate(meta.dataInicio),
+        dataFim: normalizeOptionalDate(meta.dataFim),
+      };
+
+      const goalUpdatePayload: GoalUpdateDTO = {
+        projectId,
+        numero: meta.numero,
+        titulo: normalizeRequiredTitle(meta.titulo, `Meta ${meta.numero}`),
+        descricao: normalizeOptionalText(meta.descricao),
+        dataInicio: normalizeOptionalDate(meta.dataInicio),
+        dataFim: normalizeOptionalDate(meta.dataFim),
+      };
+
+      const goalId =
+        meta.backendId ??
+        (await createGoal(goalCreatePayload)).id;
+
+      if (meta.backendId) {
+        await updateGoal(meta.backendId, goalUpdatePayload);
+      }
+
+      const etapasOrdered = [...meta.etapas].sort((a, b) => a.numero - b.numero);
+      for (const etapa of etapasOrdered) {
+        const stageCreatePayload: StageRequestDTO = {
+          goalId,
+          numero: etapa.numero,
+          titulo: normalizeRequiredTitle(etapa.titulo, `Etapa ${etapa.numero}`),
+          descricao: normalizeOptionalText(etapa.descricao),
+          dataInicio: normalizeOptionalDate(etapa.dataInicio),
+          dataFim: normalizeOptionalDate(etapa.dataFim),
+        };
+
+        const stageUpdatePayload: StageUpdateDTO = {
+          goalId,
+          numero: etapa.numero,
+          titulo: normalizeRequiredTitle(etapa.titulo, `Etapa ${etapa.numero}`),
+          descricao: normalizeOptionalText(etapa.descricao),
+          dataInicio: normalizeOptionalDate(etapa.dataInicio),
+          dataFim: normalizeOptionalDate(etapa.dataFim),
+        };
+
+        const stageId =
+          etapa.backendId ??
+          (await createStage(stageCreatePayload)).id;
+
+        if (etapa.backendId) {
+          await updateStage(etapa.backendId, stageUpdatePayload);
+        }
+
+        const fasesOrdered = [...etapa.fases].sort((a, b) => a.numero - b.numero);
+        for (const fase of fasesOrdered) {
+          const phaseCreatePayload: PhaseRequestDTO = {
+            stageId,
+            numero: fase.numero,
+            titulo: normalizeRequiredTitle(fase.titulo, `Fase ${fase.numero}`),
+            descricao: normalizeOptionalText(fase.descricao),
+            dataInicio: normalizeOptionalDate(fase.dataInicio),
+            dataFim: normalizeOptionalDate(fase.dataFim),
+          };
+
+          const phaseUpdatePayload: PhaseUpdateDTO = {
+            stageId,
+            numero: fase.numero,
+            titulo: normalizeRequiredTitle(fase.titulo, `Fase ${fase.numero}`),
+            descricao: normalizeOptionalText(fase.descricao),
+            dataInicio: normalizeOptionalDate(fase.dataInicio),
+            dataFim: normalizeOptionalDate(fase.dataFim),
+          };
+
+          if (fase.backendId) {
+            await updatePhase(fase.backendId, phaseUpdatePayload);
+          } else {
+            await createPhase(phaseCreatePayload);
+          }
+        }
+      }
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setMetas(JSON.parse(JSON.stringify(editMetas)));
-    setIsSaving(false);
-    setIsEditing(false);
-    setSavedMessage(true);
-    setTimeout(() => setSavedMessage(false), 3000);
+    setLoadError(null);
+    try {
+      await persistHierarchyChanges();
+      await loadHierarchy();
+      setEditingId(null);
+      setEditValue("");
+      setEditingDate(null);
+      setEditDateValue("");
+      setIsEditing(false);
+      setSavedMessage(true);
+      setTimeout(() => setSavedMessage(false), 3000);
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateMetaQuickField = (
+    metaId: string,
+    field: "titulo" | "descricao" | "dataInicio" | "dataFim",
+    value: string
+  ) => {
+    setEditMetas((prev) =>
+      prev.map((meta) =>
+        meta.id !== metaId
+          ? meta
+          : field === "titulo"
+            ? {
+                ...meta,
+                titulo: value.trim() === "" ? meta.titulo : value,
+              }
+            : {
+                ...meta,
+                [field]: value.trim() === "" ? undefined : value,
+              }
+      )
+    );
+  };
+
+  const toggleMetaConcluida = async (metaId: string) => {
+    if (isEditing) {
+      setLoadError("Salve as alteracoes antes de concluir ou reabrir a meta.");
+      return;
+    }
+
+    const currentMeta = metas.find((meta) => meta.id === metaId);
+    if (!currentMeta) return;
+
+    if (!currentMeta.backendId) {
+      const today = toLocalDateOnly(new Date());
+      const toggleInList = (list: Meta[]) =>
+        list.map((meta) => {
+          if (meta.id !== metaId) return meta;
+          if (meta.concluida) {
+            return {
+              ...meta,
+              concluida: false,
+              dataConclusao: undefined,
+            };
+          }
+
+          return {
+            ...meta,
+            concluida: true,
+            dataConclusao: today,
+            dataInicio: meta.dataInicio ?? today,
+            dataFim: meta.dataFim ?? today,
+          };
+        });
+
+      setMetas((prev) => toggleInList(prev));
+      setEditMetas((prev) => toggleInList(prev));
+      return;
+    }
+
+    try {
+      if (currentMeta.concluida) {
+        await reopenGoal(currentMeta.backendId);
+      } else {
+        await concludeGoal(currentMeta.backendId);
+      }
+      await loadHierarchy();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    }
+  };
+
+  const toggleEtapaConcluida = async (metaId: string, etapaId: string) => {
+    if (isEditing) {
+      setLoadError("Salve as alteracoes antes de concluir ou reabrir a etapa.");
+      return;
+    }
+
+    const currentMeta = metas.find((meta) => meta.id === metaId);
+    const currentEtapa = currentMeta?.etapas.find((etapa) => etapa.id === etapaId);
+    if (!currentEtapa) return;
+
+    if (!currentEtapa.backendId) {
+      const today = toLocalDateOnly(new Date());
+      const toggle = (list: Meta[]) =>
+        list.map((meta) =>
+          meta.id !== metaId
+            ? meta
+            : {
+                ...meta,
+                etapas: meta.etapas.map((etapa) =>
+                  etapa.id !== etapaId
+                    ? etapa
+                    : {
+                        ...etapa,
+                        concluida: !etapa.concluida,
+                        dataConclusao: etapa.concluida ? undefined : today,
+                        dataFim: etapa.dataFim ?? today,
+                      }
+                ),
+              }
+        );
+      setMetas((prev) => toggle(prev));
+      setEditMetas((prev) => toggle(prev));
+      return;
+    }
+
+    try {
+      if (currentEtapa.concluida) {
+        await reopenStage(currentEtapa.backendId);
+      } else {
+        await concludeStage(currentEtapa.backendId);
+      }
+      await loadHierarchy();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    }
+  };
+
+  const toggleFaseConcluida = async (
+    metaId: string,
+    etapaId: string,
+    faseId: string
+  ) => {
+    if (isEditing) {
+      setLoadError("Salve as alteracoes antes de concluir ou reabrir a fase.");
+      return;
+    }
+
+    const currentMeta = metas.find((meta) => meta.id === metaId);
+    const currentEtapa = currentMeta?.etapas.find((etapa) => etapa.id === etapaId);
+    const currentFase = currentEtapa?.fases.find((fase) => fase.id === faseId);
+    if (!currentFase) return;
+
+    if (!currentFase.backendId) {
+      const today = toLocalDateOnly(new Date());
+      const toggle = (list: Meta[]) =>
+        list.map((meta) =>
+          meta.id !== metaId
+            ? meta
+            : {
+                ...meta,
+                etapas: meta.etapas.map((etapa) =>
+                  etapa.id !== etapaId
+                    ? etapa
+                    : {
+                        ...etapa,
+                        fases: etapa.fases.map((fase) =>
+                          fase.id !== faseId
+                            ? fase
+                            : {
+                                ...fase,
+                                concluida: !fase.concluida,
+                                dataConclusao: fase.concluida ? undefined : today,
+                                dataFim: fase.dataFim ?? today,
+                              }
+                        ),
+                      }
+                ),
+              }
+        );
+      setMetas((prev) => toggle(prev));
+      setEditMetas((prev) => toggle(prev));
+      return;
+    }
+
+    try {
+      if (currentFase.concluida) {
+        await reopenPhase(currentFase.backendId);
+      } else {
+        await concludePhase(currentFase.backendId);
+      }
+      await loadHierarchy();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    }
   };
 
   // Toggle expandir/colapsar
@@ -210,29 +892,73 @@ export default function MetaEtapaFasePage() {
     );
   };
 
-  const removeMeta = (id: string) => {
+  const removeMeta = async (id: string) => {
+    const meta = editMetas.find((item) => item.id === id);
+    if (!meta) return;
+
+    if (meta.backendId) {
+      try {
+        await deleteGoal(meta.backendId);
+        await loadHierarchy();
+      } catch (error) {
+        setLoadError(getErrorMessage(error));
+      }
+      return;
+    }
+
     setEditMetas((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const removeEtapa = (metaId: string, etapaId: string) => {
+  const removeEtapa = async (metaId: string, etapaId: string) => {
+    const meta = editMetas.find((item) => item.id === metaId);
+    const etapa = meta?.etapas.find((item) => item.id === etapaId);
+    if (!etapa) return;
+
+    if (etapa.backendId) {
+      try {
+        await deleteStage(etapa.backendId);
+        await loadHierarchy();
+      } catch (error) {
+        setLoadError(getErrorMessage(error));
+      }
+      return;
+    }
+
     setEditMetas((prev) =>
-      prev.map((meta) => {
-        if (meta.id !== metaId) return meta;
-        return { ...meta, etapas: meta.etapas.filter((e) => e.id !== etapaId) };
-      })
+      prev.map((item) =>
+        item.id !== metaId
+          ? item
+          : { ...item, etapas: item.etapas.filter((stage) => stage.id !== etapaId) }
+      )
     );
   };
 
-  const removeFase = (metaId: string, etapaId: string, faseId: string) => {
+  const removeFase = async (metaId: string, etapaId: string, faseId: string) => {
+    const meta = editMetas.find((item) => item.id === metaId);
+    const etapa = meta?.etapas.find((item) => item.id === etapaId);
+    const fase = etapa?.fases.find((item) => item.id === faseId);
+    if (!fase) return;
+
+    if (fase.backendId) {
+      try {
+        await deletePhase(fase.backendId);
+        await loadHierarchy();
+      } catch (error) {
+        setLoadError(getErrorMessage(error));
+      }
+      return;
+    }
+
     setEditMetas((prev) =>
-      prev.map((meta) => {
-        if (meta.id !== metaId) return meta;
+      prev.map((item) => {
+        if (item.id !== metaId) return item;
         return {
-          ...meta,
-          etapas: meta.etapas.map((etapa) => {
-            if (etapa.id !== etapaId) return etapa;
-            return { ...etapa, fases: etapa.fases.filter((f) => f.id !== faseId) };
-          }),
+          ...item,
+          etapas: item.etapas.map((stage) =>
+            stage.id !== etapaId
+              ? stage
+              : { ...stage, fases: stage.fases.filter((phase) => phase.id !== faseId) }
+          ),
         };
       })
     );
@@ -356,26 +1082,40 @@ export default function MetaEtapaFasePage() {
     setEditDateValue("");
   };
 
-  // Modo de visualização (read-only)
+  // Modo de visualizacao (read-only)
   const currentMetas = isEditing ? editMetas : metas;
+  const metrics = useMemo(() => {
+    const totalMetas = currentMetas.length;
+    const totalEtapas = currentMetas.reduce(
+      (acc, meta) => acc + meta.etapas.length,
+      0
+    );
+    const totalFases = currentMetas.reduce(
+      (acc, meta) =>
+        acc +
+        meta.etapas.reduce((innerAcc, etapa) => innerAcc + etapa.fases.length, 0),
+      0
+    );
+    return { totalMetas, totalEtapas, totalFases };
+  }, [currentMetas]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-slate-900">
             Meta, Etapa e Fase
           </h2>
-          <p className="text-sm text-gray-500">
-            Estrutura de metas, etapas e fases do contrato
+          <p className="text-sm text-slate-500">
+            Estrutura estrategica e operacional do contrato {contratoId}!
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {savedMessage && (
-            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
               <CheckCircle className="h-4 w-4" />
-              Salvo com sucesso!
+              Salvo com sucesso
             </div>
           )}
           <button
@@ -385,7 +1125,7 @@ export default function MetaEtapaFasePage() {
               }
               addMeta();
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-[#004225] transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
             <Plus className="h-4 w-4" />
             Nova Meta
@@ -393,7 +1133,7 @@ export default function MetaEtapaFasePage() {
           {!isEditing ? (
             <button
               onClick={handleEdit}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
+              className="inline-flex items-center gap-2 rounded-md bg-[#004225] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#003319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             >
               <Edit className="h-4 w-4" />
               Editar
@@ -402,7 +1142,7 @@ export default function MetaEtapaFasePage() {
             <>
               <button
                 onClick={handleCancel}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
               >
                 <X className="h-4 w-4" />
                 Cancelar
@@ -410,7 +1150,7 @@ export default function MetaEtapaFasePage() {
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-[#004225] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#003319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
                 {isSaving ? "Salvando..." : "Salvar"}
@@ -420,8 +1160,35 @@ export default function MetaEtapaFasePage() {
         </div>
       </div>
 
+      {isLoadingData && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          Carregando metas, etapas e fases...
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {loadError}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="text-[11px] uppercase tracking-wide text-slate-500">Metas</p>
+          <p className="text-xl font-semibold text-slate-900">{metrics.totalMetas}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="text-[11px] uppercase tracking-wide text-slate-500">Etapas</p>
+          <p className="text-xl font-semibold text-slate-900">{metrics.totalEtapas}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <p className="text-[11px] uppercase tracking-wide text-slate-500">Fases</p>
+          <p className="text-xl font-semibold text-slate-900">{metrics.totalFases}</p>
+        </div>
+      </div>
+
       {/* Lista de Metas */}
-      {currentMetas.length === 0 ? (
+      {!isLoadingData && currentMetas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4">
             <Target className="h-8 w-8 text-gray-400" />
@@ -444,18 +1211,28 @@ export default function MetaEtapaFasePage() {
             </button>
           )}
         </div>
-      ) : (
+      ) : currentMetas.length > 0 ? (
         <div className="space-y-4">
-          {currentMetas.map((meta) => (
+          {currentMetas.map((meta) => {
+            const metaIndicators = resolveMetaIndicators(meta);
+            const metaEtapasCount = meta.etapas.length;
+            const metaFasesCount = meta.etapas.reduce(
+              (acc, etapa) => acc + etapa.fases.length,
+              0
+            );
+
+            return (
             <div
               key={meta.id}
-              className="border border-gray-200 rounded-lg overflow-hidden"
+              className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm transition-all duration-200 hover:border-emerald-300 hover:shadow-md"
             >
               {/* Header da Meta */}
-              <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border-b border-emerald-100">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-emerald-50 border-b border-emerald-100">
                 <button
                   onClick={() => toggleMeta(meta.id)}
-                  className="p-1 hover:bg-emerald-100 rounded transition-colors"
+                  aria-expanded={expandedMetas.has(meta.id)}
+                  aria-label={`Alternar meta ${meta.numero}`}
+                  className="rounded p-1 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
                   {expandedMetas.has(meta.id) ? (
                     <ChevronDown className="h-5 w-5 text-emerald-700" />
@@ -463,9 +1240,7 @@ export default function MetaEtapaFasePage() {
                     <ChevronRight className="h-5 w-5 text-emerald-700" />
                   )}
                 </button>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="h-5 w-5 text-emerald-600">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                </svg>
+                <Target className="h-5 w-5 text-emerald-600" />
                 <span className="text-sm font-bold text-emerald-800">
                   Meta {meta.numero}:
                 </span>
@@ -510,6 +1285,30 @@ export default function MetaEtapaFasePage() {
                     )}
                   </>
                 )}
+                <div className="flex items-center gap-2">
+                  <StatusChip status={metaIndicators.status} />
+                  <button
+                    onClick={() => {
+                      void toggleMetaConcluida(meta.id);
+                    }}
+                    disabled={isEditing}
+                    title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
+                      meta.concluida
+                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    {meta.concluida ? "Reabrir Meta" : "Concluir Meta"}
+                  </button>
+                  <span className="hidden text-[11px] text-slate-600 md:inline">
+                    {metaEtapasCount} etapas
+                  </span>
+                  <span className="hidden text-[11px] text-slate-600 md:inline">
+                    {metaFasesCount} fases
+                  </span>
+                </div>
                 {isEditing ? (
                   <div className="flex items-center gap-2">
                     {editingDate?.id === meta.id && editingDate?.field === "dataInicio" ? (
@@ -593,7 +1392,9 @@ export default function MetaEtapaFasePage() {
                 )}
                 {isEditing && (
                   <button
-                    onClick={() => removeMeta(meta.id)}
+                    onClick={() => {
+                      void removeMeta(meta.id);
+                    }}
                     className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
                     title="Excluir meta"
                   >
@@ -601,10 +1402,90 @@ export default function MetaEtapaFasePage() {
                   </button>
                 )}
               </div>
+              <div className="border-b border-emerald-100 bg-white px-4 py-2">
+                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarClock className="h-3.5 w-3.5 text-slate-500" />
+                    {formatDate(meta.dataInicio)} ate {formatDate(meta.dataFim)}
+                  </span>
+                  {meta.concluida && meta.dataConclusao && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      Concluida em {formatDate(meta.dataConclusao)}
+                    </span>
+                  )}
+                </div>
+                <ProgressBar
+                  value={metaIndicators.progress}
+                  status={metaIndicators.status}
+                />
+              </div>
 
               {/* Conteúdo da Meta (Etapas) */}
               {expandedMetas.has(meta.id) && (
                 <div className="p-4 space-y-3">
+                  {isEditing && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                          Edicao rapida da meta
+                        </p>
+                        <span className="text-[11px] text-emerald-700">
+                          Campos principais
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          <span className="font-medium text-slate-700">Titulo</span>
+                          <input
+                            type="text"
+                            value={meta.titulo}
+                            onChange={(event) =>
+                              updateMetaQuickField(meta.id, "titulo", event.target.value)
+                            }
+                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          />
+                        </label>
+
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          <span className="font-medium text-slate-700">Descricao</span>
+                          <input
+                            type="text"
+                            value={meta.descricao ?? ""}
+                            onChange={(event) =>
+                              updateMetaQuickField(meta.id, "descricao", event.target.value)
+                            }
+                            placeholder="Descreva o objetivo da meta"
+                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          />
+                        </label>
+
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          <span className="font-medium text-slate-700">Data de inicio</span>
+                          <input
+                            type="date"
+                            value={meta.dataInicio ?? ""}
+                            onChange={(event) =>
+                              updateMetaQuickField(meta.id, "dataInicio", event.target.value)
+                            }
+                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          />
+                        </label>
+
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          <span className="font-medium text-slate-700">Data de fim</span>
+                          <input
+                            type="date"
+                            value={meta.dataFim ?? ""}
+                            onChange={(event) =>
+                              updateMetaQuickField(meta.id, "dataFim", event.target.value)
+                            }
+                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   {meta.etapas.length === 0 ? (
                     <div className="text-center py-6 text-gray-500 text-sm">
                       Nenhuma etapa cadastrada.
@@ -619,25 +1500,29 @@ export default function MetaEtapaFasePage() {
                     </div>
                   ) : (
                     <>
-                      {meta.etapas.map((etapa) => (
+                      {meta.etapas.map((etapa) => {
+                        const etapaIndicators = resolveEtapaIndicators(etapa);
+                        return (
                         <div
                           key={etapa.id}
-                          className="ml-4 border-l-2 border-gray-200 pl-4"
+                          className="ml-2 rounded-lg border border-blue-200 bg-blue-50/40 px-3 py-2"
                         >
                           {/* Header da Etapa */}
-                          <div className="flex items-center gap-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 py-2">
                             <button
                               onClick={() => toggleEtapa(etapa.id)}
-                              className="p-1 hover:bg-gray-50 rounded transition-colors"
+                              aria-expanded={expandedEtapas.has(etapa.id)}
+                              aria-label={`Alternar etapa ${etapa.numero}`}
+                              className="rounded p-1 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
                             >
                               {expandedEtapas.has(etapa.id) ? (
-                                <ChevronDown className="h-4 w-4 text-black" />
+                                <ChevronDown className="h-4 w-4 text-blue-600" />
                               ) : (
-                                <ChevronRight className="h-4 w-4 text-black" />
+                                <ChevronRight className="h-4 w-4 text-blue-600" />
                               )}
                             </button>
-                            <Milestone className="h-4 w-4 text-black" />
-                            <span className="text-sm font-semibold text-black">
+                            <Milestone className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-semibold text-blue-700">
                               Etapa {etapa.numero}:
                             </span>
                             {isEditing && editingId === etapa.id ? (
@@ -684,6 +1569,22 @@ export default function MetaEtapaFasePage() {
                                 )}
                               </>
                             )}
+                            <StatusChip status={etapaIndicators.status} />
+                            <button
+                              onClick={() => {
+                                void toggleEtapaConcluida(meta.id, etapa.id);
+                              }}
+                              disabled={isEditing}
+                              title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                etapa.concluida
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                              }`}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              {etapa.concluida ? "Reabrir Etapa" : "Concluir Etapa"}
+                            </button>
                             {isEditing ? (
                               <div className="flex items-center gap-2">
                                 {editingDate?.id === etapa.id && editingDate?.field === "dataInicio" ? (
@@ -767,7 +1668,9 @@ export default function MetaEtapaFasePage() {
                             )}
                             {isEditing && (
                               <button
-                                onClick={() => removeEtapa(meta.id, etapa.id)}
+                                onClick={() => {
+                                  void removeEtapa(meta.id, etapa.id);
+                                }}
                                 className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                 title="Excluir etapa"
                               >
@@ -775,6 +1678,21 @@ export default function MetaEtapaFasePage() {
                               </button>
                             )}
                           </div>
+                          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                            <span className="inline-flex items-center gap-1">
+                              <CalendarClock className="h-3.5 w-3.5 text-slate-500" />
+                              {formatDate(etapa.dataInicio)} ate {formatDate(etapa.dataFim)}
+                            </span>
+                            {etapa.concluida && etapa.dataConclusao && (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                Concluida em {formatDate(etapa.dataConclusao)}
+                              </span>
+                            )}
+                          </div>
+                          <ProgressBar
+                            value={etapaIndicators.progress}
+                            status={etapaIndicators.status}
+                          />
 
                           {/* Fases da Etapa */}
                           {expandedEtapas.has(etapa.id) && (
@@ -793,10 +1711,12 @@ export default function MetaEtapaFasePage() {
                                 </div>
                               ) : (
                                 <>
-                                  {etapa.fases.map((fase) => (
+                                  {etapa.fases.map((fase) => {
+                                    const faseIndicators = resolveFaseIndicators(fase);
+                                    return (
                                     <div
                                       key={fase.id}
-                                      className="flex items-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg border border-gray-100"
+                                      className="flex flex-wrap items-center gap-2 py-1.5 px-3 bg-gray-50 rounded-lg border border-gray-100"
                                     >
                                       <Flag className="h-3.5 w-3.5 text-gray-400" />
                                       <span className="text-xs font-medium text-gray-600">
@@ -858,6 +1778,22 @@ export default function MetaEtapaFasePage() {
                                           )}
                                         </>
                                       )}
+                                      <StatusChip status={faseIndicators.status} />
+                                      <button
+                                        onClick={() => {
+                                          void toggleFaseConcluida(meta.id, etapa.id, fase.id);
+                                        }}
+                                        disabled={isEditing}
+                                        title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                          fase.concluida
+                                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                        }`}
+                                      >
+                                        <CheckCircle className="h-3 w-3" />
+                                        {fase.concluida ? "Reabrir Fase" : "Concluir Fase"}
+                                      </button>
                                       {isEditing ? (
                                         <div className="flex items-center gap-2">
                                           {editingDate?.id === fase.id && editingDate?.field === "dataInicio" ? (
@@ -939,10 +1875,15 @@ export default function MetaEtapaFasePage() {
                                           </span>
                                         )
                                       )}
+                                      {fase.concluida && fase.dataConclusao && (
+                                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                          Concluida em {formatDate(fase.dataConclusao)}
+                                        </span>
+                                      )}
                                       {isEditing && (
                                         <button
                                           onClick={() =>
-                                            removeFase(meta.id, etapa.id, fase.id)
+                                            void removeFase(meta.id, etapa.id, fase.id)
                                           }
                                           className="p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                           title="Excluir fase"
@@ -951,7 +1892,8 @@ export default function MetaEtapaFasePage() {
                                         </button>
                                       )}
                                     </div>
-                                  ))}
+                                  );
+                                  })}
                                 </>
                               )}
                               {isEditing && (
@@ -966,7 +1908,8 @@ export default function MetaEtapaFasePage() {
                             </div>
                           )}
                         </div>
-                      ))}
+                      );
+                      })}
                     </>
                   )}
                   {isEditing && (
@@ -981,9 +1924,10 @@ export default function MetaEtapaFasePage() {
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

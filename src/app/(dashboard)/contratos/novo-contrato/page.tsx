@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -18,21 +18,68 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Target,
   Milestone,
   Flag,
   X,
+  Upload,
+  Eye,
 } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/DatePicker";
-import { getOrganizationsFinanciadoras, getOrganizationsParceiras } from "../mockData";
-import { SuccessToast } from "./_components/SuccessToast";
+import { ProjectCreatedModal } from "./_components/ProjectCreatedModal";
+import {
+  createPartner,
+  createPeople,
+  createPublicAgency,
+  createSecretary,
+  createDisbursementSchedule,
+  createGoal,
+  createPhase,
+  createProject,
+  createStage,
+  listPartners,
+  listPeople,
+  listPublicAgencies,
+  listSecretaries,
+  uploadDocument,
+} from "@/src/lib/api/endpoints";
+import {
+  type DisbursementScheduleRequestDTO,
+  type GoalRequestDTO,
+  HttpError,
+  type PartnerRequestDTO,
+  type PartnersTypeEnum,
+  type PeopleRequestDTO,
+  type PhaseRequestDTO,
+  type PublicAgencyRequestDTO,
+  type PublicAgencyTypeEnum,
+  type ProjectGovIfEnum,
+  type ProjectRequestDTO,
+  type ProjectStatusEnum,
+  type ProjectTypeEnum,
+  type SecretaryRequestDTO,
+  type StageRequestDTO,
+  type StatusDisbursementScheduleEnum,
+} from "@/src/lib/api/types";
 
 // Tipos
-type ContratoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "SUSPENSO" | "PENDENTE" | "CANCELADO";
-type ContratoTipo = "PROJETO" | "PRODUTO";
-type StatusDesembolso = 0 | 1 | 2 | 3; // 0=previsto, 1=parcial, 2=recebido, 3=cancelado
+type ContratoStatus = ProjectStatusEnum;
+type ContratoTipo = ProjectTypeEnum;
+type StatusDesembolso = StatusDisbursementScheduleEnum;
+type OptionItem = {
+  id: string;
+  name: string;
+  cnpj?: string | null;
+};
+type SecretariaOptionItem = OptionItem & {
+  publicAgencyId: string;
+};
+type CoordinatorOptionItem = {
+  id: string;
+  fullName: string;
+  cpf: string | null;
+};
 
 // Tipos para Metas, Etapas e Fases
 type Fase = {
@@ -75,7 +122,7 @@ type ParcelaDesembolso = {
 
 type NovoContratoForm = {
   titulo: string;
-  govIf: "IF" | "Gov" | "";
+  govIf: ProjectGovIfEnum | "";
   status: ContratoStatus | "";
   coordenador: string;
   parceiroId: string;
@@ -96,13 +143,82 @@ type NovoContratoForm = {
 };
 
 type FormErrors = Partial<Record<keyof NovoContratoForm, string>>;
+type PartnerTargetField = "parceiroId" | "parceiroSecundarioId";
+type CoordinatorForm = {
+  fullName: string;
+  cpf: string;
+  email: string;
+  phone: string;
+};
+type PartnerCreateForm = {
+  name: string;
+  tradeName: string;
+  partnersType: PartnersTypeEnum;
+  cnpj: string;
+  email: string;
+  phone: string;
+  address: string;
+  site: string;
+  city: string;
+  state: string;
+  acronym: string;
+};
+type ClientCreateForm = {
+  name: string;
+  cnpj: string;
+  publicAgencyType: PublicAgencyTypeEnum;
+  sigla: string;
+  code: string;
+  email: string;
+  phone: string;
+  address: string;
+  contactPerson: string;
+  city: string;
+  state: string;
+};
+type SecretaryCreateForm = {
+  name: string;
+  cnpj: string;
+  sigla: string;
+  code: string;
+  email: string;
+  phone: string;
+  address: string;
+  contactPerson: string;
+};
+type TipoDocumento = "contrato" | "tr" | "planoTrabalho" | "outro";
+type ProjetoDocumentos = Partial<Record<TipoDocumento, File>>;
+
+const DOCUMENT_CATEGORY_BY_TYPE: Record<TipoDocumento, string> = {
+  contrato: "CONTRATO",
+  tr: "TERMO_REFERENCIA",
+  planoTrabalho: "PLANO_TRABALHO",
+  outro: "OUTRO",
+};
+
+const documentoLabels: Record<TipoDocumento, string> = {
+  contrato: "Contrato",
+  tr: "TR (Termo de Referencia)",
+  planoTrabalho: "Plano de Trabalho",
+  outro: "Outro Documento",
+};
+
+const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const ALLOWED_DOCUMENT_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+
+const DEFAULT_MAX_CONTRACT_VALUE = 9999999999999.99;
+const configuredMaxContractValue = Number(process.env.NEXT_PUBLIC_PROJECT_MAX_CONTRACT_VALUE);
+const MAX_CONTRACT_VALUE =
+  Number.isFinite(configuredMaxContractValue) && configuredMaxContractValue > 0
+    ? configuredMaxContractValue
+    : DEFAULT_MAX_CONTRACT_VALUE;
 
 const statusOptions: { value: ContratoStatus; label: string }[] = [
-  { value: "EM_ANDAMENTO", label: "Em Execução" },
-  { value: "CONCLUIDO", label: "Concluído" },
+  { value: "PRE_PROJETO", label: "Pre-projeto" },
+  { value: "EXECUCAO", label: "Execucao" },
+  { value: "FINALIZADO", label: "Finalizado" },
   { value: "SUSPENSO", label: "Suspenso" },
-  { value: "PENDENTE", label: "Pendente" },
-  { value: "CANCELADO", label: "Cancelado" },
+  { value: "PLANEJAMENTO", label: "Planejamento" },
 ];
 
 const tipoOptions: { value: ContratoTipo; label: string }[] = [
@@ -111,8 +227,8 @@ const tipoOptions: { value: ContratoTipo; label: string }[] = [
 ];
 
 const segmentoOptions = [
-  "Educação",
-  "Saúde",
+  "Educacao",
+  "Saude",
   "Cidades",
   "Meio Ambiente",
   "Tecnologia",
@@ -120,17 +236,28 @@ const segmentoOptions = [
   "Social",
   "Economia",
   "Cultura",
-  "Ciência",
+  "Ciencia",
   "Esporte",
   "Agricultura",
   "Outro",
 ];
 
 const statusDesembolsoOptions: { value: StatusDesembolso; label: string; color: string }[] = [
-  { value: 0, label: "Previsto", color: "bg-gray-100 text-gray-800" },
-  { value: 1, label: "Parcial", color: "bg-blue-100 text-blue-800" },
-  { value: 2, label: "Recebido", color: "bg-green-100 text-green-800" },
-  { value: 3, label: "Cancelado", color: "bg-red-100 text-red-800" },
+  { value: "PREVISTO", label: "Previsto", color: "bg-gray-100 text-gray-800" },
+  { value: "PARCIAL", label: "Parcial", color: "bg-blue-100 text-blue-800" },
+  { value: "RECEBIDO", label: "Recebido", color: "bg-green-100 text-green-800" },
+  { value: "CANCELADO", label: "Cancelado", color: "bg-red-100 text-red-800" },
+];
+
+const partnerTypeOptions: { value: PartnersTypeEnum; label: string }[] = [
+  { value: "FUNDACAO", label: "Fundacao" },
+  { value: "IF", label: "IF" },
+];
+
+const publicAgencyTypeOptions: { value: PublicAgencyTypeEnum; label: string }[] = [
+  { value: "PREFEITURA", label: "Prefeitura" },
+  { value: "GOVERNO_ESTADUAL", label: "Governo Estadual" },
+  { value: "MINISTERIO", label: "Ministerio" },
 ];
 
 const initialFormState: NovoContratoForm = {
@@ -155,35 +282,209 @@ const initialFormState: NovoContratoForm = {
   parcelas: [],
 };
 
+const initialCoordinatorFormState: CoordinatorForm = {
+  fullName: "",
+  cpf: "",
+  email: "",
+  phone: "",
+};
+
+const initialPartnerCreateFormState: PartnerCreateForm = {
+  name: "",
+  tradeName: "",
+  partnersType: "FUNDACAO",
+  cnpj: "",
+  email: "",
+  phone: "",
+  address: "",
+  site: "",
+  city: "",
+  state: "",
+  acronym: "",
+};
+
+const initialClientCreateFormState: ClientCreateForm = {
+  name: "",
+  cnpj: "",
+  publicAgencyType: "PREFEITURA",
+  sigla: "",
+  code: "",
+  email: "",
+  phone: "",
+  address: "",
+  contactPerson: "",
+  city: "",
+  state: "",
+};
+
+const initialSecretaryCreateFormState: SecretaryCreateForm = {
+  name: "",
+  cnpj: "",
+  sigla: "",
+  code: "",
+  email: "",
+  phone: "",
+  address: "",
+  contactPerson: "",
+};
+
+const onlyDigits = (value: string) => value.replace(/\D/g, "");
+
+const formatCpfInput = (value: string) => {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+};
+
+const formatCnpjInput = (value: string) => {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
 export default function NovoContratoPage() {
   const router = useRouter();
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [touched, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
+  const [, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
   const [showMetasSection, setShowMetasSection] = useState(false);
   const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastCreatedProjectId, setLastCreatedProjectId] = useState<number | null>(null);
+  const [postSubmitMessage, setPostSubmitMessage] = useState<string | null>(null);
+  const [postSubmitActionLoading, setPostSubmitActionLoading] = useState<"view" | "new" | null>(
+    null
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [organizacoesFinanciadoras, setOrganizacoesFinanciadoras] = useState<OptionItem[]>([]);
+  const [organizacoesParceiras, setOrganizacoesParceiras] = useState<OptionItem[]>([]);
+  const [secretariasCliente, setSecretariasCliente] = useState<SecretariaOptionItem[]>([]);
+  const [coordenadores, setCoordenadores] = useState<CoordinatorOptionItem[]>([]);
   const [showParcelasSection, setShowParcelasSection] = useState(false);
   const [isAddingParcela, setIsAddingParcela] = useState(false);
+  const [showCoordinatorModal, setShowCoordinatorModal] = useState(false);
+  const [isCreatingCoordinator, setIsCreatingCoordinator] = useState(false);
+  const [coordinatorForm, setCoordinatorForm] = useState<CoordinatorForm>(
+    initialCoordinatorFormState
+  );
+  const [coordinatorFormError, setCoordinatorFormError] = useState<string | null>(null);
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [partnerTargetField, setPartnerTargetField] =
+    useState<PartnerTargetField>("parceiroId");
+  const [isCreatingPartner, setIsCreatingPartner] = useState(false);
+  const [partnerForm, setPartnerForm] = useState<PartnerCreateForm>(
+    initialPartnerCreateFormState
+  );
+  const [partnerFormError, setPartnerFormError] = useState<string | null>(null);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [clientForm, setClientForm] = useState<ClientCreateForm>(initialClientCreateFormState);
+  const [clientFormError, setClientFormError] = useState<string | null>(null);
+  const [showSecretaryModal, setShowSecretaryModal] = useState(false);
+  const [isCreatingSecretary, setIsCreatingSecretary] = useState(false);
+  const [secretaryForm, setSecretaryForm] = useState<SecretaryCreateForm>(
+    initialSecretaryCreateFormState
+  );
+  const [secretaryFormError, setSecretaryFormError] = useState<string | null>(null);
   const [newParcela, setNewParcela] = useState<Partial<ParcelaDesembolso>>({
     dataPrevista: "",
     valorPrevisto: 0,
-    status: 0,
+    status: "PREVISTO",
     observacao: "",
+  });
+  const [documentos, setDocumentos] = useState<ProjetoDocumentos>({});
+  const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>({
+    contrato: "",
+    tr: "",
+    planoTrabalho: "",
+    outro: "",
   });
   
   const firstInputRef = useRef<HTMLInputElement>(null);
 
-  // Carregar organizações disponíveis
-  const organizacoesFinanciadoras = useMemo(() => getOrganizationsFinanciadoras(), []);
-  const organizacoesParceiras = useMemo(() => getOrganizationsParceiras(), []);
+  // Carregar organizacoes disponiveis
+  const loadOrganizations = useCallback(async () => {
+    setLoadError(null);
 
-  // Converter opções para formato DropdownOption
+    try {
+      const [partnersPage, publicAgenciesPage, secretariesPage, peoplePage] = await Promise.all([
+        listPartners({ page: 0, size: 20 }),
+        listPublicAgencies({ page: 0, size: 20 }),
+        listSecretaries({ page: 0, size: 20 }),
+        listPeople({ page: 0, size: 20 }),
+      ]);
+
+      setOrganizacoesParceiras(
+        partnersPage.content.map((partner) => ({
+          id: String(partner.id),
+          name: partner.name,
+          cnpj: partner.cnpj,
+        }))
+      );
+
+      setOrganizacoesFinanciadoras(
+        publicAgenciesPage.content
+          .filter((agency) => agency.isClient)
+          .map((agency) => ({
+            id: String(agency.id),
+            name: agency.name,
+            cnpj: agency.cnpj,
+          }))
+      );
+
+      setSecretariasCliente(
+        secretariesPage.content
+          .filter(
+            (secretary) =>
+              secretary.isClient &&
+              secretary.isActive &&
+              secretary.publicAgency?.id !== null &&
+              secretary.publicAgency?.id !== undefined
+          )
+          .map((secretary) => ({
+            id: String(secretary.id),
+            name: secretary.name,
+            cnpj: secretary.cnpj,
+            publicAgencyId: String(secretary.publicAgency!.id),
+          }))
+      );
+
+      setCoordenadores(
+        peoplePage.content
+          .filter((person) => person.isActive)
+          .map((person) => ({
+            id: String(person.id),
+            fullName: person.fullName,
+            cpf: person.cpf,
+          }))
+      );
+    } catch (error) {
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel carregar parceiros, agencias, secretarias e coordenadores.";
+      setLoadError(message);
+      setOrganizacoesParceiras([]);
+      setOrganizacoesFinanciadoras([]);
+      setSecretariasCliente([]);
+      setCoordenadores([]);
+    }
+  }, []);
+
+  // Converter opcoes para formato DropdownOption
   const govIfOptions: DropdownOption[] = useMemo(() => [
     { value: "IF", label: "IF" },
-    { value: "Gov", label: "Gov" },
+    { value: "GOV", label: "Gov" },
   ], []);
 
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => 
@@ -215,12 +516,38 @@ export default function NovoContratoPage() {
   );
 
   const clienteSecundarioDropdownOptions: DropdownOption[] = useMemo(() => 
-    organizacoesFinanciadoras.map(org => ({
-      value: org.id,
-      label: `${org.name}${org.cnpj ? ` (${org.cnpj})` : ""}`,
+    secretariasCliente
+      .filter(
+        (secretary) =>
+          form.clientePrimarioId !== "" &&
+          secretary.publicAgencyId === form.clientePrimarioId
+      )
+      .map((secretary) => ({
+      value: secretary.id,
+      label: `${secretary.name}${secretary.cnpj ? ` (${secretary.cnpj})` : ""}`,
       icon: <Building2 className="h-4 w-4" />,
     })),
-    [organizacoesFinanciadoras]
+    [form.clientePrimarioId, secretariasCliente]
+  );
+
+  const selectedPrimaryClient = useMemo(
+    () =>
+      organizacoesFinanciadoras.find(
+        (client) => client.id === form.clientePrimarioId
+      ),
+    [form.clientePrimarioId, organizacoesFinanciadoras]
+  );
+
+  const coordenadorDropdownOptions: DropdownOption[] = useMemo(
+    () =>
+      coordenadores
+        .map((person) => ({
+          value: person.id,
+          label: `${person.fullName}${person.cpf ? ` (${formatCpfInput(person.cpf)})` : ""}`,
+          icon: <User className="h-4 w-4" />,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [coordenadores]
   );
 
   // Focus first input on mount
@@ -228,15 +555,22 @@ export default function NovoContratoPage() {
     setTimeout(() => firstInputRef.current?.focus(), 100);
   }, []);
 
+  useEffect(() => {
+    void loadOrganizations();
+  }, [loadOrganizations]);
+
   // Validation
-  const validateField = (name: keyof NovoContratoForm, value: string | string[] | Meta[]): string => {
+  const validateField = (
+    name: keyof NovoContratoForm,
+    value: string | string[] | Meta[] | ParcelaDesembolso[]
+  ): string => {
     switch (name) {
       case "titulo":
-        if (typeof value !== "string" || !value.trim()) return "O título do projeto é obrigatório";
-        if (value.trim().length < 5) return "O título deve ter pelo menos 5 caracteres";
+        if (typeof value !== "string" || !value.trim()) return "O titulo do projeto e obrigatorio";
+        if (value.trim().length < 5) return "O titulo deve ter pelo menos 5 caracteres";
         return "";
       case "govIf":
-        if (typeof value !== "string" || !value || (value !== "IF" && value !== "Gov")) return "Selecione uma opção";
+        if (typeof value !== "string" || !value || (value !== "IF" && value !== "GOV")) return "Selecione uma opcao";
         return "";
       case "tipo":
         if (typeof value !== "string" || !value) return "Selecione um tipo de contrato";
@@ -245,61 +579,67 @@ export default function NovoContratoPage() {
         if (typeof value !== "string" || !value) return "Selecione um status";
         return "";
       case "coordenador":
-        if (typeof value !== "string" || !value.trim()) return "O nome do coordenador é obrigatório";
+        if (typeof value !== "string" || !value.trim()) return "Selecione um coordenador";
         return "";
       case "parceiroId":
         if (typeof value !== "string" || !value.trim()) return "Selecione um parceiro";
         return "";
       case "parceiroSecundarioId":
-        // Opcional, sem validação obrigatória
+        // Opcional, sem validacao obrigatoria
         return "";
       case "clientePrimarioId":
-        if (typeof value !== "string" || !value.trim()) return "Selecione um cliente primário";
+        if (typeof value !== "string" || !value.trim()) return "Selecione um cliente primario";
         return "";
       case "clienteSecundarioId":
-        // Opcional, sem validação obrigatória
+        // Opcional, sem validacao obrigatoria
         return "";
       case "segmentos":
         if (!Array.isArray(value) || value.length === 0) return "Selecione ao menos um segmento";
         return "";
       case "dataInicio":
-        if (typeof value !== "string" || !value) return "A data de início é obrigatória";
+        if (typeof value !== "string" || !value) return "A data de inicio e obrigatoria";
         return "";
       case "dataFim":
-        if (typeof value !== "string" || !value) return "A data de fim é obrigatória";
+        if (typeof value !== "string" || !value) return "A data de fim e obrigatoria";
         if (form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de fim deve ser posterior à data de início";
+          return "A data de fim deve ser posterior a data de inicio";
         }
         return "";
       case "dataInicioEfetivo":
-        // Opcional, mas se preenchido deve ser válido
+        // Opcional, mas se preenchido deve ser valido
         if (typeof value === "string" && value && form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de início efetivo deve ser posterior ou igual à data de início do contrato";
+          return "A data de inicio efetivo deve ser posterior ou igual a data de inicio do contrato";
         }
         return "";
       case "dataFimEfetivo":
-        // Opcional, mas se preenchido deve ser posterior ao início efetivo
+        // Opcional, mas se preenchido deve ser posterior ao inicio efetivo
         if (typeof value === "string" && value && form.dataInicioEfetivo && new Date(value) < new Date(form.dataInicioEfetivo)) {
-          return "A data de fim efetivo deve ser posterior à data de início efetivo";
+          return "A data de fim efetivo deve ser posterior a data de inicio efetivo";
         }
         return "";
       case "localidade":
-        if (typeof value !== "string" || !value.trim()) return "A localidade é obrigatória";
+        if (typeof value !== "string" || !value.trim()) return "A localidade e obrigatoria";
         return "";
       case "scope":
-        if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
+        if (typeof value !== "string" || !value.trim()) return "O objeto do contrato e obrigatorio";
         if (value.trim().length < 10) return "O objeto do contrato deve ter pelo menos 10 caracteres";
         return "";
       case "contract_value":
-        if (typeof value !== "string" || !value.trim()) return "O valor do projeto é obrigatório";
+        if (typeof value !== "string" || !value.trim()) return "O valor do projeto e obrigatorio";
         const numericValue = value.replace(/\D/g, "");
-        if (!numericValue || parseInt(numericValue, 10) <= 0) return "Informe um valor válido maior que zero";
+        if (!numericValue || parseInt(numericValue, 10) <= 0) return "Informe um valor valido maior que zero";
+        if (parseInt(numericValue, 10) / 100 > MAX_CONTRACT_VALUE) {
+          return `O valor maximo permitido e ${new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(MAX_CONTRACT_VALUE)}.`;
+        }
         return "";
       case "metas":
-        // Metas são opcionais, não precisam de validação obrigatória
+        // Metas sao opcionais, nao precisam de validacao obrigatoria
         return "";
       case "parcelas":
-        // Parcelas são opcionais, não precisam de validação obrigatória
+        // Parcelas sao opcionais, nao precisam de validacao obrigatoria
         return "";
       default:
         return "";
@@ -322,7 +662,7 @@ export default function NovoContratoPage() {
     return isValid;
   };
 
-  // Função para formatar valor monetário
+  // Funcao para formatar valor monetario
   const formatCurrency = (value: string): string => {
     const onlyNumbers = value.replace(/\D/g, "");
     if (!onlyNumbers) return "";
@@ -335,10 +675,81 @@ export default function NovoContratoPage() {
     });
   };
 
-  // Função para converter valor formatado para número (em centavos)
+  // Funcao para converter valor formatado para numero (em centavos)
   const parseCurrencyToCents = (formattedValue: string): number => {
     const onlyNumbers = formattedValue.replace(/\D/g, "");
     return parseInt(onlyNumbers, 10) || 0;
+  };
+
+  const parseCurrencyToNumber = (formattedValue: string): number =>
+    parseCurrencyToCents(formattedValue) / 100;
+
+  const resetFormState = useCallback(() => {
+    setForm(initialFormState);
+    setErrors({});
+    setTouched(new Set());
+    setShowMetasSection(false);
+    setExpandedMetas(new Set());
+    setExpandedEtapas(new Set());
+    setShowParcelasSection(false);
+    setIsAddingParcela(false);
+    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
+    setDocumentos({});
+    setFileErrors({
+      contrato: "",
+      tr: "",
+      planoTrabalho: "",
+      outro: "",
+    });
+  }, []);
+
+  const handleFileChange = (tipo: TipoDocumento, file: File | null) => {
+    if (!file) {
+      setDocumentos((prev) => {
+        const next = { ...prev };
+        delete next[tipo];
+        return next;
+      });
+      setFileErrors((prev) => ({ ...prev, [tipo]: "" }));
+      return;
+    }
+
+    if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+      setFileErrors((prev) => ({
+        ...prev,
+        [tipo]: "Arquivo muito grande. Maximo de 20MB por arquivo.",
+      }));
+      return;
+    }
+
+    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
+      setFileErrors((prev) => ({
+        ...prev,
+        [tipo]: "Formato invalido. Aceitos: PDF, PNG, JPG e JPEG.",
+      }));
+      return;
+    }
+
+    setDocumentos((prev) => ({ ...prev, [tipo]: file }));
+    setFileErrors((prev) => ({ ...prev, [tipo]: "" }));
+  };
+
+  const removeFile = (tipo: TipoDocumento) => {
+    setDocumentos((prev) => {
+      const next = { ...prev };
+      delete next[tipo];
+      return next;
+    });
+    setFileErrors((prev) => ({ ...prev, [tipo]: "" }));
+  };
+
+  const previewFile = (tipo: TipoDocumento) => {
+    const file = documentos[tipo];
+    if (!file) return;
+
+    const objectUrl = URL.createObjectURL(file);
+    window.open(objectUrl, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 15_000);
   };
 
   const handleChange = (name: keyof NovoContratoForm, value: string | undefined) => {
@@ -349,16 +760,32 @@ export default function NovoContratoPage() {
       const formatted = formatCurrency(stringValue);
       setForm((prev) => ({ ...prev, [name]: formatted }));
       
-      // Sempre validar e atualizar erros após mudança
+      // Sempre validar e atualizar erros apos mudanca
       const error = validateField(name, formatted);
       setErrors((prev) => ({ ...prev, [name]: error || undefined }));
       
       // Marcar como touched
       setTouched((prev) => new Set(prev).add(name));
+    } else if (name === "clientePrimarioId") {
+      // Troca do cliente primario invalida a selecao da secretaria secundaria.
+      setForm((prev) => ({
+        ...prev,
+        clientePrimarioId: stringValue,
+        clienteSecundarioId: "",
+      }));
+
+      const error = validateField(name, stringValue);
+      setErrors((prev) => ({
+        ...prev,
+        clientePrimarioId: error || undefined,
+        clienteSecundarioId: undefined,
+      }));
+
+      setTouched((prev) => new Set(prev).add(name).add("clienteSecundarioId"));
     } else {
       setForm((prev) => ({ ...prev, [name]: stringValue }));
       
-      // Sempre validar e atualizar erros após mudança
+      // Sempre validar e atualizar erros apos mudanca
       const error = validateField(name, stringValue);
       setErrors((prev) => ({ ...prev, [name]: error || undefined }));
       
@@ -390,8 +817,309 @@ export default function NovoContratoPage() {
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
+  const optionalInputValue = (value: string) => {
+    const normalized = value.trim();
+    return normalized ? normalized : undefined;
+  };
+
+  const closePartnerModal = () => {
+    setShowPartnerModal(false);
+    setPartnerForm(initialPartnerCreateFormState);
+    setPartnerFormError(null);
+  };
+
+  const openPartnerModal = (targetField: PartnerTargetField) => {
+    setPartnerTargetField(targetField);
+    setPartnerForm(initialPartnerCreateFormState);
+    setPartnerFormError(null);
+    setShowPartnerModal(true);
+  };
+
+  const handleCreatePartner = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPartnerFormError(null);
+
+    const name = partnerForm.name.trim();
+    const tradeName = partnerForm.tradeName.trim();
+    const phone = partnerForm.phone.trim();
+    const address = partnerForm.address.trim();
+    const city = partnerForm.city.trim();
+    const state = partnerForm.state.trim();
+    const cnpjDigits = onlyDigits(partnerForm.cnpj);
+
+    if (!name || !tradeName || !phone || !address || !city || !state) {
+      setPartnerFormError("Preencha os campos obrigatorios: nome, nome fantasia, telefone, endereco, cidade e estado.");
+      return;
+    }
+
+    if (cnpjDigits.length !== 14) {
+      setPartnerFormError("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
+
+    setIsCreatingPartner(true);
+    try {
+      const payload: PartnerRequestDTO = {
+        acronym: optionalInputValue(partnerForm.acronym),
+        name,
+        tradeName,
+        partnersType: partnerForm.partnersType,
+        cnpj: cnpjDigits,
+        email: optionalInputValue(partnerForm.email),
+        phone,
+        address,
+        site: optionalInputValue(partnerForm.site),
+        city,
+        state,
+        isActive: true,
+      };
+
+      const createdPartner = await createPartner(payload);
+
+      setOrganizacoesParceiras((prev) => {
+        const next = [
+          ...prev.filter((item) => item.id !== String(createdPartner.id)),
+          {
+            id: String(createdPartner.id),
+            name: createdPartner.name,
+            cnpj: createdPartner.cnpj,
+          },
+        ];
+        return next.sort((a, b) => a.name.localeCompare(b.name));
+      });
+
+      handleChange(partnerTargetField, String(createdPartner.id));
+      closePartnerModal();
+    } catch (error) {
+      const message =
+        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar o parceiro.";
+      setPartnerFormError(message);
+    } finally {
+      setIsCreatingPartner(false);
+    }
+  };
+
+  const closeClientModal = () => {
+    setShowClientModal(false);
+    setClientForm(initialClientCreateFormState);
+    setClientFormError(null);
+  };
+
+  const openClientModal = () => {
+    setClientForm(initialClientCreateFormState);
+    setClientFormError(null);
+    setShowClientModal(true);
+  };
+
+  const handleCreateClient = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setClientFormError(null);
+
+    const name = clientForm.name.trim();
+    const cnpjDigits = onlyDigits(clientForm.cnpj);
+
+    if (!name) {
+      setClientFormError("Informe o nome do cliente.");
+      return;
+    }
+
+    if (cnpjDigits.length !== 14) {
+      setClientFormError("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
+
+    setIsCreatingClient(true);
+    try {
+      const payload: PublicAgencyRequestDTO = {
+        code: optionalInputValue(clientForm.code),
+        sigla: optionalInputValue(clientForm.sigla),
+        name,
+        cnpj: cnpjDigits,
+        isClient: true,
+        publicAgencyType: clientForm.publicAgencyType,
+        email: optionalInputValue(clientForm.email),
+        phone: optionalInputValue(clientForm.phone),
+        address: optionalInputValue(clientForm.address),
+        contactPerson: optionalInputValue(clientForm.contactPerson),
+        city: optionalInputValue(clientForm.city),
+        state: optionalInputValue(clientForm.state),
+        isActive: true,
+      };
+
+      const createdClient = await createPublicAgency(payload);
+
+      setOrganizacoesFinanciadoras((prev) => {
+        const next = [
+          ...prev.filter((item) => item.id !== String(createdClient.id)),
+          {
+            id: String(createdClient.id),
+            name: createdClient.name,
+            cnpj: createdClient.cnpj,
+          },
+        ];
+        return next.sort((a, b) => a.name.localeCompare(b.name));
+      });
+
+      handleChange("clientePrimarioId", String(createdClient.id));
+      closeClientModal();
+    } catch (error) {
+      const message =
+        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar o cliente.";
+      setClientFormError(message);
+    } finally {
+      setIsCreatingClient(false);
+    }
+  };
+
+  const closeSecretaryModal = () => {
+    setShowSecretaryModal(false);
+    setSecretaryForm(initialSecretaryCreateFormState);
+    setSecretaryFormError(null);
+  };
+
+  const openSecretaryModal = () => {
+    if (!form.clientePrimarioId) {
+      setSecretaryFormError("Selecione o cliente primario antes de cadastrar a secretaria.");
+      return;
+    }
+    setSecretaryForm(initialSecretaryCreateFormState);
+    setSecretaryFormError(null);
+    setShowSecretaryModal(true);
+  };
+
+  const handleCreateSecretary = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSecretaryFormError(null);
+
+    if (!form.clientePrimarioId) {
+      setSecretaryFormError("Selecione o cliente primario antes de cadastrar a secretaria.");
+      return;
+    }
+
+    const name = secretaryForm.name.trim();
+    const cnpjDigits = onlyDigits(secretaryForm.cnpj);
+
+    if (!name) {
+      setSecretaryFormError("Informe o nome da secretaria.");
+      return;
+    }
+
+    if (secretaryForm.cnpj.trim() && cnpjDigits.length !== 14) {
+      setSecretaryFormError("Informe um CNPJ valido com 14 digitos ou deixe em branco.");
+      return;
+    }
+
+    setIsCreatingSecretary(true);
+    try {
+      const payload: SecretaryRequestDTO = {
+        code: optionalInputValue(secretaryForm.code),
+        sigla: optionalInputValue(secretaryForm.sigla),
+        publicAgencyId: parseInt(form.clientePrimarioId, 10),
+        name,
+        cnpj: cnpjDigits.length === 14 ? cnpjDigits : undefined,
+        isClient: true,
+        email: optionalInputValue(secretaryForm.email),
+        phone: optionalInputValue(secretaryForm.phone),
+        address: optionalInputValue(secretaryForm.address),
+        contactPerson: optionalInputValue(secretaryForm.contactPerson),
+        isActive: true,
+      };
+
+      const createdSecretary = await createSecretary(payload);
+
+      setSecretariasCliente((prev) => {
+        const next = [
+          ...prev.filter((item) => item.id !== String(createdSecretary.id)),
+          {
+            id: String(createdSecretary.id),
+            name: createdSecretary.name,
+            cnpj: createdSecretary.cnpj,
+            publicAgencyId: String(createdSecretary.publicAgency?.id ?? form.clientePrimarioId),
+          },
+        ];
+        return next.sort((a, b) => a.name.localeCompare(b.name));
+      });
+
+      handleChange("clienteSecundarioId", String(createdSecretary.id));
+      closeSecretaryModal();
+    } catch (error) {
+      const message =
+        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar a secretaria.";
+      setSecretaryFormError(message);
+    } finally {
+      setIsCreatingSecretary(false);
+    }
+  };
+
+  const closeCoordinatorModal = () => {
+    setShowCoordinatorModal(false);
+    setCoordinatorForm(initialCoordinatorFormState);
+    setCoordinatorFormError(null);
+  };
+
+  const openCoordinatorModal = () => {
+    setCoordinatorForm(initialCoordinatorFormState);
+    setCoordinatorFormError(null);
+    setShowCoordinatorModal(true);
+  };
+
+  const handleCreateCoordinator = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCoordinatorFormError(null);
+
+    const fullName = coordinatorForm.fullName.trim();
+    const cpfDigits = onlyDigits(coordinatorForm.cpf);
+    const email = coordinatorForm.email.trim();
+    const phone = coordinatorForm.phone.trim();
+
+    if (!fullName) {
+      setCoordinatorFormError("Informe o nome completo do coordenador.");
+      return;
+    }
+
+    if (cpfDigits.length !== 11) {
+      setCoordinatorFormError("Informe um CPF valido com 11 digitos.");
+      return;
+    }
+
+    setIsCreatingCoordinator(true);
+    try {
+      const payload: PeopleRequestDTO = {
+        fullName,
+        cpf: cpfDigits,
+        email: email || undefined,
+        phone: phone || undefined,
+      };
+
+      const createdPerson = await createPeople(payload);
+
+      setCoordenadores((prev) => {
+        const next = [
+          ...prev.filter((person) => person.id !== String(createdPerson.id)),
+          {
+            id: String(createdPerson.id),
+            fullName: createdPerson.fullName,
+            cpf: createdPerson.cpf,
+          },
+        ];
+        return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      });
+
+      handleChange("coordenador", String(createdPerson.id));
+      closeCoordinatorModal();
+    } catch (error) {
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel cadastrar o coordenador.";
+      setCoordinatorFormError(message);
+    } finally {
+      setIsCreatingCoordinator(false);
+    }
+  };
+
   // ============================================================================
-  // Funções para gerenciar Metas, Etapas e Fases
+  // Funcoes para gerenciar Metas, Etapas e Fases
   // ============================================================================
   
   const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -567,7 +1295,7 @@ export default function NovoContratoPage() {
   };
 
   // ============================================================================
-  // Funções para gerenciar Parcelas de Desembolso
+  // Funcoes para gerenciar Parcelas de Desembolso
   // ============================================================================
 
   const sortAndRenumberParcelas = (items: ParcelaDesembolso[]) =>
@@ -586,7 +1314,7 @@ export default function NovoContratoPage() {
       numero: form.parcelas.length + 1,
       dataPrevista: newParcela.dataPrevista!,
       valorPrevisto: newParcela.valorPrevisto || 0,
-      status: newParcela.status ?? 0,
+      status: newParcela.status ?? "PREVISTO",
       observacao: newParcela.observacao || "",
     };
 
@@ -595,7 +1323,7 @@ export default function NovoContratoPage() {
       parcelas: sortAndRenumberParcelas([...prev.parcelas, novaParcela]),
     }));
 
-    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
     setIsAddingParcela(false);
   };
 
@@ -610,68 +1338,239 @@ export default function NovoContratoPage() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const date = new Date(dateStr + "T00:00:00");
     return date.toLocaleDateString("pt-BR");
   };
 
-  const valorTotalContrato = form.contract_value
-    ? parseFloat(form.contract_value.replace(/\./g, "").replace(",", ".")) || 0
-    : 0;
+  const valorTotalContrato = form.contract_value ? parseCurrencyToNumber(form.contract_value) : 0;
   const totalPrevisto = form.parcelas.reduce((acc, p) => acc + (p.valorPrevisto || 0), 0);
   const restante = Math.max(valorTotalContrato - totalPrevisto, 0);
   const excedente = Math.max(totalPrevisto - valorTotalContrato, 0);
 
-  // Função auxiliar para transformar dados do formulário para formato do backend
-  const transformFormToBackend = (formData: NovoContratoForm) => {
+  const buildProjectCode = (tipo: ContratoTipo) => {
+    const prefix = tipo === "PRODUTO" ? "PRD" : "PRJ";
+    return `${prefix}-${Date.now().toString().slice(-8)}`;
+  };
+
+  // Funcao auxiliar para transformar dados do formulario para formato do backend
+  const transformFormToBackend = (formData: NovoContratoForm): ProjectRequestDTO => {
+    const contractValue = parseCurrencyToCents(formData.contract_value) / 100;
+    const locationParts = formData.localidade
+      .split("-")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const state =
+      locationParts.length >= 2 ? locationParts[locationParts.length - 1] : undefined;
+    const city =
+      locationParts.length >= 2 ? locationParts.slice(0, -1).join(" - ") : undefined;
+
     return {
-      ...formData,
-      segmentos: formData.segmentos.join(", "),
-      contract_value: parseFloat(
-        formData.contract_value.replace(/\./g, "").replace(",", ".")
-      ) || 0,
-      parceiroId: parseInt(formData.parceiroId),
-      parceiroSecundarioId: formData.parceiroSecundarioId ? parseInt(formData.parceiroSecundarioId) : undefined,
-      clientePrimarioId: parseInt(formData.clientePrimarioId),
-      clienteSecundarioId: formData.clienteSecundarioId ? parseInt(formData.clienteSecundarioId) : undefined,
+      name: formData.titulo.trim(),
+      code: buildProjectCode(formData.tipo as ContratoTipo),
+      projectStatus: formData.status as ProjectRequestDTO["projectStatus"],
+      areaSegmento: formData.segmentos.join(", ") || undefined,
+      object: formData.scope.trim(),
+      primaryPartnerId: parseInt(formData.parceiroId, 10),
+      secundaryPartnerId: formData.parceiroSecundarioId
+        ? parseInt(formData.parceiroSecundarioId, 10)
+        : undefined,
+      primaryClientId: parseInt(formData.clientePrimarioId, 10),
+      secundaryClientId: formData.clienteSecundarioId
+        ? parseInt(formData.clienteSecundarioId, 10)
+        : undefined,
+      cordinatorId: formData.coordenador ? parseInt(formData.coordenador, 10) : undefined,
+      projectGovIf: formData.govIf as ProjectRequestDTO["projectGovIf"],
+      projectType: formData.tipo as ProjectRequestDTO["projectType"],
+      contractValue: contractValue > 0 ? contractValue : undefined,
+      startDate: formData.dataInicio || undefined,
+      endDate: formData.dataFim || undefined,
+      openingDate: formData.dataInicioEfetivo || undefined,
+      closingDate: formData.dataFimEfetivo || undefined,
+      city,
+      state,
+      executionLocation: formData.localidade.trim() || undefined,
     };
+  };
+
+  const normalizeOptionalText = (value?: string) => {
+    const normalized = value?.trim();
+    return normalized ? normalized : undefined;
+  };
+
+  const validateHierarchyBeforeSubmit = (formData: NovoContratoForm): string | null => {
+    for (const parcela of formData.parcelas) {
+      if (!validateParcela(parcela)) {
+        return `Parcela ${parcela.numero} invalida. Preencha data prevista e valor maior que zero.`;
+      }
+    }
+
+    for (const meta of formData.metas) {
+      if (!meta.titulo.trim()) {
+        return `Preencha o titulo da Meta ${meta.numero}.`;
+      }
+
+      for (const etapa of meta.etapas) {
+        if (!etapa.titulo.trim()) {
+          return `Preencha o titulo da Etapa ${meta.numero}.${etapa.numero}.`;
+        }
+
+        for (const fase of etapa.fases) {
+          if (!fase.titulo.trim()) {
+            return `Preencha o titulo da Fase ${meta.numero}.${etapa.numero}.${fase.numero}.`;
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const buildDisbursementPayload = (
+    projectId: number,
+    parcela: ParcelaDesembolso
+  ): DisbursementScheduleRequestDTO => ({
+    projectId,
+    numero: parcela.numero,
+    expectedMonth: parcela.dataPrevista,
+    expectedAmount: parcela.valorPrevisto,
+    status: parcela.status,
+    notes: normalizeOptionalText(parcela.observacao),
+  });
+
+  const buildGoalPayload = (projectId: number, meta: Meta): GoalRequestDTO => ({
+    projectId,
+    numero: meta.numero,
+    titulo: meta.titulo.trim(),
+    descricao: normalizeOptionalText(meta.descricao),
+    dataInicio: meta.dataInicio || undefined,
+    dataFim: meta.dataFim || undefined,
+  });
+
+  const buildStagePayload = (goalId: number, etapa: Etapa): StageRequestDTO => ({
+    goalId,
+    numero: etapa.numero,
+    titulo: etapa.titulo.trim(),
+    descricao: normalizeOptionalText(etapa.descricao),
+    dataInicio: etapa.dataInicio || undefined,
+    dataFim: etapa.dataFim || undefined,
+  });
+
+  const buildPhasePayload = (stageId: number, fase: Fase): PhaseRequestDTO => ({
+    stageId,
+    numero: fase.numero,
+    titulo: fase.titulo.trim(),
+    descricao: normalizeOptionalText(fase.descricao),
+    dataInicio: fase.dataInicio || undefined,
+    dataFim: fase.dataFim || undefined,
+  });
+
+  const persistProjectDetails = async (projectId: number, formData: NovoContratoForm) => {
+    for (const parcela of formData.parcelas) {
+      await createDisbursementSchedule(buildDisbursementPayload(projectId, parcela));
+    }
+
+    for (const meta of formData.metas) {
+      const createdGoal = await createGoal(buildGoalPayload(projectId, meta));
+
+      for (const etapa of meta.etapas) {
+        const createdStage = await createStage(buildStagePayload(createdGoal.id, etapa));
+
+        for (const fase of etapa.fases) {
+          await createPhase(buildPhasePayload(createdStage.id, fase));
+        }
+      }
+    }
+  };
+
+  const uploadPendingDocuments = async (projectId: number) => {
+    const entries = Object.entries(documentos) as Array<[TipoDocumento, File | undefined]>;
+    const failedUploads: TipoDocumento[] = [];
+    let uploadedCount = 0;
+
+    for (const [tipo, file] of entries) {
+      if (!file) continue;
+
+      try {
+        await uploadDocument({
+          file,
+          ownerType: "PROJECT",
+          ownerId: projectId,
+          category: DOCUMENT_CATEGORY_BY_TYPE[tipo],
+        });
+        uploadedCount += 1;
+        setFileErrors((prev) => ({ ...prev, [tipo]: "" }));
+      } catch (uploadError) {
+        console.error("Falha no upload do documento", {
+          projectId,
+          tipo,
+          error: uploadError,
+        });
+        failedUploads.push(tipo);
+        setFileErrors((prev) => ({
+          ...prev,
+          [tipo]: "Falha ao enviar este arquivo. Tente novamente.",
+        }));
+      }
+    }
+
+    return { uploadedCount, failedUploads };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     setTouched(new Set(Object.keys(form) as Array<keyof NovoContratoForm>));
-    
+    setSubmitError(null);
+
     if (!validateForm()) return;
 
+    const hierarchyError = validateHierarchyBeforeSubmit(form);
+    if (hierarchyError) {
+      setSubmitError(hierarchyError);
+      return;
+    }
+
     setIsSubmitting(true);
+    let createdProjectId: number | null = null;
+
     try {
       const transformedData = transformFormToBackend(form);
+      const createdProject = await createProject(transformedData);
+      createdProjectId = createdProject.id;
 
-      // TODO: Integrar com API real
-      console.log("Novo contrato criado:", transformedData);
-      
-      // Dispara evento para notificar outras páginas sobre o novo contrato
-      window.dispatchEvent(new CustomEvent('contrato-criado', { detail: transformedData }));
-      
-      // Mostrar mensagem de sucesso
-      setShowSuccessMessage(true);
-      
-      // Reset do formulário para criar um novo contrato
-      setForm(initialFormState);
-      setErrors({});
-      setTouched(new Set());
-      setShowMetasSection(false);
-      setExpandedMetas(new Set());
-      setExpandedEtapas(new Set());
-      setShowParcelasSection(false);
-      setIsAddingParcela(false);
-      setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
-      
-      // Focus no primeiro campo para facilitar a criação de um novo contrato
-      setTimeout(() => firstInputRef.current?.focus(), 100);
+      await persistProjectDetails(createdProject.id, form);
+      const uploadSummary = await uploadPendingDocuments(createdProject.id);
+
+      setLastCreatedProjectId(createdProject.id);
+      if (uploadSummary.failedUploads.length > 0) {
+        const failedLabels = uploadSummary.failedUploads
+          .map((tipo) => documentoLabels[tipo])
+          .join(", ");
+        setPostSubmitMessage(
+          `Projeto cadastrado. ${uploadSummary.uploadedCount} documento(s) enviado(s). Falha em: ${failedLabels}.`
+        );
+      } else if (uploadSummary.uploadedCount > 0) {
+        setPostSubmitMessage(
+          `Projeto cadastrado e ${uploadSummary.uploadedCount} documento(s) enviado(s) com sucesso.`
+        );
+      } else {
+        setPostSubmitMessage("Projeto cadastrado com sucesso.");
+      }
+
+      setShowSuccessModal(true);
     } catch (error) {
-      console.error("Erro ao criar contrato:", error);
+      const rootMessage =
+        error instanceof HttpError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Nao foi possivel concluir o cadastro do contrato.";
+
+      const message = createdProjectId
+        ? `${rootMessage} Projeto ${createdProjectId} foi criado, mas ocorreu erro ao salvar cronograma/metas.`
+        : rootMessage;
+      setSubmitError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -681,17 +1580,34 @@ export default function NovoContratoPage() {
     router.back();
   };
 
+  const handleCreateAnotherProject = () => {
+    setPostSubmitActionLoading("new");
+    resetFormState();
+    setPostSubmitMessage(null);
+    setLastCreatedProjectId(null);
+    setShowSuccessModal(false);
+    setPostSubmitActionLoading(null);
+    setTimeout(() => firstInputRef.current?.focus(), 100);
+  };
+
+  const handleViewCreatedProject = () => {
+    if (!lastCreatedProjectId) return;
+    setPostSubmitActionLoading("view");
+    router.push(`/contratos/${lastCreatedProjectId}`);
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
-      
-      {/* Toast de Sucesso */}
-      <SuccessToast
-        show={showSuccessMessage}
-        onClose={() => setShowSuccessMessage(false)}
-        title="Criado com sucesso"
-        message="O contrato foi cadastrado no sistema"
-        duration={4000}
+
+      <ProjectCreatedModal
+        open={showSuccessModal}
+        createdProjectId={lastCreatedProjectId}
+        message={postSubmitMessage}
+        pendingAction={postSubmitActionLoading}
+        onClose={() => setShowSuccessModal(false)}
+        onViewCreated={handleViewCreatedProject}
+        onCreateAnother={handleCreateAnotherProject}
       />
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6">
@@ -717,18 +1633,39 @@ export default function NovoContratoPage() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Novo Contrato</h1>
-              <p className="text-sm text-gray-500">Preencha as informações do contrato</p>
+              <p className="text-sm text-gray-500">Preencha as informacoes do contrato</p>
             </div>
           </div>
         </div>
+
+        {loadError && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="flex items-center justify-between gap-2">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => void loadOrganizations()}
+                className="font-medium underline underline-offset-2"
+              >
+                Recarregar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {submitError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 space-y-5">
-              {/* Título do Projeto */}
+              {/* Titulo do Projeto */}
               <FormField
-                label="Título do Projeto"
+                label="Titulo do Projeto"
                 required
                 error={errors.titulo}
                 icon={<FileText className="h-4 w-4" />}
@@ -739,7 +1676,7 @@ export default function NovoContratoPage() {
                   value={form.titulo}
                   onChange={(e) => handleChange("titulo", e.target.value)}
                   onBlur={() => handleBlur("titulo")}
-                  placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
+                  placeholder="Ex.: Plataforma de Gestao de Projetos da Innovatis"
                   className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
                     errors.titulo
                       ? "border-red-300 focus:border-red-500"
@@ -804,89 +1741,167 @@ export default function NovoContratoPage() {
 
               {/* Coordenador */}
               <FormField
-                label="Nome do Coordenador"
+                label="Coordenador"
                 required
                 error={errors.coordenador}
                 icon={<User className="h-4 w-4" />}
               >
-                <input
-                  type="text"
-                  value={form.coordenador}
-                  onChange={(e) => handleChange("coordenador", e.target.value)}
-                  onBlur={() => handleBlur("coordenador")}
-                  placeholder="Ex.: João Silva"
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.coordenador
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
+                <div className="space-y-2">
+                  <Dropdown
+                    options={coordenadorDropdownOptions}
+                    value={form.coordenador || undefined}
+                    placeholder={
+                      coordenadorDropdownOptions.length === 0
+                        ? "Nenhum coordenador cadastrado"
+                        : "Selecione um coordenador..."
+                    }
+                    searchable={true}
+                    onChange={(value) => handleChange("coordenador", value ?? "")}
+                    className={errors.coordenador ? "border-red-300 focus:border-red-500" : ""}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-500">
+                      {coordenadorDropdownOptions.length === 0
+                        ? "Cadastre um coordenador para continuar."
+                        : "Nao encontrou a pessoa? Cadastre um novo coordenador."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCoordinatorModal}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#004225] bg-[#004225]/10 rounded-md hover:bg-[#004225]/20 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Cadastrar Coordenador
+                    </button>
+                  </div>
+                </div>
               </FormField>
 
-              {/* Parceiro Primário */}
+              {/* Parceiro Primario */}
               <FormField
-                label="Parceiro Primário"
+                label="Parceiro Primario"
                 required
                 error={errors.parceiroId}
                 icon={<Building2 className="h-4 w-4" />}
               >
-                <Dropdown
-                  options={parceiroDropdownOptions}
-                  value={form.parceiroId || undefined}
-                  placeholder="Selecione um parceiro primário..."
-                  searchable={true}
-                  onChange={(value) => handleChange("parceiroId", value ?? "")}
-                  className={errors.parceiroId ? "border-red-300 focus:border-red-500" : ""}
-                />
+                <div className="space-y-2">
+                  <Dropdown
+                    options={parceiroDropdownOptions}
+                    value={form.parceiroId || undefined}
+                    placeholder="Selecione um parceiro primario..."
+                    searchable={true}
+                    onChange={(value) => handleChange("parceiroId", value ?? "")}
+                    className={errors.parceiroId ? "border-red-300 focus:border-red-500" : ""}
+                  />
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => openPartnerModal("parceiroId")}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#004225] bg-[#004225]/10 rounded-md hover:bg-[#004225]/20 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Cadastrar Parceiro
+                    </button>
+                  </div>
+                </div>
               </FormField>
 
-              {/* Parceiro Secundário */}
+              {/* Parceiro Secundario */}
               <FormField
-                label="Parceiro Secundário"
+                label="Parceiro Secundario"
                 error={errors.parceiroSecundarioId}
                 icon={<Building2 className="h-4 w-4" />}
               >
-                <Dropdown
-                  options={parceiroDropdownOptions}
-                  value={form.parceiroSecundarioId || undefined}
-                  placeholder="Selecione um parceiro secundário (opcional)..."
-                  searchable={true}
-                  onChange={(value) => handleChange("parceiroSecundarioId", value ?? "")}
-                  className={errors.parceiroSecundarioId ? "border-red-300 focus:border-red-500" : ""}
-                />
+                <div className="space-y-2">
+                  <Dropdown
+                    options={parceiroDropdownOptions}
+                    value={form.parceiroSecundarioId || undefined}
+                    placeholder="Selecione um parceiro secundario (opcional)..."
+                    searchable={true}
+                    onChange={(value) => handleChange("parceiroSecundarioId", value ?? "")}
+                    className={errors.parceiroSecundarioId ? "border-red-300 focus:border-red-500" : ""}
+                  />
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => openPartnerModal("parceiroSecundarioId")}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#004225] bg-[#004225]/10 rounded-md hover:bg-[#004225]/20 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Cadastrar Parceiro
+                    </button>
+                  </div>
+                </div>
               </FormField>
 
-              {/* Cliente Primário */}
+              {/* Cliente Primario */}
               <FormField
-                label="Cliente Primário"
+                label="Cliente Primario"
                 required
                 error={errors.clientePrimarioId}
                 icon={<Building2 className="h-4 w-4" />}
               >
-                <Dropdown
-                  options={clientePrimarioDropdownOptions}
-                  value={form.clientePrimarioId || undefined}
-                  placeholder="Selecione um cliente primário..."
-                  searchable={true}
-                  onChange={(value) => handleChange("clientePrimarioId", value ?? "")}
-                  className={errors.clientePrimarioId ? "border-red-300 focus:border-red-500" : ""}
-                />
+                <div className="space-y-2">
+                  <Dropdown
+                    options={clientePrimarioDropdownOptions}
+                    value={form.clientePrimarioId || undefined}
+                    placeholder="Selecione um cliente primario..."
+                    searchable={true}
+                    onChange={(value) => handleChange("clientePrimarioId", value ?? "")}
+                    className={errors.clientePrimarioId ? "border-red-300 focus:border-red-500" : ""}
+                  />
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={openClientModal}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#004225] bg-[#004225]/10 rounded-md hover:bg-[#004225]/20 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Cadastrar Cliente
+                    </button>
+                  </div>
+                </div>
               </FormField>
 
-              {/* Cliente Secundário */}
+              {/* Cliente Secundario */}
               <FormField
-                label="Cliente Secundário"
+                label="Secretaria (Cliente Secundario)"
                 error={errors.clienteSecundarioId}
                 icon={<Building2 className="h-4 w-4" />}
               >
-                <Dropdown
-                  options={clienteSecundarioDropdownOptions}
-                  value={form.clienteSecundarioId || undefined}
-                  placeholder="Selecione um cliente secundário (opcional)..."
-                  searchable={true}
-                  onChange={(value) => handleChange("clienteSecundarioId", value ?? "")}
-                  className={errors.clienteSecundarioId ? "border-red-300 focus:border-red-500" : ""}
-                />
+                <div className="space-y-2">
+                  <Dropdown
+                    options={clienteSecundarioDropdownOptions}
+                    value={form.clienteSecundarioId || undefined}
+                    placeholder={
+                      !form.clientePrimarioId
+                        ? "Selecione primeiro um cliente primario..."
+                        : clienteSecundarioDropdownOptions.length === 0
+                          ? "Nenhuma secretaria encontrada para o cliente selecionado"
+                          : "Selecione uma secretaria (opcional)..."
+                    }
+                    searchable={true}
+                    disabled={!form.clientePrimarioId || clienteSecundarioDropdownOptions.length === 0}
+                    onChange={(value) => handleChange("clienteSecundarioId", value ?? "")}
+                    className={errors.clienteSecundarioId ? "border-red-300 focus:border-red-500" : ""}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-500">
+                      {!form.clientePrimarioId
+                        ? "Escolha o cliente primario para cadastrar uma secretaria vinculada."
+                        : "A secretaria sera vinculada ao cliente primario selecionado."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openSecretaryModal}
+                      disabled={!form.clientePrimarioId}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#004225] bg-[#004225]/10 rounded-md hover:bg-[#004225]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Cadastrar Secretaria
+                    </button>
+                  </div>
+                </div>
               </FormField>
 
               {/* Segmento do Contrato */}
@@ -919,9 +1934,9 @@ export default function NovoContratoPage() {
 
               {/* Datas - Grid 2 colunas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Data de Início */}
+                {/* Data de Inicio */}
                 <FormField
-                  label="Início do Contrato"
+                  label="Inicio do Contrato"
                   required
                   error={errors.dataInicio}
                   icon={<Calendar className="h-4 w-4" />}
@@ -930,7 +1945,7 @@ export default function NovoContratoPage() {
                     value={form.dataInicio}
                     onChange={(value) => handleChange("dataInicio", value)}
                     onBlur={() => handleBlur("dataInicio")}
-                    placeholder="Selecione a data de início"
+                    placeholder="Selecione a data de inicio"
                     error={!!errors.dataInicio}
                   />
                 </FormField>
@@ -955,9 +1970,9 @@ export default function NovoContratoPage() {
 
               {/* Datas Efetivas - Grid 2 colunas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Data de Início Efetivo */}
+                {/* Data de Inicio Efetivo */}
                 <FormField
-                  label="Início Efetivo"
+                  label="Inicio Efetivo"
                   error={errors.dataInicioEfetivo}
                   icon={<Calendar className="h-4 w-4" />}
                 >
@@ -965,7 +1980,7 @@ export default function NovoContratoPage() {
                     value={form.dataInicioEfetivo}
                     onChange={(value) => handleChange("dataInicioEfetivo", value)}
                     onBlur={() => handleBlur("dataInicioEfetivo")}
-                    placeholder="Selecione a data de início efetivo"
+                    placeholder="Selecione a data de inicio efetivo"
                     minDate={form.dataInicio || undefined}
                     error={!!errors.dataInicioEfetivo}
                   />
@@ -1052,10 +2067,46 @@ export default function NovoContratoPage() {
                     }`}
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Maximo permitido: {formatCurrencyDisplay(MAX_CONTRACT_VALUE)}
+                </p>
               </FormField>
 
+              {/* Documentos */}
+              <div className="border-t border-gray-200 pt-5 mt-2 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4.5 w-4.5 text-[#004225]" />
+                  <h3 className="text-sm font-semibold text-gray-900">Documentos do Projeto</h3>
+                  <span className="text-xs text-gray-500">(opcional)</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Os arquivos serao enviados automaticamente apos o cadastro do projeto.
+                  Formatos aceitos: PDF, PNG, JPG e JPEG. Maximo: 20MB por arquivo.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(["contrato", "tr", "planoTrabalho", "outro"] as TipoDocumento[]).map((tipo) => (
+                    <ProjectDocumentUploadField
+                      key={tipo}
+                      label={documentoLabels[tipo]}
+                      file={documentos[tipo]}
+                      error={fileErrors[tipo]}
+                      onFileChange={(file) => handleFileChange(tipo, file)}
+                      onRemove={() => removeFile(tipo)}
+                      onPreview={() => previewFile(tipo)}
+                      disabled={isSubmitting}
+                    />
+                  ))}
+                </div>
+                {Object.values(documentos).filter(Boolean).length === 0 ? (
+                  <p className="text-xs text-gray-500 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2">
+                    Nenhum documento selecionado ainda.
+                  </p>
+                ) : null}
+              </div>
+
               {/* ================================================================ */}
-              {/* Seção de Cronograma de Desembolso (Opcional) */}
+              {/* Secao de Cronograma de Desembolso (Opcional) */}
               {/* ================================================================ */}
               <div className="border-t border-gray-200 pt-5 mt-2">
                 <button
@@ -1104,7 +2155,7 @@ export default function NovoContratoPage() {
                       </div>
                     )}
 
-                    {/* Alerta de validação */}
+                    {/* Alerta de validacao */}
                     {valorTotalContrato > 0 && (excedente > 0 || restante > 0) && (
                       <div
                         className={`rounded-lg border p-3 ${
@@ -1126,7 +2177,7 @@ export default function NovoContratoPage() {
                       </div>
                     )}
 
-                    {/* Botão Adicionar Parcela */}
+                    {/* Botao Adicionar Parcela */}
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -1151,7 +2202,7 @@ export default function NovoContratoPage() {
                             type="button"
                             onClick={() => {
                               setIsAddingParcela(false);
-                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
                             }}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                           >
@@ -1197,8 +2248,13 @@ export default function NovoContratoPage() {
                               Status <span className="text-red-500">*</span>
                             </label>
                             <select
-                              value={newParcela.status ?? 0}
-                              onChange={(e) => setNewParcela({ ...newParcela, status: Number(e.target.value) as StatusDesembolso })}
+                              value={newParcela.status ?? "PREVISTO"}
+                              onChange={(e) =>
+                                setNewParcela({
+                                  ...newParcela,
+                                  status: e.target.value as StatusDesembolso,
+                                })
+                              }
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                             >
                               {statusDesembolsoOptions.map((opt) => (
@@ -1210,7 +2266,7 @@ export default function NovoContratoPage() {
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Observação</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Observacao</label>
                             <input
                               type="text"
                               value={newParcela.observacao || ""}
@@ -1226,7 +2282,7 @@ export default function NovoContratoPage() {
                             type="button"
                             onClick={() => {
                               setIsAddingParcela(false);
-                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: 0, observacao: "" });
+                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
                             }}
                             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                           >
@@ -1267,14 +2323,14 @@ export default function NovoContratoPage() {
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Data prevista</th>
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">Ações</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Observacao</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Acoes</th>
                             </tr>
                           </thead>
                           <tbody>
                             {form.parcelas.map((parcela) => (
                               <tr key={parcela.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="py-3 px-4 font-medium text-gray-500 text-center">{parcela.numero}º</td>
+                                <td className="py-3 px-4 font-medium text-gray-500 text-center">{parcela.numero}o</td>
                                 <td className="py-3 px-4 text-center text-gray-700">{formatDate(parcela.dataPrevista)}</td>
                                 <td className="py-3 px-4 text-center font-semibold text-gray-900">
                                   {formatCurrencyDisplay(parcela.valorPrevisto)}
@@ -1291,7 +2347,7 @@ export default function NovoContratoPage() {
                                   </span>
                                 </td>
                                 <td className="py-3 px-4 text-gray-700">
-                                  {parcela.observacao ? parcela.observacao : <span className="text-gray-400">—</span>}
+                                  {parcela.observacao ? parcela.observacao : <span className="text-gray-400">-</span>}
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center justify-center gap-1">
@@ -1333,7 +2389,7 @@ export default function NovoContratoPage() {
               </div>
 
               {/* ================================================================ */}
-              {/* Seção de Metas, Etapas e Fases (Opcional) */}
+              {/* Secao de Metas, Etapas e Fases (Opcional) */}
               {/* ================================================================ */}
               <div className="border-t border-gray-200 pt-5 mt-2">
                 <button
@@ -1362,7 +2418,7 @@ export default function NovoContratoPage() {
 
                 {showMetasSection && (
                   <div className="mt-4 space-y-4">
-                    {/* Botão Adicionar Meta */}
+                    {/* Botao Adicionar Meta */}
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -1415,7 +2471,7 @@ export default function NovoContratoPage() {
                                 type="text"
                                 value={meta.titulo}
                                 onChange={(e) => updateMeta(meta.id, "titulo", e.target.value)}
-                                placeholder="Título da meta..."
+                                placeholder="Titulo da meta..."
                                 className="flex-1 px-2 py-1 text-sm bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                               />
                               <button
@@ -1428,14 +2484,14 @@ export default function NovoContratoPage() {
                               </button>
                             </div>
 
-                            {/* Conteúdo da Meta (expandido) */}
+                            {/* Conteudo da Meta (expandido) */}
                             {expandedMetas.has(meta.id) && (
                               <div className="p-4 space-y-4 bg-white">
                                 {/* Campos da Meta */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   <div>
                                     <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                      Data Início
+                                      Data Inicio
                                     </label>
                                     <DatePicker
                                       value={meta.dataInicio || ""}
@@ -1456,12 +2512,12 @@ export default function NovoContratoPage() {
                                 </div>
                                 <div>
                                   <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                    Descrição (opcional)
+                                    Descricao (opcional)
                                   </label>
                                   <textarea
                                     value={meta.descricao || ""}
                                     onChange={(e) => updateMeta(meta.id, "descricao", e.target.value)}
-                                    placeholder="Descrição da meta..."
+                                    placeholder="Descricao da meta..."
                                     rows={2}
                                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 resize-none"
                                   />
@@ -1518,7 +2574,7 @@ export default function NovoContratoPage() {
                                               onChange={(e) =>
                                                 updateEtapa(meta.id, etapa.id, "titulo", e.target.value)
                                               }
-                                              placeholder="Título da etapa..."
+                                              placeholder="Titulo da etapa..."
                                               className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                             />
                                             <button
@@ -1530,14 +2586,14 @@ export default function NovoContratoPage() {
                                             </button>
                                           </div>
 
-                                          {/* Conteúdo da Etapa (expandido) */}
+                                          {/* Conteudo da Etapa (expandido) */}
                                           {expandedEtapas.has(etapa.id) && (
                                             <div className="p-3 space-y-3 bg-white">
                                               {/* Campos da Etapa */}
                                               <div className="grid grid-cols-2 gap-2">
                                                 <div>
                                                   <label className="text-xs text-gray-500 mb-1 block">
-                                                    Data Início
+                                                    Data Inicio
                                                   </label>
                                                   <DatePicker
                                                     value={etapa.dataInicio || ""}
@@ -1605,7 +2661,7 @@ export default function NovoContratoPage() {
                                                               e.target.value
                                                             )
                                                           }
-                                                          placeholder="Título da fase..."
+                                                          placeholder="Titulo da fase..."
                                                           className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                                         />
                                                         <div className="w-32">
@@ -1620,7 +2676,7 @@ export default function NovoContratoPage() {
                                                                 value
                                                               )
                                                             }
-                                                            placeholder="Início"
+                                                            placeholder="Inicio"
                                                           />
                                                         </div>
                                                         <div className="w-32">
@@ -1675,7 +2731,7 @@ export default function NovoContratoPage() {
               <button
                 type="button"
                 onClick={handleCancel}
-                disabled={isSubmitting}
+                disabled={isSubmitting || showSuccessModal}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -1683,7 +2739,7 @@ export default function NovoContratoPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || showSuccessModal}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] focus:outline-none focus:ring-2 focus:ring-[#004225]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -1701,11 +2757,871 @@ export default function NovoContratoPage() {
           </div>
         </form>
       </div>
+
+      {showPartnerModal && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          onClick={closePartnerModal}
+        >
+          <div
+            className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Cadastrar Parceiro</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  O parceiro criado sera selecionado automaticamente no campo atual.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePartnerModal}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                aria-label="Fechar popup de parceiro"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePartner} className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Nome <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.name}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                    placeholder="Nome do parceiro"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Nome fantasia <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.tradeName}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, tradeName: event.target.value }))
+                    }
+                    placeholder="Nome fantasia"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Tipo <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={partnerForm.partnersType}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        partnersType: event.target.value as PartnersTypeEnum,
+                      }))
+                    }
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  >
+                    {partnerTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Sigla</label>
+                  <input
+                    type="text"
+                    value={partnerForm.acronym}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, acronym: event.target.value }))
+                    }
+                    placeholder="Sigla"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    CNPJ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.cnpj}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        cnpj: formatCnpjInput(event.target.value),
+                      }))
+                    }
+                    placeholder="00.000.000/0000-00"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Telefone <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.phone}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, phone: event.target.value }))
+                    }
+                    placeholder="(00) 00000-0000"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    value={partnerForm.email}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="contato@parceiro.com"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Endereco <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={partnerForm.address}
+                  onChange={(event) =>
+                    setPartnerForm((prev) => ({ ...prev, address: event.target.value }))
+                  }
+                  placeholder="Endereco completo"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Cidade <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.city}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, city: event.target.value }))
+                    }
+                    placeholder="Cidade"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Estado <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={partnerForm.state}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, state: event.target.value }))
+                    }
+                    placeholder="UF"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Site</label>
+                  <input
+                    type="text"
+                    value={partnerForm.site}
+                    onChange={(event) =>
+                      setPartnerForm((prev) => ({ ...prev, site: event.target.value }))
+                    }
+                    placeholder="https://"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              {partnerFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {partnerFormError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closePartnerModal}
+                  disabled={isCreatingPartner}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingPartner}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                >
+                  {isCreatingPartner ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar Parceiro"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showClientModal && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          onClick={closeClientModal}
+        >
+          <div
+            className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Cadastrar Cliente</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  O cliente cadastrado sera selecionado como cliente primario.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeClientModal}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                aria-label="Fechar popup de cliente"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateClient} className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Nome <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={clientForm.name}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                    placeholder="Nome do cliente"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    CNPJ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={clientForm.cnpj}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        cnpj: formatCnpjInput(event.target.value),
+                      }))
+                    }
+                    placeholder="00.000.000/0000-00"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Tipo de orgao <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={clientForm.publicAgencyType}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        publicAgencyType: event.target.value as PublicAgencyTypeEnum,
+                      }))
+                    }
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  >
+                    {publicAgencyTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Sigla</label>
+                  <input
+                    type="text"
+                    value={clientForm.sigla}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, sigla: event.target.value }))
+                    }
+                    placeholder="Sigla"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Codigo</label>
+                  <input
+                    type="text"
+                    value={clientForm.code}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, code: event.target.value }))
+                    }
+                    placeholder="Codigo"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    value={clientForm.email}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="contato@cliente.com"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
+                  <input
+                    type="text"
+                    value={clientForm.phone}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, phone: event.target.value }))
+                    }
+                    placeholder="(00) 00000-0000"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cidade</label>
+                  <input
+                    type="text"
+                    value={clientForm.city}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, city: event.target.value }))
+                    }
+                    placeholder="Cidade"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Estado</label>
+                  <input
+                    type="text"
+                    value={clientForm.state}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, state: event.target.value }))
+                    }
+                    placeholder="UF"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereco</label>
+                <input
+                  type="text"
+                  value={clientForm.address}
+                  onChange={(event) =>
+                    setClientForm((prev) => ({ ...prev, address: event.target.value }))
+                  }
+                  placeholder="Endereco completo"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Responsavel de contato
+                </label>
+                <input
+                  type="text"
+                  value={clientForm.contactPerson}
+                  onChange={(event) =>
+                    setClientForm((prev) => ({ ...prev, contactPerson: event.target.value }))
+                  }
+                  placeholder="Nome do responsavel"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              {clientFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {clientFormError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeClientModal}
+                  disabled={isCreatingClient}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingClient}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                >
+                  {isCreatingClient ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar Cliente"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showSecretaryModal && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          onClick={closeSecretaryModal}
+        >
+          <div
+            className="w-full max-w-xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Cadastrar Secretaria</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Secretaria vinculada ao cliente primario:
+                  <span className="font-semibold text-gray-700">
+                    {" "}
+                    {selectedPrimaryClient?.name ?? "-"}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSecretaryModal}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                aria-label="Fechar popup de secretaria"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSecretary} className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nome da secretaria <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={secretaryForm.name}
+                  onChange={(event) =>
+                    setSecretaryForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  placeholder="Nome da secretaria"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">CNPJ</label>
+                  <input
+                    type="text"
+                    value={secretaryForm.cnpj}
+                    onChange={(event) =>
+                      setSecretaryForm((prev) => ({
+                        ...prev,
+                        cnpj: formatCnpjInput(event.target.value),
+                      }))
+                    }
+                    placeholder="00.000.000/0000-00"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Sigla</label>
+                  <input
+                    type="text"
+                    value={secretaryForm.sigla}
+                    onChange={(event) =>
+                      setSecretaryForm((prev) => ({ ...prev, sigla: event.target.value }))
+                    }
+                    placeholder="Sigla"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Codigo</label>
+                  <input
+                    type="text"
+                    value={secretaryForm.code}
+                    onChange={(event) =>
+                      setSecretaryForm((prev) => ({ ...prev, code: event.target.value }))
+                    }
+                    placeholder="Codigo"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    value={secretaryForm.email}
+                    onChange={(event) =>
+                      setSecretaryForm((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="secretaria@orgao.gov.br"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
+                  <input
+                    type="text"
+                    value={secretaryForm.phone}
+                    onChange={(event) =>
+                      setSecretaryForm((prev) => ({ ...prev, phone: event.target.value }))
+                    }
+                    placeholder="(00) 00000-0000"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereco</label>
+                <input
+                  type="text"
+                  value={secretaryForm.address}
+                  onChange={(event) =>
+                    setSecretaryForm((prev) => ({ ...prev, address: event.target.value }))
+                  }
+                  placeholder="Endereco completo"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Responsavel de contato
+                </label>
+                <input
+                  type="text"
+                  value={secretaryForm.contactPerson}
+                  onChange={(event) =>
+                    setSecretaryForm((prev) => ({ ...prev, contactPerson: event.target.value }))
+                  }
+                  placeholder="Nome do responsavel"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              {secretaryFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {secretaryFormError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeSecretaryModal}
+                  disabled={isCreatingSecretary}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingSecretary}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                >
+                  {isCreatingSecretary ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar Secretaria"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showCoordinatorModal && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          onClick={closeCoordinatorModal}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Cadastrar Coordenador</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cadastre uma pessoa e selecione como coordenador do projeto.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCoordinatorModal}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                aria-label="Fechar popup"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCoordinator} className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nome completo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={coordinatorForm.fullName}
+                  onChange={(event) =>
+                    setCoordinatorForm((prev) => ({ ...prev, fullName: event.target.value }))
+                  }
+                  placeholder="Ex.: Joao da Silva"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    CPF <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={coordinatorForm.cpf}
+                    onChange={(event) =>
+                      setCoordinatorForm((prev) => ({
+                        ...prev,
+                        cpf: formatCpfInput(event.target.value),
+                      }))
+                    }
+                    placeholder="000.000.000-00"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
+                  <input
+                    type="text"
+                    value={coordinatorForm.phone}
+                    onChange={(event) =>
+                      setCoordinatorForm((prev) => ({ ...prev, phone: event.target.value }))
+                    }
+                    placeholder="(00) 00000-0000"
+                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={coordinatorForm.email}
+                  onChange={(event) =>
+                    setCoordinatorForm((prev) => ({ ...prev, email: event.target.value }))
+                  }
+                  placeholder="coordenador@exemplo.com"
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              {coordinatorFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {coordinatorFormError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeCoordinatorModal}
+                  disabled={isCreatingCoordinator}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingCoordinator}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] disabled:opacity-50 transition-colors"
+                >
+                  {isCreatingCoordinator ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar Coordenador"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// Componente auxiliar para campos do formulário
+function ProjectDocumentUploadField({
+  label,
+  file,
+  error,
+  onFileChange,
+  onRemove,
+  onPreview,
+  disabled,
+}: {
+  label: string;
+  file?: File;
+  error?: string;
+  onFileChange: (file: File | null) => void;
+  onRemove: () => void;
+  onPreview: () => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-xs font-medium text-gray-700">{label}</label>
+
+      {!file ? (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-sm border-2 border-dashed rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+            error
+              ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+              : "border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:border-gray-400"
+          }`}
+        >
+          <Upload className="h-4 w-4" />
+          Selecionar arquivo
+        </button>
+      ) : (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-emerald-700 flex-shrink-0" />
+            <p className="text-xs text-emerald-900 truncate flex-1" title={file.name}>
+              {file.name}
+            </p>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-emerald-700">Pronto para envio</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onPreview}
+                disabled={disabled}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 rounded transition-colors disabled:opacity-60"
+              >
+                <Eye className="h-3 w-3" />
+                Visualizar
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                disabled={disabled}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 rounded transition-colors disabled:opacity-60"
+              >
+                <Trash2 className="h-3 w-3" />
+                Remover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg"
+        className="hidden"
+        disabled={disabled}
+        onChange={(event) => onFileChange(event.target.files?.[0] || null)}
+      />
+
+      {error ? (
+        <p className="text-xs text-red-600 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// Componente auxiliar para campos do formulario
 function FormField({
   label,
   required,

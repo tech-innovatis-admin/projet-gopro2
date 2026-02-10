@@ -54,36 +54,39 @@ const navigationItems: NavItem[] = [
     icon: FolderOpen,
     children: [
       { label: "Todos os Contratos", href: "/contratos", icon: FolderOpen },
-      { label: "Trilha de Contratos", href: "/contratos/funil", icon: BarChart3 },
+      // Temporarily disabled:
+      // { label: "Trilha de Contratos", href: "/contratos/funil", icon: BarChart3 },
       { label: "Novo Contrato", href: "/contratos/novo-contrato", icon: FileText },
       { label: "Pré-Contratos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
     ],
   },
-  {
-    label: "Organizações",
-    href: "/organizacoes",
-    icon: Users,
-    children: [
-      {
-        label: "Todos os Parceiros",
-        icon: Users,
-        submenu: [
-          { label: "IFES", href: "/parceiros/ifes", icon: BarChart3 },
-          { label: "Fundações", href: "/parceiros/fundacoes", icon: FileText },
-        ],
-      },
-      { label: "Fornecedores", href: "/fornecedores", icon: FolderOpen },
-    ],
-  },
-  {
-    label: "Recursos Humanos",
-    href: "/recursos-humanos",
-    icon: Users,
-    children: [
-      { label: "Equipe Interna", href: "/recursos-humanos/equipe", icon: Users },
-      { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
-    ],
-  },
+  // Temporarily disabled:
+  // {
+  //   label: "Organizações",
+  //   href: "/organizacoes",
+  //   icon: Users,
+  //   children: [
+  //     {
+  //       label: "Todos os Parceiros",
+  //       icon: Users,
+  //       submenu: [
+  //         { label: "IFES", href: "/parceiros/ifes", icon: BarChart3 },
+  //         { label: "Fundações", href: "/parceiros/fundacoes", icon: FileText },
+  //       ],
+  //     },
+  //     { label: "Fornecedores", href: "/fornecedores", icon: FolderOpen },
+  //   ],
+  // },
+  // Temporarily disabled:
+  // {
+  //   label: "Recursos Humanos",
+  //   href: "/recursos-humanos",
+  //   icon: Users,
+  //   children: [
+  //     { label: "Equipe Interna", href: "/recursos-humanos/equipe", icon: Users },
+  //     { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
+  //   ],
+  // },
 ];
 
 // =============================================================================
@@ -530,11 +533,13 @@ export function NavBar() {
 
           {/* User Menu & Mobile Toggle */}
           <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <NotificationDropdown />
+            {false && (
+              <>
+                {/* Notifications */}
+                <NotificationDropdown />
 
-            {/* User Dropdown */}
-            {mounted ? (
+                {/* User Dropdown */}
+                {mounted ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -617,6 +622,8 @@ export function NavBar() {
                 <span className="hidden sm:block">Admin</span>
                 <ChevronDown className="h-4 w-4" />
               </Button>
+                )}
+              </>
             )}
 
             {/* Mobile Menu Toggle */}

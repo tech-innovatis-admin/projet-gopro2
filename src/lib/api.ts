@@ -394,10 +394,6 @@ export function getErrorMessage(error: unknown): string {
  */
 export function handleApiError(error: unknown): string {
   if (isApiException(error)) {
-    if (error.isUnauthorized() && typeof window !== 'undefined') {
-      window.location.href = '/login';
-      return 'Sessão expirada. Redirecionando...';
-    }
     return error.message;
   }
   return getErrorMessage(error);

@@ -1,9 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, usePathname } from "next/navigation";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
+import {
+  getPartnerById,
+  getPeopleById,
+  getProjectById,
+  getPublicAgencyById,
+  getSecretaryById,
+  listPartners,
+  listPeople,
+  listPublicAgencies,
+  listSecretaries,
+  updateProject,
+} from "@/src/lib/api/endpoints";
+import {
+  HttpError,
+  type ProjectGovIfEnum,
+  type ProjectResponseDTO,
+  type ProjectStatusEnum,
+  type ProjectTypeEnum,
+  type ProjectUpdateDTO,
+} from "@/src/lib/api/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,10 +47,10 @@ import {
   Edit,
   Save,
   X,
+  Check,
   CheckCircle,
 } from "lucide-react";
-import { mockContrato, type Contrato } from "./types";
-import { rubricasMock, parcelasMock } from "./rubricas/page";
+import { type Contrato } from "./types";
 
 type TabItem = {
   label: string;
@@ -38,8 +58,158 @@ type TabItem = {
   description: string;
 };
 
+type SelectOption = {
+  id: number;
+  label: string;
+};
+
+type SecretaryOption = SelectOption & {
+  publicAgencyId: number | null;
+};
+
+type EditRelations = {
+  primaryPartnerId: number | null;
+  secundaryPartnerId: number | null;
+  primaryClientId: number | null;
+  secundaryClientId: number | null;
+  cordinatorId: number | null;
+  projectGovIf: ProjectGovIfEnum | null;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+const NO_INFO_LABEL = "-";
+
+const PROJECT_STATUS_OPTIONS: Array<{
+  value: ProjectStatusEnum;
+  label: string;
+}> = [
+  { value: "PRE_PROJETO", label: "Pre-projeto" },
+  { value: "PLANEJAMENTO", label: "Planejamento" },
+  { value: "EXECUCAO", label: "Execucao" },
+  { value: "FINALIZADO", label: "Finalizado" },
+  { value: "SUSPENSO", label: "Suspenso" },
+];
+
+const EMPTY_CONTRATO: Contrato = {
+  id: "",
+  codigo: "",
+  titulo: "",
+  tipo: "PROJETO",
+  status: "PRE_PROJETO",
+  coordenador: NO_INFO_LABEL,
+  parceiro: NO_INFO_LABEL,
+  cliente: NO_INFO_LABEL,
+  orgaoFinanciador: NO_INFO_LABEL,
+  segmentos: [],
+  localidade: NO_INFO_LABEL,
+  dataInicio: "",
+  dataFim: "",
+  valorTotal: 0,
+  valorExecutado: 0,
+  descricao: "",
+};
+
+function normalizeSegments(areaSegmento: string | null) {
+  if (!areaSegmento) return [];
+  return areaSegmento
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function normalizeLocation(
+  city: string | null,
+  state: string | null,
+  executionLocation: string | null
+) {
+  if (executionLocation && executionLocation.trim()) return executionLocation.trim();
+  if (city && state) return `${city} - ${state}`;
+  if (city) return city;
+  if (state) return state;
+  return NO_INFO_LABEL;
+}
+
+function normalizeMoneyValue(value: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function mapProjectToContrato(
+  project: ProjectResponseDTO,
+  names: {
+    primaryPartner: string;
+    secondaryPartner: string;
+    primaryClient: string;
+    secondaryClient: string;
+    coordinator: string;
+  }
+): Contrato {
+  return {
+    id: String(project.id),
+    codigo: project.code || `PROJ-${project.id}`,
+    titulo: project.name || `Contrato ${project.id}`,
+    tipo: project.projectType === "PRODUTO" ? "PRODUTO" : "PROJETO",
+    status: project.projectStatus || "PRE_PROJETO",
+    coordenador: names.coordinator,
+    parceiro:
+      names.secondaryPartner !== NO_INFO_LABEL
+        ? `${names.primaryPartner} / ${names.secondaryPartner}`
+        : names.primaryPartner,
+    cliente: names.primaryClient,
+    orgaoFinanciador: names.secondaryClient !== NO_INFO_LABEL ? names.secondaryClient : names.primaryClient,
+    segmentos: normalizeSegments(project.areaSegmento),
+    localidade: normalizeLocation(project.city, project.state, project.executionLocation),
+    dataInicio: project.startDate ?? project.openingDate ?? "",
+    dataFim: project.endDate ?? project.closingDate ?? "",
+    dataRealInicio: project.openingDate ?? undefined,
+    dataRealTermino: project.closingDate ?? undefined,
+    valorTotal: normalizeMoneyValue(project.contractValue),
+    valorExecutado: normalizeMoneyValue(project.totalReceived),
+    descricao: project.object || "",
+    unidade: project.projectGovIf ?? undefined,
+  };
+}
+
+function toEditRelations(project: ProjectResponseDTO | null): EditRelations {
+  if (!project) {
+    return {
+      primaryPartnerId: null,
+      secundaryPartnerId: null,
+      primaryClientId: null,
+      secundaryClientId: null,
+      cordinatorId: null,
+      projectGovIf: null,
+    };
+  }
+
+  return {
+    primaryPartnerId: project.primaryPartnerId ?? null,
+    secundaryPartnerId: project.secundaryPartnerId ?? null,
+    primaryClientId: project.primaryClientId ?? null,
+    secundaryClientId: project.secundaryClientId ?? null,
+    cordinatorId: project.cordinatorId ?? null,
+    projectGovIf: project.projectGovIf ?? null,
+  };
+}
+
+function toOptionalDate(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function toOptionalText(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseSelectNumber(value: string) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export default function ContratoLayout({
@@ -49,28 +219,32 @@ export default function ContratoLayout({
 }) {
   const params = useParams();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const contratoId = params.contratoId as string;
+  const autoEditRequested = searchParams.get("edit") === "true";
+  const autoEditAppliedRef = useRef(false);
   const [isDescricaoExpanded, setIsDescricaoExpanded] = useState(false);
   const [isInfoComplementarExpanded, setIsInfoComplementarExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-
-  // Cálculo do Saldo Total (replicado de pagamentos/page.tsx)
-  const totalRecebido = (parcelasMock as any[]).reduce((acc, p) => acc + (Number(p.valorRecebido) || 0), 0);
-
-  const totalPago = (rubricasMock as any[]).reduce((accRub: number, rub: any) => {
-    return accRub + (rub.itens || []).reduce((accItem: number, item: any) => {
-      return accItem + (item.subitens || []).reduce((accSub: number, sub: any) => {
-        const sumLancamentos = Object.values(sub.lancamentos || {}).reduce((accLanc: number, lanc: any) => {
-            return accLanc + (Number(lanc?.valor) || 0);
-        }, 0);
-        return accSub + sumLancamentos;
-      }, 0);
-    }, 0);
-  }, 0);
-
-  const saldoTotal = totalRecebido - totalPago;
-  const [editContrato, setEditContrato] = useState<Contrato>({ ...mockContrato, id: contratoId });
+  const [contratoBase, setContratoBase] = useState<Contrato>({
+    ...EMPTY_CONTRATO,
+    id: contratoId,
+  });
+  const [editContrato, setEditContrato] = useState<Contrato>({
+    ...EMPTY_CONTRATO,
+    id: contratoId,
+  });
+  const [projectSnapshot, setProjectSnapshot] = useState<ProjectResponseDTO | null>(null);
+  const [partnerOptions, setPartnerOptions] = useState<SelectOption[]>([]);
+  const [peopleOptions, setPeopleOptions] = useState<SelectOption[]>([]);
+  const [publicAgencyOptions, setPublicAgencyOptions] = useState<SelectOption[]>([]);
+  const [secretaryOptions, setSecretaryOptions] = useState<SecretaryOption[]>([]);
+  const [editRelations, setEditRelations] = useState<EditRelations>(toEditRelations(null));
+  const [isLoadingContrato, setIsLoadingContrato] = useState(true);
+  const [loadContratoError, setLoadContratoError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -78,21 +252,177 @@ export default function ContratoLayout({
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    autoEditAppliedRef.current = false;
+  }, [contratoId]);
+
+  const loadSelectOptions = useCallback(async () => {
+    const [partnersPage, peoplePage, publicAgenciesPage, secretariesPage] = await Promise.all([
+      listPartners({ page: 0, size: 100 }).catch(() => null),
+      listPeople({ page: 0, size: 100 }).catch(() => null),
+      listPublicAgencies({ page: 0, size: 100 }).catch(() => null),
+      listSecretaries({ page: 0, size: 100 }).catch(() => null),
+    ]);
+
+    if (partnersPage) {
+      setPartnerOptions(
+        partnersPage.content.map((partner) => ({
+          id: partner.id,
+          label: partner.name,
+        }))
+      );
+    }
+
+    if (peoplePage) {
+      setPeopleOptions(
+        peoplePage.content.map((person) => ({
+          id: person.id,
+          label: person.fullName,
+        }))
+      );
+    }
+
+    if (publicAgenciesPage) {
+      setPublicAgencyOptions(
+        publicAgenciesPage.content.map((agency) => ({
+          id: agency.id,
+          label: agency.name,
+        }))
+      );
+    }
+
+    if (secretariesPage) {
+      setSecretaryOptions(
+        secretariesPage.content.map((secretary) => ({
+          id: secretary.id,
+          label: secretary.name,
+          publicAgencyId: secretary.publicAgency?.id ?? null,
+        }))
+      );
+    }
+  }, []);
   
-  const contratoBase: Contrato = { ...mockContrato, id: contratoId };
+  const loadContrato = useCallback(async () => {
+    setIsLoadingContrato(true);
+    setLoadContratoError(null);
+
+    const safePartnerName = async (id: number | null) => {
+      if (!id) return NO_INFO_LABEL;
+      try {
+        const partner = await getPartnerById(id);
+        return partner.name || NO_INFO_LABEL;
+      } catch {
+        return `Parceiro #${id}`;
+      }
+    };
+
+    const safePrimaryClientName = async (id: number | null) => {
+      if (!id) return NO_INFO_LABEL;
+      try {
+        const agency = await getPublicAgencyById(id);
+        return agency.name || NO_INFO_LABEL;
+      } catch {
+        return `Cliente #${id}`;
+      }
+    };
+
+    const safeSecondaryClientName = async (id: number | null) => {
+      if (!id) return NO_INFO_LABEL;
+      try {
+        const secretary = await getSecretaryById(id);
+        return secretary.name || NO_INFO_LABEL;
+      } catch {
+        return `Secretaria #${id}`;
+      }
+    };
+
+    const safeCoordinatorName = async (id: number | null) => {
+      if (!id) return NO_INFO_LABEL;
+      try {
+        const person = await getPeopleById(id);
+        return person.fullName || NO_INFO_LABEL;
+      } catch {
+        return `Pessoa #${id}`;
+      }
+    };
+
+    try {
+      const project = await getProjectById(contratoId);
+      const [primaryPartner, secondaryPartner, primaryClient, secondaryClient, coordinator] =
+        await Promise.all([
+          safePartnerName(project.primaryPartnerId),
+          safePartnerName(project.secundaryPartnerId),
+          safePrimaryClientName(project.primaryClientId),
+          safeSecondaryClientName(project.secundaryClientId),
+          safeCoordinatorName(project.cordinatorId),
+        ]);
+
+      const mapped = mapProjectToContrato(project, {
+        primaryPartner,
+        secondaryPartner,
+        primaryClient,
+        secondaryClient,
+        coordinator,
+      });
+
+      setProjectSnapshot(project);
+      setEditRelations(toEditRelations(project));
+      setContratoBase(mapped);
+      setEditContrato(mapped);
+    } catch (error) {
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel carregar os detalhes do contrato.";
+      setLoadContratoError(message);
+      setProjectSnapshot(null);
+      setEditRelations(toEditRelations(null));
+      setContratoBase({ ...EMPTY_CONTRATO, id: contratoId });
+      setEditContrato({ ...EMPTY_CONTRATO, id: contratoId });
+    } finally {
+      setIsLoadingContrato(false);
+    }
+  }, [contratoId]);
+
+  useEffect(() => {
+    void loadContrato();
+  }, [loadContrato]);
+
+  useEffect(() => {
+    void loadSelectOptions();
+  }, [loadSelectOptions]);
+
   const contrato: Contrato = isEditing ? editContrato : contratoBase;
+  const filteredSecondaryClientOptions = useMemo(() => {
+    if (!editRelations.primaryClientId) return [];
+
+    return secretaryOptions.filter(
+      (secretary) => secretary.publicAgencyId === editRelations.primaryClientId
+    );
+  }, [editRelations.primaryClientId, secretaryOptions]);
+
+  useEffect(() => {
+    if (!editRelations.secundaryClientId) return;
+    const isValid = filteredSecondaryClientOptions.some(
+      (secretary) => secretary.id === editRelations.secundaryClientId
+    );
+    if (!isValid) {
+      setEditRelations((prev) => ({ ...prev, secundaryClientId: null }));
+    }
+  }, [editRelations.secundaryClientId, filteredSecondaryClientOptions]);
 
   const tabs: TabItem[] = [
-    {
-      label: "Visão Geral",
-      href: `/contratos/${contratoId}`,
-      description: "Resumo e informações principais",
-    },
-    {
-      label: "Trilha",
-      href: `/contratos/${contratoId}/trilha`,
-      description: "Funil de preparação do contrato",
-    },
+    // {
+    //   label: "Visao Geral",
+    //   href: `/contratos/${contratoId}`,
+    //   description: "Resumo e informacoes principais",
+    // },
+    // {
+    //   label: "Trilha",
+    //   href: `/contratos/${contratoId}/trilha`,
+    //   description: "Funil de preparação do contrato",
+    // },
     {
       label: "Metas",
       href: `/contratos/${contratoId}/meta-etapa-fase`,
@@ -103,26 +433,26 @@ export default function ContratoLayout({
       href: `/contratos/${contratoId}/desembolso`,
       description: "Cronograma de desembolsos",
     },
-    {
-      label: "Rubricas",
-      href: `/contratos/${contratoId}/rubricas`,
-      description: "Orçamento e execução financeira",
-    },
-    {
-      label: "Pagamentos",
-      href: `/contratos/${contratoId}/pagamentos`,
-      description: "Histórico de pagamentos",
-    },
-    {
-      label: "Equipe",
-      href: `/contratos/${contratoId}/equipe-tecnica`,
-      description: "Membros",
-    },
-    {
-      label: "Empresas",
-      href: `/contratos/${contratoId}/empresas`,
-      description: "Empresas vinculadas",
-    },
+    // {
+    //   label: "Rubricas",
+    //   href: `/contratos/${contratoId}/rubricas`,
+    //   description: "Orcamento e execucao financeira",
+    // },
+    // {
+    //   label: "Pagamentos",
+    //   href: `/contratos/${contratoId}/pagamentos`,
+    //   description: "Historico de pagamentos",
+    // },
+    // {
+    //   label: "Equipe",
+    //   href: `/contratos/${contratoId}/equipe-tecnica`,
+    //   description: "Membros",
+    // },
+    // {
+    //   label: "Empresas",
+    //   href: `/contratos/${contratoId}/empresas`,
+    //   description: "Empresas vinculadas",
+    // },
     {
       label: "Arquivos",
       href: `/contratos/${contratoId}/arquivos`,
@@ -138,9 +468,15 @@ export default function ContratoLayout({
   };
 
   const currentContrato = isEditing ? editContrato : contrato;
-  const percentualExecutado = currentContrato.valorExecutado
-    ? Math.round((currentContrato.valorExecutado / currentContrato.valorTotal) * 100)
-    : 0;
+  const currentProjectStatus = (
+    isEditing ? editContrato.status : contratoBase.status
+  ) as ProjectStatusEnum;
+  const percentualExecutado =
+    currentContrato.valorTotal > 0
+      ? Math.round(((currentContrato.valorExecutado ?? 0) / currentContrato.valorTotal) * 100)
+      : 0;
+  const saldoTotal = (currentContrato.valorTotal || 0) - (currentContrato.valorExecutado || 0);
+  const canEditContrato = !isLoadingContrato && !loadContratoError && !!projectSnapshot;
   
   // Truncar descrição para preview
   const currentDescricao = isEditing ? editContrato.descricao : contrato.descricao;
@@ -151,28 +487,90 @@ export default function ContratoLayout({
     : null;
 
   // Funções de edição
-  const handleEdit = () => {
-    setEditContrato({ ...mockContrato, id: contratoId });
+  const handleEdit = useCallback(() => {
+    setSaveError(null);
+    setSavedMessage(false);
+    setEditContrato({ ...contratoBase });
+    setEditRelations(toEditRelations(projectSnapshot));
     setIsEditing(true);
-  };
+  }, [contratoBase, projectSnapshot]);
+
+  useEffect(() => {
+    if (!autoEditRequested || autoEditAppliedRef.current) {
+      return;
+    }
+
+    if (canEditContrato && !isEditing) {
+      handleEdit();
+      autoEditAppliedRef.current = true;
+    }
+  }, [autoEditRequested, canEditContrato, isEditing, handleEdit]);
 
   const handleCancel = () => {
-    setEditContrato({ ...mockContrato, id: contratoId });
+    setSaveError(null);
+    setEditContrato({ ...contratoBase });
+    setEditRelations(toEditRelations(projectSnapshot));
     setIsEditing(false);
   };
 
   const handleSave = async () => {
+    if (!projectSnapshot) return;
+
     setIsSaving(true);
-    // TODO: Salvar contrato via API
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    setIsEditing(false);
-    setSavedMessage(true);
-    setTimeout(() => setSavedMessage(false), 3000);
+    setSaveError(null);
+
+    const payload: ProjectUpdateDTO = {
+      name: toOptionalText(editContrato.titulo),
+      code: toOptionalText(editContrato.codigo),
+      projectStatus: editContrato.status as ProjectStatusEnum,
+      areaSegmento:
+        editContrato.segmentos && editContrato.segmentos.length > 0
+          ? editContrato.segmentos.join(", ")
+          : undefined,
+      object: toOptionalText(editContrato.descricao),
+      primaryPartnerId: editRelations.primaryPartnerId ?? undefined,
+      secundaryPartnerId: editRelations.secundaryPartnerId ?? undefined,
+      primaryClientId: editRelations.primaryClientId ?? undefined,
+      secundaryClientId: editRelations.secundaryClientId ?? undefined,
+      cordinatorId: editRelations.cordinatorId ?? undefined,
+      projectGovIf: editRelations.projectGovIf ?? undefined,
+      projectType: editContrato.tipo as ProjectTypeEnum,
+      contractValue: editContrato.valorTotal,
+      startDate: toOptionalDate(editContrato.dataInicio),
+      endDate: toOptionalDate(editContrato.dataFim),
+      openingDate: toOptionalDate(editContrato.dataRealInicio),
+      closingDate: toOptionalDate(editContrato.dataRealTermino),
+      city: projectSnapshot.city ?? undefined,
+      state: projectSnapshot.state ?? undefined,
+      executionLocation:
+        editContrato.localidade === NO_INFO_LABEL
+          ? undefined
+          : toOptionalText(editContrato.localidade),
+    };
+
+    try {
+      await updateProject(contratoId, payload);
+      await loadContrato();
+      setIsEditing(false);
+      setSavedMessage(true);
+      setTimeout(() => setSavedMessage(false), 3000);
+    } catch (error) {
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel salvar as alteracoes do contrato.";
+      setSaveError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChange = (updates: Partial<Contrato>) => {
     setEditContrato((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleRelationChange = (updates: Partial<EditRelations>) => {
+    setEditRelations((prev) => ({ ...prev, ...updates }));
   };
 
   const toggleSegmento = (segmento: string) => {
@@ -181,6 +579,35 @@ export default function ContratoLayout({
       ? selected.filter((s) => s !== segmento)
       : [...selected, segmento];
     handleChange({ segmentos: updated });
+  };
+
+  const handleStatusChange = async (nextStatus: ProjectStatusEnum) => {
+    if (isEditing) {
+      handleChange({ status: nextStatus });
+      return;
+    }
+
+    if (!projectSnapshot || nextStatus === contratoBase.status) {
+      return;
+    }
+
+    setIsUpdatingStatus(true);
+    setSaveError(null);
+
+    try {
+      await updateProject(contratoId, { projectStatus: nextStatus });
+      await loadContrato();
+      setSavedMessage(true);
+      setTimeout(() => setSavedMessage(false), 3000);
+    } catch (error) {
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel atualizar o status do projeto.";
+      setSaveError(message);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   const segmentoOptions = [
@@ -219,6 +646,25 @@ export default function ContratoLayout({
             {(isEditing ? editContrato : contrato).codigo} – {(isEditing ? editContrato : contrato).titulo}
           </span>
         </nav>
+
+        {isLoadingContrato && (
+          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            Carregando detalhes do contrato...
+          </div>
+        )}
+
+        {loadContratoError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div>{loadContratoError}</div>
+            <button
+              type="button"
+              onClick={() => void loadContrato()}
+              className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
 
         {/* Header do Contrato */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -264,24 +710,51 @@ export default function ContratoLayout({
                       <option value="PROJETO">Projeto</option>
                       <option value="PRODUTO">Produto</option>
                     </select>
-                    <select
-                      value={editContrato.status}
-                      onChange={(e) => handleChange({ status: e.target.value })}
-                      className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                    >
-                      <option value="EM_ANDAMENTO">Em Andamento</option>
-                      <option value="CONCLUIDO">Concluído</option>
-                      <option value="SUSPENSO">Suspenso</option>
-                      <option value="CANCELADO">Cancelado</option>
-                      <option value="DRAFT">Rascunho</option>
-                      <option value="EM_NEGOCIACAO">Em Negociação</option>
-                    </select>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3 text-gray-500 text-sm">
+              <div className="flex items-center gap-3 text-gray-500 text-sm flex-wrap">
                 <span>Contrato ID: {contratoId}</span>
-                {!isEditing && <StatusBadge status={contrato.status} />}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={
+                        isUpdatingStatus || (!isEditing && !projectSnapshot)
+                      }
+                      className="inline-flex items-center gap-1 rounded-full border border-transparent bg-transparent px-0 py-0 text-xs disabled:opacity-60"
+                    >
+                      <StatusBadge status={currentProjectStatus} />
+                      <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    sideOffset={6}
+                    className="z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+                  >
+                    {PROJECT_STATUS_OPTIONS.map((option) => {
+                      const isSelected = option.value === currentProjectStatus;
+                      return (
+                        <DropdownMenuItem
+                          key={option.value}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            void handleStatusChange(option.value);
+                          }}
+                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 focus:bg-gray-50 outline-none cursor-pointer"
+                        >
+                          <span>{option.label}</span>
+                          {isSelected ? (
+                            <Check className="h-4 w-4 text-[#004225]" />
+                          ) : (
+                            <span className="h-4 w-4" />
+                          )}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -291,6 +764,11 @@ export default function ContratoLayout({
                 <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
                   <CheckCircle className="h-4 w-4" />
                   Salvo com sucesso!
+                </div>
+              )}
+              {saveError && (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg">
+                  {saveError}
                 </div>
               )}
               {isEditing ? (
@@ -304,7 +782,7 @@ export default function ContratoLayout({
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={isSaving}
+                    disabled={isSaving || !projectSnapshot}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" />
@@ -319,6 +797,7 @@ export default function ContratoLayout({
                           <DropdownMenuTrigger asChild>
                             <button 
                               type="button"
+                              disabled={!canEditContrato}
                               className="inline-flex items-center justify-center w-10 h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                             >
                               <MoreHorizontal className="h-4 w-4" />
@@ -370,55 +849,120 @@ export default function ContratoLayout({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
             {/* Coluna 1 - Cliente/Parceiro */}
             <div className="space-y-3">
-              {contrato.cliente && (
-                <div className="flex items-start gap-3 group">
-                  <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                  <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Cliente</p>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editContrato.cliente || ""}
-                        onChange={(e) => handleChange({ cliente: e.target.value })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                      />
-                    ) : (
-                      <p className="text-sm font-medium text-gray-900">{contrato.cliente}</p>
-                    )}
-                  </div>
-                </div>
-              )}
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Parceiro</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Cliente Primario
+                  </p>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={editContrato.parceiro}
-                      onChange={(e) => handleChange({ parceiro: e.target.value })}
+                    <select
+                      value={editRelations.primaryClientId ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          primaryClientId: parseSelectNumber(e.target.value),
+                        })
+                      }
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                    />
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {publicAgencyOptions.map((agency) => (
+                        <option key={agency.id} value={agency.id}>
+                          {agency.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-900">{contrato.cliente || NO_INFO_LABEL}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-start gap-3 group">
+                <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Parceiro Primario
+                  </p>
+                  {isEditing ? (
+                    <select
+                      value={editRelations.primaryPartnerId ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          primaryPartnerId: parseSelectNumber(e.target.value),
+                        })
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                    >
+                      <option value="">Selecione um parceiro</option>
+                      {partnerOptions.map((partner) => (
+                        <option key={partner.id} value={partner.id}>
+                          {partner.label}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <p className="text-sm font-medium text-gray-900">{contrato.parceiro}</p>
                   )}
                 </div>
               </div>
+              {isEditing && (
+                <div className="flex items-start gap-3 group">
+                  <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                      Parceiro Secundario
+                    </p>
+                    <select
+                      value={editRelations.secundaryPartnerId ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          secundaryPartnerId: parseSelectNumber(e.target.value),
+                        })
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                    >
+                      <option value="">Sem parceiro secundario</option>
+                      {partnerOptions.map((partner) => (
+                        <option key={partner.id} value={partner.id}>
+                          {partner.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Coluna 2 - Órgão Financiador/Tipo */}
+            {/* Coluna 2 - Cliente Secundario/Tipo */}
             <div className="space-y-3">
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Órgão Financiador</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Cliente Secundario (Secretaria)
+                  </p>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={editContrato.orgaoFinanciador}
-                      onChange={(e) => handleChange({ orgaoFinanciador: e.target.value })}
+                    <select
+                      value={editRelations.secundaryClientId ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          secundaryClientId: parseSelectNumber(e.target.value),
+                        })
+                      }
+                      disabled={!editRelations.primaryClientId}
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                    />
+                    >
+                      <option value="">
+                        {editRelations.primaryClientId
+                          ? "Selecione uma secretaria"
+                          : "Selecione primeiro o cliente primario"}
+                      </option>
+                      {filteredSecondaryClientOptions.map((secretary) => (
+                        <option key={secretary.id} value={secretary.id}>
+                          {secretary.label}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <p className="text-sm font-medium text-gray-900">{contrato.orgaoFinanciador}</p>
                   )}
@@ -427,7 +971,9 @@ export default function ContratoLayout({
               <div className="flex items-start gap-3 group">
                 <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Tipo</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Tipo
+                  </p>
                   {isEditing ? (
                     <select
                       value={editContrato.tipo}
@@ -441,6 +987,31 @@ export default function ContratoLayout({
                     <p className="text-sm font-medium text-gray-900">
                       {contrato.tipo === "PROJETO" ? "Projeto" : "Produto"}
                     </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-start gap-3 group">
+                <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Gov/IF
+                  </p>
+                  {isEditing ? (
+                    <select
+                      value={editRelations.projectGovIf ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          projectGovIf: (e.target.value || null) as ProjectGovIfEnum | null,
+                        })
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                    >
+                      <option value="">Nao informado</option>
+                      <option value="GOV">GOV</option>
+                      <option value="IF">IF</option>
+                    </select>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-900">{contrato.unidade || NO_INFO_LABEL}</p>
                   )}
                 </div>
               </div>
@@ -570,12 +1141,22 @@ export default function ContratoLayout({
                       <div className="flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Coordenador</p>
                         {isEditing ? (
-                          <input
-                            type="text"
-                            value={editContrato.coordenador}
-                            onChange={(e) => handleChange({ coordenador: e.target.value })}
+                          <select
+                            value={editRelations.cordinatorId ?? ""}
+                            onChange={(e) =>
+                              handleRelationChange({
+                                cordinatorId: parseSelectNumber(e.target.value),
+                              })
+                            }
                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                          />
+                          >
+                            <option value="">Selecione um coordenador</option>
+                            {peopleOptions.map((person) => (
+                              <option key={person.id} value={person.id}>
+                                {person.label}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <p className="text-sm font-medium text-gray-900">{contrato.coordenador}</p>
                         )}
@@ -773,32 +1354,18 @@ export default function ContratoLayout({
 // Componentes auxiliares
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    EM_ANDAMENTO: { bg: "bg-blue-100", text: "text-blue-800", label: "Em Andamento" },
-    CONCLUIDO: { bg: "bg-green-100", text: "text-green-800", label: "Concluído" },
+    PRE_PROJETO: { bg: "bg-gray-100", text: "text-gray-800", label: "Pré-projeto" },
+    PLANEJAMENTO: { bg: "bg-slate-100", text: "text-slate-800", label: "Planejamento" },
+    EXECUCAO: { bg: "bg-blue-100", text: "text-blue-800", label: "Execução" },
+    FINALIZADO: { bg: "bg-green-100", text: "text-green-800", label: "Finalizado" },
     SUSPENSO: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Suspenso" },
-    DRAFT: { bg: "bg-gray-100", text: "text-gray-800", label: "Rascunho" },
-    CANCELADO: { bg: "bg-red-100", text: "text-red-800", label: "Cancelado" },
-    EM_NEGOCIACAO: { bg: "bg-purple-100", text: "text-purple-800", label: "Em Negociação" },
   };
 
-  const { bg, text, label } = config[status] || config.DRAFT;
+  const { bg, text, label } = config[status] || config.PRE_PROJETO;
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}>
       {label}
-    </span>
-  );
-}
-
-function TipoBadge({ tipo }: { tipo: "PROJETO" | "PRODUTO" }) {
-  const isProjeto = tipo === "PROJETO";
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        isProjeto ? "bg-emerald-100 text-emerald-800" : "bg-teal-100 text-teal-800"
-      }`}
-    >
-      {isProjeto ? "Projeto" : "Produto"}
     </span>
   );
 }
@@ -810,3 +1377,4 @@ function formatDate(iso: string) {
     return iso;
   }
 }
+

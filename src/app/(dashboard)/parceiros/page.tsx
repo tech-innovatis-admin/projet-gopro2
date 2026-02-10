@@ -1,39 +1,65 @@
-"use client";
+﻿"use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavBar } from "@/components/ui/NavBar";
+import { createPartner, listPartners, listProjects } from "@/src/lib/api/endpoints";
+import type { ProjectResponseDTO } from "@/src/lib/api/types";
 import {
   ParceirosHeader,
   ParceirosFilters,
   ParceirosGrid,
   NovoParceiroModal,
 } from "./_components";
-import { MOCK_PARCEIROS } from "./mockData";
+import {
+  getFriendlyApiError,
+  mapParceiroFormToPartnerRequestDTO,
+  mapPartnerToParceiro,
+} from "./mappers";
 import { INITIAL_FILTERS_STATE } from "./types";
 import type { Parceiro, ParceirosFiltersState } from "./types";
 
 // =============================================================================
-// PÁGINA PRINCIPAL DE PARCEIROS
+// PAGINA PRINCIPAL DE PARCEIROS
 // =============================================================================
 
-// Gera ID mock
-const generateMockId = () => `p${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
 export default function ParceirosPage() {
-  // ---------------------------------------------------------------------------
-  // STATE
-  // ---------------------------------------------------------------------------
-  const [parceiros, setParceiros] = useState<Parceiro[]>(MOCK_PARCEIROS);
+  const [parceiros, setParceiros] = useState<Parceiro[]>([]);
+  const [projects, setProjects] = useState<ProjectResponseDTO[]>([]);
   const [filters, setFilters] = useState<ParceirosFiltersState>(INITIAL_FILTERS_STATE);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // FILTRAGEM E ORDENAÇÃO
-  // ---------------------------------------------------------------------------
+  const loadParceiros = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [partnersResponse, projectsResponse] = await Promise.all([
+        listPartners({ page: 0, size: 20 }),
+        listProjects({ page: 0, size: 20 }),
+      ]);
+
+      setProjects(projectsResponse.content);
+      setParceiros(
+        partnersResponse.content.map((partner) =>
+          mapPartnerToParceiro(partner, projectsResponse.content)
+        )
+      );
+    } catch (loadError) {
+      setError(getFriendlyApiError(loadError));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadParceiros();
+  }, [loadParceiros]);
+
   const filteredParceiros = useMemo(() => {
     let result = [...parceiros];
 
-    // Filtro por busca textual
     if (filters.q) {
       const search = filters.q.toLowerCase();
       result = result.filter(
@@ -45,22 +71,18 @@ export default function ParceirosPage() {
       );
     }
 
-    // Filtro por tipo
     if (filters.tipo) {
       result = result.filter((p) => p.tipo === filters.tipo);
     }
 
-    // Filtro por UF
     if (filters.uf) {
       result = result.filter((p) => p.uf === filters.uf);
     }
 
-    // Filtro por status
     if (filters.status) {
       result = result.filter((p) => p.status === filters.status);
     }
 
-    // Ordenação
     const sortDir = filters.sortDir === "asc" ? 1 : -1;
     result.sort((a, b) => {
       switch (filters.sortBy) {
@@ -82,9 +104,6 @@ export default function ParceirosPage() {
     return result;
   }, [parceiros, filters]);
 
-  // ---------------------------------------------------------------------------
-  // CONTADORES
-  // ---------------------------------------------------------------------------
   const counts = useMemo(() => {
     const total = parceiros.length;
     const ifes = parceiros.filter((p) => p.tipo === "IFES").length;
@@ -94,37 +113,41 @@ export default function ParceirosPage() {
     return { total, ifes, fundacoes, ativos };
   }, [parceiros]);
 
-  // ---------------------------------------------------------------------------
-  // HANDLERS
-  // ---------------------------------------------------------------------------
   const handleFiltersChange = useCallback((newFilters: ParceirosFiltersState) => {
     setFilters(newFilters);
   }, []);
 
   const handleAddParceiro = useCallback(
-    (data: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">) => {
-      const newParceiro: Parceiro = {
-        ...data,
-        id: generateMockId(),
-        createdAt: new Date().toISOString(),
-        contratosAtivos: 0,
-        valorTotalContratos: 0,
-      };
-      setParceiros((prev) => [newParceiro, ...prev]);
+    async (data: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">) => {
+      const cnpjDigits = (data.cnpj ?? "").replace(/\D/g, "");
+      if (cnpjDigits.length !== 14) {
+        throw new Error("Informe um CNPJ valido com 14 digitos.");
+      }
+      if (!data.telefone?.trim()) {
+        throw new Error("Telefone e obrigatorio para cadastro.");
+      }
+      if (!data.endereco?.trim()) {
+        throw new Error("Endereco e obrigatorio para cadastro.");
+      }
+
+      try {
+        const created = await createPartner(mapParceiroFormToPartnerRequestDTO(data));
+        const mapped = mapPartnerToParceiro(created, projects);
+        setParceiros((prev) => [mapped, ...prev]);
+        setError(null);
+      } catch (createError) {
+        throw new Error(getFriendlyApiError(createError));
+      }
     },
-    []
+    [projects]
   );
 
-  // ---------------------------------------------------------------------------
-  // RENDER
-  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen liquid-glass-bg">
       <NavBar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
-          {/* Header com título, contadores e ações */}
           <ParceirosHeader
             totalParceiros={counts.total}
             totalIfes={counts.ifes}
@@ -134,22 +157,38 @@ export default function ParceirosPage() {
             onNovoParceiro={() => setIsModalOpen(true)}
           />
 
-          {/* Filtros */}
-          <ParceirosFilters
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-          />
+          <ParceirosFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
-          {/* Grid de Cards */}
-          <ParceirosGrid
-            parceiros={filteredParceiros}
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-          />
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="flex items-center justify-between gap-3">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => void loadParceiros()}
+                  className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200 transition-colors"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
+              <p className="mt-4 text-sm text-gray-500">Carregando parceiros...</p>
+            </div>
+          ) : (
+            <ParceirosGrid
+              parceiros={filteredParceiros}
+              filters={filters}
+              onFiltersChange={handleFiltersChange}
+            />
+          )}
         </div>
       </main>
 
-      {/* Modal de Novo Parceiro */}
       <NovoParceiroModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -158,3 +197,4 @@ export default function ParceirosPage() {
     </div>
   );
 }
+

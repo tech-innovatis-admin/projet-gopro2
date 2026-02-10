@@ -1,0 +1,877 @@
+export interface PageResponseDTO<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+}
+
+export interface BackendFieldError {
+  field: string;
+  message: string;
+}
+
+export interface BackendErrorResponse {
+  timestamp?: string;
+  status?: number;
+  error?: string;
+  message?: string;
+  path?: string;
+  fieldErrors?: BackendFieldError[];
+}
+
+export interface BffErrorEnvelope {
+  error: {
+    message: string;
+    code?: string;
+    details?: unknown;
+    timestamp?: string;
+    path?: string;
+  };
+}
+
+export class HttpError extends Error {
+  status: number;
+  details?: unknown;
+  code?: string;
+  timestamp?: string;
+  path?: string;
+  fieldErrors?: BackendFieldError[];
+
+  constructor(
+    message: string,
+    status: number,
+    details?: unknown,
+    meta?: {
+      code?: string;
+      timestamp?: string;
+      path?: string;
+      fieldErrors?: BackendFieldError[];
+    }
+  ) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+    this.details = details;
+    this.code = meta?.code;
+    this.timestamp = meta?.timestamp;
+    this.path = meta?.path;
+    this.fieldErrors = meta?.fieldErrors;
+  }
+}
+
+export type PartnersTypeEnum = 'FUNDACAO' | 'IF';
+export type PublicAgencyTypeEnum = 'PREFEITURA' | 'GOVERNO_ESTADUAL' | 'MINISTERIO';
+export type ProjectGovIfEnum = 'GOV' | 'IF';
+export type ProjectTypeEnum = 'PROJETO' | 'PRODUTO';
+export type ProjectStatusEnum =
+  | 'PRE_PROJETO'
+  | 'EXECUCAO'
+  | 'FINALIZADO'
+  | 'SUSPENSO'
+  | 'PLANEJAMENTO';
+export type StatusProjectPeopleEnum = 'PENDENTE' | 'ATIVO' | 'ENCERRADO';
+export type ContractTypeEnum = 'BOLSA' | 'RPA' | 'CLT';
+export type RoleProjectPeopleEnum = 'DIRETOR' | 'BOLSISTA';
+export type DocumentOwnerTypeEnum =
+  | 'PROJECT'
+  | 'EXPENSE'
+  | 'BUDGET_ITEM'
+  | 'BUDGET_TRANSFER'
+  | 'INCOME'
+  | 'GOAL'
+  | 'STAGE'
+  | 'PHASE'
+  | 'PROJECT_PEOPLE'
+  | 'PROJECT_COMPANY'
+  | 'PARTNER'
+  | 'PUBLIC_AGENCY'
+  | 'SECRETARY'
+  | 'PEOPLE'
+  | 'ORGANIZATION'
+  | 'COMPANY';
+export type DocumentStatusEnum = 'UPLOADING' | 'AVAILABLE' | 'DELETED';
+
+export interface PartnerResponseDTO {
+  id: number;
+  acronym: string | null;
+  name: string;
+  tradeName: string;
+  partnersType: PartnersTypeEnum;
+  cnpj: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  site: string | null;
+  city: string | null;
+  state: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface PartnerRequestDTO {
+  acronym?: string;
+  name: string;
+  tradeName: string;
+  partnersType: PartnersTypeEnum;
+  cnpj: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  site?: string;
+  city?: string;
+  state?: string;
+  isActive?: boolean;
+  createdBy?: number;
+}
+
+export interface PartnerUpdateDTO extends Partial<PartnerRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface PublicAgencyResponseDTO {
+  id: number;
+  code: string | null;
+  sigla: string | null;
+  name: string;
+  cnpj: string;
+  isClient: boolean;
+  publicAgencyType: PublicAgencyTypeEnum;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  contactPerson: string | null;
+  city: string | null;
+  state: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface PublicAgencyRequestDTO {
+  code?: string;
+  sigla?: string;
+  name: string;
+  cnpj: string;
+  isClient: boolean;
+  publicAgencyType: PublicAgencyTypeEnum;
+  email?: string;
+  phone?: string;
+  address?: string;
+  contactPerson?: string;
+  city?: string;
+  state?: string;
+  isActive?: boolean;
+  createdBy?: number;
+}
+
+export interface PublicAgencyUpdateDTO extends Partial<PublicAgencyRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface SecretaryResponseDTO {
+  id: number;
+  code: string | null;
+  sigla: string | null;
+  publicAgency: PublicAgencyResponseDTO | null;
+  name: string;
+  cnpj: string | null;
+  isClient: boolean;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  contactPerson: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface SecretaryRequestDTO {
+  code?: string;
+  sigla?: string;
+  publicAgencyId: number;
+  name: string;
+  cnpj?: string;
+  isClient: boolean;
+  email?: string;
+  phone?: string;
+  address?: string;
+  contactPerson?: string;
+  isActive?: boolean;
+  createdBy?: number;
+}
+
+export interface SecretaryUpdateDTO extends Partial<SecretaryRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface CompanyResponseDTO {
+  id: number;
+  name: string;
+  tradeName: string;
+  cnpj: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface CompanyRequestDTO {
+  name: string;
+  tradeName: string;
+  cnpj: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  createdBy?: number;
+}
+
+export interface CompanyUpdateDTO extends Partial<CompanyRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface PeopleResponseDTO {
+  id: number;
+  fullName: string;
+  cpf: string;
+  email: string | null;
+  phone: string | null;
+  birthDate: string | null;
+  address: string | null;
+  zipCode: string | null;
+  city: string | null;
+  state: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface PeopleRequestDTO {
+  fullName: string;
+  cpf: string;
+  email?: string;
+  phone?: string;
+  birthDate?: string;
+  address?: string;
+  zipCode?: string;
+  city?: string;
+  state?: string;
+  notes?: string;
+}
+
+export interface ProjectResponseDTO {
+  id: number;
+  name: string;
+  code: string;
+  projectStatus: ProjectStatusEnum;
+  areaSegmento: string | null;
+  object: string;
+  primaryPartnerId: number | null;
+  secundaryPartnerId: number | null;
+  primaryClientId: number | null;
+  secundaryClientId: number | null;
+  cordinatorId: number | null;
+  projectGovIf: ProjectGovIfEnum | null;
+  projectType: ProjectTypeEnum | null;
+  contractValue: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  openingDate: string | null;
+  closingDate: string | null;
+  city: string | null;
+  state: string | null;
+  executionLocation: string | null;
+  isActive: boolean;
+  totalReceived: number | null;
+  totalExpenses: number | null;
+  saldo: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface ProjectRequestDTO {
+  name: string;
+  code: string;
+  projectStatus: ProjectStatusEnum;
+  areaSegmento?: string;
+  object: string;
+  primaryPartnerId: number;
+  secundaryPartnerId?: number;
+  primaryClientId: number;
+  secundaryClientId?: number;
+  cordinatorId?: number;
+  projectGovIf?: ProjectGovIfEnum;
+  projectType?: ProjectTypeEnum;
+  contractValue?: number;
+  startDate?: string;
+  endDate?: string;
+  openingDate?: string;
+  closingDate?: string;
+  city?: string;
+  state?: string;
+  executionLocation?: string;
+  createdBy?: number;
+}
+
+export interface ProjectUpdateDTO extends Partial<ProjectRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface ProjectTotalsDTO {
+  projectId: number;
+  totalIncome: number;
+  totalExpense: number;
+  saldo: number;
+}
+
+export interface ProjectDashboardFiltersDTO {
+  projectStatus: ProjectStatusEnum | null;
+  projectType: ProjectTypeEnum | null;
+  month: number | null;
+  year: number | null;
+  location: string | null;
+  partnerId: number | null;
+}
+
+export interface ProjectDashboardSummaryDTO {
+  totalContracts: number;
+  totalValue: number;
+}
+
+export interface ProjectDashboardStatusMetricDTO {
+  status: ProjectStatusEnum;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectDashboardTypeMetricDTO {
+  type: ProjectTypeEnum;
+  contracts: number;
+  totalValue: number;
+  percentageOfTypeTotal: number;
+}
+
+export interface ProjectDashboardMonthMetricDTO {
+  month: number;
+  label: string;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectDashboardLocationMetricDTO {
+  location: string;
+  city: string | null;
+  state: string | null;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectDashboardPartnerMetricDTO {
+  partnerId: number | null;
+  partnerName: string;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectDashboardResponseDTO {
+  filters: ProjectDashboardFiltersDTO;
+  availableYears: number[];
+  summary: ProjectDashboardSummaryDTO;
+  byStatus: ProjectDashboardStatusMetricDTO[];
+  byType: ProjectDashboardTypeMetricDTO[];
+  byMonth: ProjectDashboardMonthMetricDTO[];
+  byLocation: ProjectDashboardLocationMetricDTO[];
+  byPartner: ProjectDashboardPartnerMetricDTO[];
+}
+
+export interface ProjectCategoryMetricDTO {
+  type: ProjectTypeEnum;
+  contracts: number;
+  totalValue: number;
+  percentageOfTotal: number;
+}
+
+export interface ProjectStatusCategoryResponseDTO {
+  projectStatus: ProjectStatusEnum;
+  totalContracts: number;
+  totalValue: number;
+  categories: ProjectCategoryMetricDTO[];
+}
+
+export interface ProjectTypeDistributionResponseDTO {
+  requestedType: ProjectTypeEnum;
+  totalContracts: number;
+  totalValue: number;
+  requestedTypePercentage: number;
+  categories: ProjectCategoryMetricDTO[];
+}
+
+export interface ProjectMonthMetricDTO {
+  month: number;
+  label: string;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectMonthResponseDTO {
+  requestedMonth: number;
+  requestedYear: number;
+  totalContracts: number;
+  totalValue: number;
+  availableYears: number[];
+  months: ProjectMonthMetricDTO[];
+}
+
+export interface ProjectLocationMetricDTO {
+  location: string;
+  city: string | null;
+  state: string | null;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectLocationResponseDTO {
+  requestedLocation: string;
+  totalContracts: number;
+  totalValue: number;
+  locations: ProjectLocationMetricDTO[];
+}
+
+export interface ProjectPartnerMetricDTO {
+  partnerId: number | null;
+  partnerName: string;
+  contracts: number;
+  totalValue: number;
+}
+
+export interface ProjectPartnerResponseDTO {
+  requestedPartnerId: number;
+  requestedPartnerName: string;
+  totalContracts: number;
+  totalValue: number;
+  partners: ProjectPartnerMetricDTO[];
+}
+
+export type StatusDisbursementScheduleEnum =
+  | 'PREVISTO'
+  | 'PARCIAL'
+  | 'RECEBIDO'
+  | 'CANCELADO';
+
+export interface DisbursementScheduleResponseDTO {
+  id: number;
+  projectId: number;
+  numero: number;
+  expectedMonth: string;
+  expectedAmount: number;
+  status: StatusDisbursementScheduleEnum;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface DisbursementScheduleRequestDTO {
+  projectId: number;
+  numero: number;
+  expectedMonth: string;
+  expectedAmount: number;
+  status: StatusDisbursementScheduleEnum;
+  notes?: string;
+  createdBy?: number;
+}
+
+export interface DisbursementScheduleUpdateDTO
+  extends Partial<DisbursementScheduleRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface GoalResponseDTO {
+  id: number;
+  projectId: number;
+  numero: number;
+  titulo: string;
+  descricao: string | null;
+  dataInicio: string | null;
+  dataFim: string | null;
+  dataConclusao: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface GoalRequestDTO {
+  projectId: number;
+  numero: number;
+  titulo: string;
+  descricao?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  dataConclusao?: string;
+  createdBy?: number;
+}
+
+export interface GoalUpdateDTO extends Partial<GoalRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface StageResponseDTO {
+  id: number;
+  goalId: number;
+  numero: number;
+  titulo: string;
+  descricao: string | null;
+  dataInicio: string | null;
+  dataFim: string | null;
+  dataConclusao: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface StageRequestDTO {
+  goalId: number;
+  numero: number;
+  titulo: string;
+  descricao?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  dataConclusao?: string;
+  createdBy?: number;
+}
+
+export interface StageUpdateDTO extends Partial<StageRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface PhaseResponseDTO {
+  id: number;
+  stageId: number;
+  numero: number;
+  titulo: string;
+  descricao: string | null;
+  dataInicio: string | null;
+  dataFim: string | null;
+  dataConclusao: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface PhaseRequestDTO {
+  stageId: number;
+  numero: number;
+  titulo: string;
+  descricao?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  dataConclusao?: string;
+  createdBy?: number;
+}
+
+export interface PhaseUpdateDTO extends Partial<PhaseRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface ProjectPeopleResponseDTO {
+  id: number;
+  projectId: number;
+  personId: number;
+  role: RoleProjectPeopleEnum | null;
+  workloadHours: number | null;
+  institutionalLink: string | null;
+  contractType: ContractTypeEnum | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: StatusProjectPeopleEnum | null;
+  baseAmount: number | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface ProjectPeopleRequestDTO {
+  projectId: number;
+  personId: number;
+  role?: RoleProjectPeopleEnum;
+  workloadHours?: number;
+  institutionalLink?: string;
+  contractType?: ContractTypeEnum;
+  startDate?: string;
+  endDate?: string;
+  status?: StatusProjectPeopleEnum;
+  baseAmount?: number;
+  notes?: string;
+  createdBy?: number;
+}
+
+export interface ProjectPeopleUpdateDTO extends Partial<ProjectPeopleRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface ProjectCompanyResponseDTO {
+  id: number;
+  projectId: number;
+  companyId: number;
+  contractNumber: string | null;
+  description: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: number | null;
+  totalValue: number | null;
+  notes: string | null;
+  isIncubated: boolean | null;
+  serviceType: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface ProjectCompanyRequestDTO {
+  projectId: number;
+  companyId: number;
+  contractNumber?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: number;
+  totalValue?: number;
+  notes?: string;
+  isIncubated?: boolean;
+  serviceType?: string;
+  createdBy?: number;
+}
+
+export interface ProjectCompanyUpdateDTO extends Partial<ProjectCompanyRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface DocumentResponseDTO {
+  id: string;
+  ownerType: DocumentOwnerTypeEnum;
+  ownerId: number;
+  category: string | null;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string | null;
+  bucket: string;
+  s3Key: string;
+  status: DocumentStatusEnum;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  deletedAt: string | null;
+}
+
+export interface DocumentDownloadUrlDTO {
+  url: string;
+  expiresAt: string;
+}
+
+export interface IncomeResponseDTO {
+  id: number;
+  projectId: number;
+  numero: number;
+  amount: number;
+  receivedAt: string;
+  source: string | null;
+  invoiceNumber: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface IncomeRequestDTO {
+  projectId: number;
+  numero: number;
+  amount: number;
+  receivedAt: string;
+  source?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdBy?: number;
+}
+
+export interface IncomeUpdateDTO extends Partial<IncomeRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface ExpenseResponseDTO {
+  id: number;
+  budgetItemId: number;
+  categoryId: number;
+  incomeId: number;
+  expenseDate: string;
+  quantity: number;
+  amount: number;
+  personId: number | null;
+  organizationId: number | null;
+  description: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  documentId: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface ExpenseRequestDTO {
+  budgetItemId: number;
+  categoryId: number;
+  incomeId: number;
+  expenseDate: string;
+  quantity: number;
+  amount: number;
+  personId?: number;
+  organizationId?: number;
+  description?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  documentId?: string;
+  createdBy?: number;
+}
+
+export interface ExpenseUpdateDTO extends Partial<ExpenseRequestDTO> {
+  updatedBy?: number;
+}
+
+export type BudgetTransferStatusEnum = 'APROVADO' | 'REPEROVADO';
+
+export interface BudgetCategoryResponseDTO {
+  id: number;
+  projectId: number | null;
+  code: string | null;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface BudgetCategoryRequestDTO {
+  projectId?: number;
+  code?: string;
+  name: string;
+  description?: string;
+  createdBy?: number;
+}
+
+export interface BudgetCategoryUpdateDTO extends Partial<BudgetCategoryRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface BudgetItemResponseDTO {
+  id: number;
+  categoryId: number;
+  description: string;
+  quantity: number | null;
+  months: number | null;
+  unitCost: number | null;
+  plannedAmount: number;
+  executedAmount: number | null;
+  goalId: number | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface BudgetItemRequestDTO {
+  categoryId: number;
+  description: string;
+  quantity?: number;
+  months?: number;
+  unitCost?: number;
+  plannedAmount: number;
+  executedAmount?: number;
+  goalId?: number;
+  notes?: string;
+  createdBy?: number;
+}
+
+export interface BudgetItemUpdateDTO extends Partial<BudgetItemRequestDTO> {
+  updatedBy?: number;
+}
+
+export interface BudgetTransferResponseDTO {
+  id: number;
+  projectId: number;
+  fromItemId: number;
+  toItemId: number;
+  amount: number;
+  transferDate: string;
+  status: BudgetTransferStatusEnum | null;
+  reason: string | null;
+  documentId: string | null;
+  approvedAt: string | null;
+  approvedBy: number | null;
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface BudgetTransferRequestDTO {
+  projectId: number;
+  fromItemId: number;
+  toItemId: number;
+  amount: number;
+  transferDate: string;
+  status?: BudgetTransferStatusEnum;
+  reason?: string;
+  documentId?: string;
+  createdBy?: number;
+}
+
+export interface BudgetTransferUpdateDTO extends Partial<BudgetTransferRequestDTO> {
+  approvedAt?: string;
+  approvedBy?: number;
+  updatedBy?: number;
+}

@@ -1,14 +1,40 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Trash2, ChevronDown, ChevronRight, Edit2, Check, X, AlertCircle, ArrowRight, History } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Edit2,
+  Check,
+  X,
+  AlertCircle,
+} from 'lucide-react';
 import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
+import {
+  createBudgetCategory,
+  createBudgetItem,
+  createBudgetTransfer,
+  deleteBudgetCategory,
+  deleteBudgetItem,
+  listBudgetCategories,
+  listBudgetItems,
+  listBudgetTransfers,
+  listGoals,
+  updateBudgetItem,
+} from '@/src/lib/api/endpoints';
+import {
+  HttpError,
+  type BudgetTransferRequestDTO,
+  type GoalResponseDTO,
+  type PageResponseDTO,
+} from '@/src/lib/api/types';
 
-// Tipos
 type ID = string;
 
 interface Remanejamento {
@@ -25,31 +51,30 @@ interface Remanejamento {
 }
 
 type Lancamento = {
-  valor: number;    // valor pago daquele subitem na parcela
-  dataPag: string;  // data do pagamento (AAAA-MM-DD)
+  valor: number;
+  dataPag: string;
 };
 
 type Subitem = {
   id: ID;
-  empresaRh: string; // "Empresa/RH" na planilha
-  lancamentos: Record<ID, Lancamento | undefined>; // chave = parcelaId
+  empresaRh: string;
+  lancamentos: Record<ID, Lancamento | undefined>;
 };
 
 interface ItemRubrica {
   id: string;
-  codigo?: string; // ex: "2.4", "2.1", "3.1"
+  codigo?: string;
   descricao: string;
   quantidade: number;
   meses: number;
   valorUnitario: number;
   valorTotal: number;
-  meta?: string; // meta vinculada ao item (texto livre ou ID da meta)
-  metaId?: string; // ID da meta selecionada da página de metas
-  subitens?: Subitem[]; // subitens com empresa/RH e lançamentos por parcela
-  // Campos calculados para remanejamento (não persistidos diretamente no item)
-  remanejamentoDebito?: number; // Total de débitos (saídas)
-  remanejamentoCredito?: number; // Total de créditos (entradas)
-  valorFinal?: number; // Valor Total - Débito + Crédito
+  meta?: string;
+  metaId?: string;
+  subitens?: Subitem[];
+  remanejamentoDebito?: number;
+  remanejamentoCredito?: number;
+  valorFinal?: number;
 }
 
 interface Rubrica {
@@ -60,160 +85,72 @@ interface Rubrica {
   expanded: boolean;
 }
 
-// Dados mockados iniciais (compatível com ambas as páginas: rubricas e pagamentos)
-export const rubricasMock: Rubrica[] = [
-  {
-    id: '1',
-    codigo: 'MC',
-    nome: 'Material de Consumo (33.90.30)',
-    expanded: true,
-    itens: [
-      {
-        id: '1-1',
-        codigo: '3.1',
-        descricao: 'Reagentes químicos para laboratório',
-        quantidade: 50,
-        meses: 12,
-        valorUnitario: 150.00,
-        valorTotal: 90000.00,
-        meta: '',
-        subitens: [],
-      },
-      {
-        id: '1-2',
-        codigo: '3.2',
-        descricao: 'Material de escritório',
-        quantidade: 1,
-        meses: 12,
-        valorUnitario: 500.00,
-        valorTotal: 6000.00,
-        meta: '',
-        subitens: [],
-      },
-    ],
-  },
-  {
-    id: '2',
-    codigo: 'PP',
-    nome: 'Pagamento de Pessoal (33.90.20)',
-    expanded: true,
-    itens: [
-      {
-        id: '2-1',
-        codigo: '2.1',
-        descricao: 'Coordenador',
-        quantidade: 1,
-        meses: 34,
-        valorUnitario: 6000.00,
-        valorTotal: 204000.00,
-        meta: '',
-        subitens: [
-          {
-            id: 'sub-1',
-            empresaRh: 'Stefânia Cabral Pedra',
-            lancamentos: {
-              'parc-1': { valor: 18000, dataPag: '2025-05-30' },
-              'parc-2': { valor: 36000, dataPag: '2025-11-27' },
-            },
-          },
-        ],
-      },
-      {
-        id: '2-2',
-        codigo: '2.4',
-        descricao: 'Bolsa Ministério',
-        quantidade: 1,
-        meses: 1,
-        valorUnitario: 2499500.00,
-        valorTotal: 2499500.00,
-        meta: 'Ministério sugestão SV',
-        subitens: [
-          {
-            id: 'sub-2',
-            empresaRh: 'ARILSON CÂNDIDO',
-            lancamentos: {
-              'parc-1': { valor: 1400, dataPag: '2025-06-05' },
-              'parc-2': { valor: 21600, dataPag: '2025-12-04' },
-            },
-          },
-          {
-            id: 'sub-3',
-            empresaRh: 'ELIEZER CECE GREGORIO',
-            lancamentos: {
-              'parc-1': { valor: 1400, dataPag: '2025-06-05' },
-              'parc-2': { valor: 8400, dataPag: '2025-12-04' },
-            },
-          },
-        ],
-      },
-      {
-        id: '2-3',
-        codigo: '2.2',
-        descricao: 'Bolsa de pesquisador júnior',
-        quantidade: 1,
-        meses: 12,
-        valorUnitario: 3500.00,
-        valorTotal: 42000.00,
-        meta: '',
-        subitens: [],
-      },
-    ],
-  },
-  {
-    id: '3',
-    codigo: 'OST-PJ',
-    nome: 'Outros Serviços de Terceiros - Pessoa Jurídica',
-    expanded: false,
-    itens: [],
-  },
-  {
-    id: '4',
-    codigo: 'OST-PF',
-    nome: 'Outros Serviços de Terceiros - Pessoa Física',
-    expanded: false,
-    itens: [],
-  },
-  {
-    id: '5',
-    codigo: 'VD',
-    nome: 'Viagens e Diárias',
-    expanded: false,
-    itens: [],
-  },
-  {
-    id: '6',
-    codigo: 'EQUIP',
-    nome: 'Equipamentos e Material Permanente',
-    expanded: false,
-    itens: [],
-  },
-  {
-    id: '7',
-    codigo: 'OP',
-    nome: 'Obras e Instalações',
-    expanded: false,
-    itens: [],
-  },
-];
+interface MetaOption {
+  id: string;
+  numero: number;
+  titulo: string;
+}
 
-// Mock de parcelas para a página de pagamentos
-export const parcelasMock = [
-  { id: 'parc-1', numero: 1, valorRecebido: 250000, dataRecebimento: '2025-02-10' },
-  { id: 'parc-2', numero: 2, valorRecebido: 250000, dataRecebimento: '2025-06-20' },
-];
+const PAGE_SIZE = 20;
+const MAX_PAGE_REQUESTS = 1000;
 
-// Mock de metas para seleção na página de rubricas
-export const metasMock = [
-  { id: 'meta-1', numero: 1, titulo: ' Meta 1 - Levantamento de Requisitos' },
-  { id: 'meta-2', numero: 2, titulo: ' Meta 2 - Desenvolvimento do Sistema' },
-  { id: 'meta-3', numero: 3, titulo: ' Meta 3 - Testes e Validação' },
-  { id: 'meta-4', numero: 4, titulo: ' Meta 4 - Implementação e Deploy' },
-];
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+
+const toSafeNumber = (value: number | null | undefined): number => {
+  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
+    return 0;
+  }
+  return value;
+};
+
+const toPositiveInt = (value: number | undefined, fallback = 1): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.trunc(parsed));
+};
+
+const toMoneyValue = (value: number | undefined): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Number(parsed.toFixed(2));
+};
+
+const toErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof HttpError ? error.message : fallback;
+
+const isPersistedId = (id: string) => /^\d+$/.test(id);
+const toPersistedId = (id: string) => Number.parseInt(id, 10);
+
+const normalizeTransferStatus = (status: string | null | undefined): 'PENDENTE' | 'APROVADO' =>
+  status === 'APROVADO' ? 'APROVADO' : 'PENDENTE';
+
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let page = 0;
+
+  for (let i = 0; i < MAX_PAGE_REQUESTS; i += 1) {
+    const response = await fetchPage({ page, size: PAGE_SIZE });
+    allItems.push(...response.content);
+    if (response.last) break;
+    page += 1;
+  }
+
+  return allItems;
+}
 
 export default function RubricasPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
-  const [rubricas, setRubricas] = useState<Rubrica[]>(rubricasMock);
+  const projectId = useMemo(() => Number.parseInt(contratoId, 10), [contratoId]);
+
+  const [rubricas, setRubricas] = useState<Rubrica[]>([]);
+  const [metas, setMetas] = useState<MetaOption[]>([]);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ItemRubrica | null>(null);
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
@@ -225,193 +162,359 @@ export default function RubricasPage() {
   });
   const [isAddingRubrica, setIsAddingRubrica] = useState(false);
   const [newRubrica, setNewRubrica] = useState({ nome: '' });
-  
-  // Estado para remanejamentos
   const [remanejamentos, setRemanejamentos] = useState<Remanejamento[]>([]);
   const [remanejamentoModalOpen, setRemanejamentoModalOpen] = useState(false);
   const [itemParaRemanejamento, setItemParaRemanejamento] = useState<ItemRubrica | null>(null);
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
 
-  // Formatar moeda
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+
+  const showSavedMessage = (message: string) => {
+    setSavedMessage(message);
+    setTimeout(() => setSavedMessage(null), 2500);
   };
 
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
 
-  // Calcular débitos e créditos por item baseado nos remanejamentos
+    if (!Number.isFinite(projectId)) {
+      setRubricas([]);
+      setMetas([]);
+      setRemanejamentos([]);
+      setLoadError('ID do contrato invalido para carregar rubricas.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const [allCategories, allItems, allGoals, allTransfers] = await Promise.all([
+        fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
+        fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
+        fetchAllPages((query) => listGoals({ ...query, projectId })),
+        fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
+      ]);
+
+      const projectGoals = (allGoals as GoalResponseDTO[])
+        .filter((goal) => goal.projectId === projectId)
+        .sort((a, b) => a.numero - b.numero || a.id - b.id);
+
+      setMetas(
+        projectGoals.map((goal) => ({
+          id: String(goal.id),
+          numero: goal.numero,
+          titulo: goal.titulo,
+        }))
+      );
+
+      const categories = allCategories
+        .filter((category) => category.projectId === projectId)
+        .sort((a, b) => {
+          const codeA = a.code || '';
+          const codeB = b.code || '';
+          return codeA.localeCompare(codeB, 'pt-BR') || a.id - b.id;
+        });
+
+      const categoryIds = new Set(categories.map((category) => category.id));
+      const itemsByCategory = new Map<number, ItemRubrica[]>();
+
+      for (const item of allItems) {
+        if (!categoryIds.has(item.categoryId)) continue;
+
+        const quantidade = toPositiveInt(item.quantity ?? 1);
+        const meses = toPositiveInt(item.months ?? 1);
+        const valorUnitario = toMoneyValue(item.unitCost ?? 0);
+        const valorPlanejado = toMoneyValue(item.plannedAmount);
+        const valorTotal =
+          valorPlanejado > 0
+            ? valorPlanejado
+            : Number((quantidade * meses * valorUnitario).toFixed(2));
+
+        const mappedItem: ItemRubrica = {
+          id: String(item.id),
+          descricao: item.description,
+          quantidade,
+          meses,
+          valorUnitario,
+          valorTotal,
+          metaId: item.goalId ? String(item.goalId) : undefined,
+          subitens: [],
+        };
+
+        const existing = itemsByCategory.get(item.categoryId) ?? [];
+        existing.push(mappedItem);
+        itemsByCategory.set(item.categoryId, existing);
+      }
+
+      for (const [categoryId, categoryItems] of itemsByCategory.entries()) {
+        itemsByCategory.set(
+          categoryId,
+          [...categoryItems].sort((a, b) => a.descricao.localeCompare(b.descricao, 'pt-BR'))
+        );
+      }
+
+      setRubricas((previous) => {
+        const expandedById = new Map(previous.map((rubrica) => [rubrica.id, rubrica.expanded]));
+        return categories.map((category) => ({
+          id: String(category.id),
+          codigo: category.code || `RUB-${category.id}`,
+          nome: category.name,
+          itens: itemsByCategory.get(category.id) ?? [],
+          expanded: expandedById.get(String(category.id)) ?? true,
+        }));
+      });
+
+      const transfers = allTransfers
+        .filter((transfer) => transfer.projectId === projectId)
+        .map<Remanejamento>((transfer) => ({
+          id: String(transfer.id),
+          contratoId: String(transfer.projectId),
+          itemOrigemId: String(transfer.fromItemId),
+          itemDestinoId: String(transfer.toItemId),
+          valor: toSafeNumber(transfer.amount),
+          data: transfer.transferDate || '',
+          motivo: transfer.reason || '',
+          createdBy: transfer.createdBy ? String(transfer.createdBy) : '-',
+          createdAt: transfer.createdAt || '',
+          status: normalizeTransferStatus(transfer.status),
+        }))
+        .sort((a, b) => b.data.localeCompare(a.data));
+
+      setRemanejamentos(transfers);
+    } catch (error) {
+      setLoadError(toErrorMessage(error, 'Nao foi possivel carregar rubricas.'));
+      setRubricas([]);
+      setMetas([]);
+      setRemanejamentos([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
   const calcularRemanejamentosItem = (itemId: string) => {
     const debito = remanejamentos
-      .filter(rem => rem.itemOrigemId === itemId)
+      .filter((rem) => rem.itemOrigemId === itemId)
       .reduce((acc, rem) => acc + rem.valor, 0);
-    
+
     const credito = remanejamentos
-      .filter(rem => rem.itemDestinoId === itemId)
+      .filter((rem) => rem.itemDestinoId === itemId)
       .reduce((acc, rem) => acc + rem.valor, 0);
-    
+
     return { debito, credito };
   };
 
-  // Calcular valor final do item (Valor Total - Débito + Crédito)
   const calcularValorFinalItem = (item: ItemRubrica) => {
     const { debito, credito } = calcularRemanejamentosItem(item.id);
     return item.valorTotal - debito + credito;
   };
 
-  // Calcular total da rubrica (soma dos valores finais dos itens)
-  const calcularTotalRubrica = (rubrica: Rubrica) => {
-    return rubrica.itens.reduce((acc, item) => {
-      return acc + calcularValorFinalItem(item);
-    }, 0);
-  };
+  const calcularTotalRubrica = (rubrica: Rubrica) =>
+    rubrica.itens.reduce((acc, item) => acc + calcularValorFinalItem(item), 0);
 
-  // Calcular total geral (soma de todas as rubricas)
-  const calcularTotalGeral = () => {
-    return rubricas.reduce((acc, rubrica) => acc + calcularTotalRubrica(rubrica), 0);
-  };
+  const calcularTotalGeral = () =>
+    rubricas.reduce((acc, rubrica) => acc + calcularTotalRubrica(rubrica), 0);
 
-  // Calcular totais de remanejamento por rubrica
-  const calcularRemanejamentosRubrica = (rubrica: Rubrica) => {
-    const debito = rubrica.itens.reduce((acc, item) => {
-      const { debito: itemDebito } = calcularRemanejamentosItem(item.id);
-      return acc + itemDebito;
-    }, 0);
-    
-    const credito = rubrica.itens.reduce((acc, item) => {
-      const { credito: itemCredito } = calcularRemanejamentosItem(item.id);
-      return acc + itemCredito;
-    }, 0);
-    
-    return { debito, credito };
-  };
-
-  // Toggle expandir rubrica
   const toggleExpand = (rubricaId: string) => {
-    setRubricas(rubricas.map(r =>
-      r.id === rubricaId ? { ...r, expanded: !r.expanded } : r
-    ));
+    setRubricas((current) =>
+      current.map((rubrica) =>
+        rubrica.id === rubricaId ? { ...rubrica, expanded: !rubrica.expanded } : rubrica
+      )
+    );
   };
 
-  // Adicionar item à rubrica
-  const handleAddItem = (rubricaId: string) => {
+  const handleAddItem = async (rubricaId: string) => {
     if (!newItem.descricao?.trim()) return;
+    if (!isPersistedId(rubricaId)) {
+      setActionError('Rubrica invalida para adicionar item.');
+      return;
+    }
 
-    const valorTotal = (newItem.quantidade || 0) * (newItem.meses || 0) * (newItem.valorUnitario || 0);
-    const item: ItemRubrica = {
-      id: `${rubricaId}-${Date.now()}`,
-      descricao: newItem.descricao,
-      quantidade: newItem.quantidade || 1,
-      meses: newItem.meses || 1,
-      valorUnitario: newItem.valorUnitario || 0,
-      valorTotal,
-      metaId: newItem.metaId,
-    };
+    const quantidade = toPositiveInt(newItem.quantidade, 1);
+    const meses = toPositiveInt(newItem.meses, 1);
+    const valorUnitario = toMoneyValue(newItem.valorUnitario);
+    const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
+    const goalId =
+      newItem.metaId && isPersistedId(newItem.metaId) ? toPersistedId(newItem.metaId) : undefined;
 
-    setRubricas(rubricas.map(r => {
-      if (r.id === rubricaId) {
-        return { ...r, itens: [...r.itens, item], expanded: true };
-      }
-      return r;
-    }));
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
 
-    setNewItem({
-      descricao: '',
-      quantidade: 1,
-      meses: 1,
-      valorUnitario: 0,
-      metaId: undefined,
-    });
-    setAddingToRubrica(null);
+    try {
+      await createBudgetItem({
+        categoryId: toPersistedId(rubricaId),
+        description: newItem.descricao.trim(),
+        quantity: quantidade,
+        months: meses,
+        unitCost: valorUnitario,
+        plannedAmount: valorTotal,
+        executedAmount: 0,
+        goalId,
+      });
+
+      await loadData();
+      setNewItem({
+        descricao: '',
+        quantidade: 1,
+        meses: 1,
+        valorUnitario: 0,
+        metaId: undefined,
+      });
+      setAddingToRubrica(null);
+      showSavedMessage('Item adicionado com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel adicionar o item.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Iniciar edição
   const handleStartEdit = (item: ItemRubrica) => {
     setEditingItem(item.id);
     setEditForm({ ...item });
   };
 
-  // Salvar edição
-  const handleSaveEdit = (rubricaId: string) => {
-    if (!editForm) return;
+  const handleSaveEdit = async (rubricaId: string) => {
+    if (!editForm || !editingItem) return;
+    if (!isPersistedId(editingItem) || !isPersistedId(rubricaId)) {
+      setActionError('Item ou rubrica invalida para atualizar.');
+      return;
+    }
 
-    const valorTotal = editForm.quantidade * editForm.meses * editForm.valorUnitario;
+    const quantidade = toPositiveInt(editForm.quantidade, 1);
+    const meses = toPositiveInt(editForm.meses, 1);
+    const valorUnitario = toMoneyValue(editForm.valorUnitario);
+    const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
+    const goalId =
+      editForm.metaId && isPersistedId(editForm.metaId) ? toPersistedId(editForm.metaId) : undefined;
 
-    setRubricas(rubricas.map(r => {
-      if (r.id === rubricaId) {
-        return {
-          ...r,
-          itens: r.itens.map(item =>
-            item.id === editingItem
-              ? { ...editForm, valorTotal }
-              : item
-          ),
-        };
-      }
-      return r;
-    }));
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
 
-    setEditingItem(null);
-    setEditForm(null);
+    try {
+      await updateBudgetItem(toPersistedId(editingItem), {
+        categoryId: toPersistedId(rubricaId),
+        description: editForm.descricao.trim(),
+        quantity: quantidade,
+        months: meses,
+        unitCost: valorUnitario,
+        plannedAmount: valorTotal,
+        goalId,
+      });
+
+      await loadData();
+      setEditingItem(null);
+      setEditForm(null);
+      showSavedMessage('Item atualizado com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel atualizar o item.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Cancelar edição
   const handleCancelEdit = () => {
     setEditingItem(null);
     setEditForm(null);
   };
 
-  // Remover item
-  const handleRemoveItem = (rubricaId: string, itemId: string) => {
-    setRubricas(rubricas.map(r => {
-      if (r.id === rubricaId) {
-        return { ...r, itens: r.itens.filter(item => item.id !== itemId) };
-      }
-      return r;
-    }));
+  const handleRemoveItem = async (rubricaId: string, itemId: string) => {
+    if (!confirm('Tem certeza que deseja remover este item?')) return;
+    if (!isPersistedId(rubricaId) || !isPersistedId(itemId)) {
+      setActionError('Item invalido para remocao.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
+
+    try {
+      await deleteBudgetItem(toPersistedId(itemId));
+      await loadData();
+      showSavedMessage('Item removido com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel remover o item.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Adicionar nova rubrica
-  const handleAddRubrica = () => {
+  const handleAddRubrica = async () => {
     if (!newRubrica.nome.trim()) return;
+    if (!Number.isFinite(projectId)) {
+      setActionError('ID do contrato invalido para criar rubrica.');
+      return;
+    }
 
-    // Gerar código automático baseado no número sequencial
-    const proximoCodigo = `RUB-${rubricas.length + 1}`;
+    const generatedCode = `RUB-${projectId}-${Date.now().toString().slice(-6)}`;
 
-    const novaRubrica: Rubrica = {
-      id: String(Date.now()),
-      codigo: proximoCodigo,
-      nome: newRubrica.nome,
-      itens: [],
-      expanded: true,
-    };
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
 
-    setRubricas([...rubricas, novaRubrica]);
-    setNewRubrica({ nome: '' });
-    setIsAddingRubrica(false);
+    try {
+      await createBudgetCategory({
+        projectId,
+        code: generatedCode,
+        name: newRubrica.nome.trim(),
+      });
+
+      await loadData();
+      setNewRubrica({ nome: '' });
+      setIsAddingRubrica(false);
+      showSavedMessage('Rubrica criada com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel criar a rubrica.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Cancelar adição de rubrica
   const handleCancelAddRubrica = () => {
     setNewRubrica({ nome: '' });
     setIsAddingRubrica(false);
   };
 
-  // Remover rubrica
-  const handleRemoveRubrica = (rubricaId: string) => {
-    if (confirm('Tem certeza que deseja remover esta rubrica? Todos os itens serão removidos.')) {
-      setRubricas(rubricas.filter(r => r.id !== rubricaId));
+  const handleRemoveRubrica = async (rubricaId: string) => {
+    if (!confirm('Tem certeza que deseja remover esta rubrica? Todos os itens serao removidos.')) {
+      return;
+    }
+
+    if (!isPersistedId(rubricaId)) {
+      setActionError('Rubrica invalida para remocao.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
+
+    try {
+      await deleteBudgetCategory(toPersistedId(rubricaId));
+      await loadData();
+      showSavedMessage('Rubrica removida com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel remover a rubrica.'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Abrir modal de remanejamento
   const handleAbrirRemanejamento = (item: ItemRubrica) => {
     setItemParaRemanejamento(item);
     setRemanejamentoModalOpen(true);
   };
 
-  // Confirmar remanejamento
   const handleConfirmarRemanejamento = async (form: {
     itemOrigemId: string;
     itemDestinoId: string;
@@ -419,85 +522,109 @@ export default function RubricasPage() {
     data: string;
     motivo: string;
   }) => {
-    // Criar novo remanejamento
-    const novoRemanejamento: Remanejamento = {
-      id: `rem-${Date.now()}`,
-      contratoId,
-      itemOrigemId: form.itemOrigemId,
-      itemDestinoId: form.itemDestinoId,
-      valor: form.valor,
-      data: form.data,
-      motivo: form.motivo,
-      createdBy: 'Usuário Atual', // TODO: pegar do contexto de auth
-      createdAt: new Date().toISOString(),
-      status: 'APROVADO',
-    };
+    if (!Number.isFinite(projectId)) {
+      setActionError('ID do contrato invalido para remanejamento.');
+      return;
+    }
+    if (!isPersistedId(form.itemOrigemId) || !isPersistedId(form.itemDestinoId)) {
+      setActionError('Itens invalidos para remanejamento.');
+      return;
+    }
 
-    // Adicionar à lista de remanejamentos
-    setRemanejamentos(prev => [...prev, novoRemanejamento]);
+    const itemOrigemAtual = rubricas.flatMap((rubrica) => rubrica.itens).find(
+      (item) => item.id === form.itemOrigemId
+    );
+    const saldoDisponivel = itemOrigemAtual ? calcularValorFinalItem(itemOrigemAtual) : 0;
 
-    // TODO: Salvar via API
-    // await fetch(`/api/contratos/${contratoId}/rubricas/remanejamentos-itens`, {
-    //   method: 'POST',
-    //   body: JSON.stringify(novoRemanejamento),
-    // });
+    if (form.valor > saldoDisponivel) {
+      setActionError(
+        `Valor acima do saldo disponivel do item de origem (${formatCurrency(saldoDisponivel)}).`
+      );
+      return;
+    }
 
-    setRemanejamentoModalOpen(false);
-    setItemParaRemanejamento(null);
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
+
+    try {
+      const payload: BudgetTransferRequestDTO = {
+        projectId,
+        fromItemId: toPersistedId(form.itemOrigemId),
+        toItemId: toPersistedId(form.itemDestinoId),
+        amount: toMoneyValue(form.valor),
+        transferDate: form.data,
+        status: 'APROVADO',
+        reason: form.motivo.trim(),
+      };
+
+      await createBudgetTransfer(payload);
+      await loadData();
+      setRemanejamentoModalOpen(false);
+      setItemParaRemanejamento(null);
+      showSavedMessage('Remanejamento registrado com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel registrar o remanejamento.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Obter remanejamentos com dados relacionados para exibição
   const remanejamentosComDados = useMemo(() => {
-    return remanejamentos.map(rem => {
+    return remanejamentos.map((remanejamento) => {
       const itemOrigem = rubricas
-        .flatMap(r => r.itens)
-        .find(item => item.id === rem.itemOrigemId);
-      
+        .flatMap((rubrica) => rubrica.itens)
+        .find((item) => item.id === remanejamento.itemOrigemId);
+
       const itemDestino = rubricas
-        .flatMap(r => r.itens)
-        .find(item => item.id === rem.itemDestinoId);
-      
-      const rubricaOrigem = rubricas.find(r => 
-        r.itens.some(item => item.id === rem.itemOrigemId)
+        .flatMap((rubrica) => rubrica.itens)
+        .find((item) => item.id === remanejamento.itemDestinoId);
+
+      const rubricaOrigem = rubricas.find((rubrica) =>
+        rubrica.itens.some((item) => item.id === remanejamento.itemOrigemId)
       );
-      
-      const rubricaDestino = rubricas.find(r => 
-        r.itens.some(item => item.id === rem.itemDestinoId)
+
+      const rubricaDestino = rubricas.find((rubrica) =>
+        rubrica.itens.some((item) => item.id === remanejamento.itemDestinoId)
       );
 
       return {
-        ...rem,
-        itemOrigem: itemOrigem ? {
-          descricao: itemOrigem.descricao,
-          codigo: itemOrigem.codigo,
-          rubricaNome: rubricaOrigem?.nome || '',
-          rubricaCodigo: rubricaOrigem?.codigo || '',
-        } : undefined,
-        itemDestino: itemDestino ? {
-          descricao: itemDestino.descricao,
-          codigo: itemDestino.codigo,
-          rubricaNome: rubricaDestino?.nome || '',
-          rubricaCodigo: rubricaDestino?.codigo || '',
-        } : undefined,
+        ...remanejamento,
+        itemOrigem: itemOrigem
+          ? {
+              descricao: itemOrigem.descricao,
+              codigo: itemOrigem.codigo,
+              rubricaNome: rubricaOrigem?.nome || '',
+              rubricaCodigo: rubricaOrigem?.codigo || '',
+            }
+          : undefined,
+        itemDestino: itemDestino
+          ? {
+              descricao: itemDestino.descricao,
+              codigo: itemDestino.codigo,
+              rubricaNome: rubricaDestino?.nome || '',
+              rubricaCodigo: rubricaDestino?.codigo || '',
+            }
+          : undefined,
       };
     });
   }, [remanejamentos, rubricas]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Rubricas Orcamentarias</h3>
           <p className="text-sm text-gray-500">
-            Gerencie os itens de despesa organizados por categoria orçamentária
+            Gerencie os itens de despesa organizados por categoria orcamentaria
           </p>
         </div>
         <div className="flex items-center gap-4">
           {!isAddingRubrica && (
             <button
               onClick={() => setIsAddingRubrica(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#004225] text-white text-sm font-medium rounded-lg hover:bg-[#003319] transition-colors"
+              disabled={isSubmitting || isLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-[#004225] text-white text-sm font-medium rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               Nova Rubrica
@@ -506,7 +633,37 @@ export default function RubricasPage() {
         </div>
       </div>
 
-      {/* Formulário para adicionar nova rubrica */}
+      {isLoading && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Carregando rubricas...
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div>{loadError}</div>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
+      {savedMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {savedMessage}
+        </div>
+      )}
+
       {isAddingRubrica && (
         <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -531,8 +688,8 @@ export default function RubricasPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleAddRubrica}
-              disabled={!newRubrica.nome.trim()}
+              onClick={() => void handleAddRubrica()}
+              disabled={isSubmitting || !newRubrica.nome.trim()}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />
@@ -540,7 +697,8 @@ export default function RubricasPage() {
             </button>
             <button
               onClick={handleCancelAddRubrica}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X className="w-4 h-4" />
               Cancelar
@@ -549,16 +707,11 @@ export default function RubricasPage() {
         </div>
       )}
 
-      {/* Lista de Rubricas */}
       <div className="space-y-4">
         {rubricas.map((rubrica) => (
-          <div
-            key={rubrica.id}
-            className="border border-gray-200 rounded-lg overflow-hidden"
-          >
-            {/* Header da Rubrica */}
+          <div key={rubrica.id} className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100">
-              <div 
+              <div
                 className="flex items-center gap-3 flex-1 cursor-pointer"
                 onClick={() => toggleExpand(rubrica.id)}
               >
@@ -583,11 +736,14 @@ export default function RubricasPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setAddingToRubrica(rubrica.id);
-                    setRubricas(rubricas.map(r =>
-                      r.id === rubrica.id ? { ...r, expanded: true } : r
-                    ));
+                    setRubricas((current) =>
+                      current.map((item) =>
+                        item.id === rubrica.id ? { ...item, expanded: true } : item
+                      )
+                    );
                   }}
-                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319] transition-colors"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-4 h-4" />
                   Novo Item
@@ -595,9 +751,10 @@ export default function RubricasPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleRemoveRubrica(rubrica.id);
+                    void handleRemoveRubrica(rubrica.id);
                   }}
-                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  disabled={isSubmitting}
+                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Remover rubrica"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -605,7 +762,6 @@ export default function RubricasPage() {
               </div>
             </div>
 
-            {/* Conteúdo expandido */}
             {rubrica.expanded && (
               <div className="px-4 py-3 bg-white">
                 {rubrica.itens.length === 0 && !addingToRubrica ? (
@@ -622,267 +778,325 @@ export default function RubricasPage() {
                   >
                     <thead>
                       <tr className="border-b border-gray-200">
-                        <th className="text-left py-2 px-2 font-medium text-gray-600">Descrição</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-600">Descricao</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Qtd</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Meses</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Valor Unit.</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Valor Total</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Créd.)</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Meta</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Acoes</th>
                       </tr>
                     </thead>
-                      <tbody>
-                        {rubrica.itens.map((item) => (
-                          <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            {editingItem === item.id && editForm ? (
-                              // Modo edição
-                              <>
-                                <td className="py-2 px-2">
-                                  <input
-                                    type="text"
-                                    value={editForm.descricao}
-                                    onChange={(e) => setEditForm({ ...editForm, descricao: e.target.value })}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-center">
-                                  <input
-                                    type="number"
-                                    value={editForm.quantidade}
-                                    onChange={(e) => setEditForm({ ...editForm, quantidade: Number(e.target.value) })}
-                                    min={1}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-center">
-                                  <input
-                                    type="number"
-                                    value={editForm.meses}
-                                    onChange={(e) => setEditForm({ ...editForm, meses: Number(e.target.value) })}
-                                    min={1}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                                  />
-                                </td>
-                                <td className="py-2 px-2">
-                                  <MoneyInput
-                                    valueCents={Math.round(editForm.valorUnitario * 100)}
-                                    onValueChange={(cents) => setEditForm({ ...editForm, valorUnitario: cents / 100 })}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-right font-medium text-gray-700">
-                                  {formatCurrency(editForm.quantidade * editForm.meses * editForm.valorUnitario)}
-                                </td>
-                                <td className="py-2 px-2 text-right text-gray-400">—</td>
-                                <td className="py-2 px-2 text-right text-gray-400">—</td>
-                                <td className="py-2 px-2 text-right text-gray-400">—</td>
-                                <td className="py-2 px-2">
-                                  <select
-                                    value={editForm.metaId || ''}
-                                    onChange={(e) => setEditForm({ ...editForm, metaId: e.target.value || undefined })}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                    <tbody>
+                      {rubrica.itens.map((item) => (
+                        <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          {editingItem === item.id && editForm ? (
+                            <>
+                              <td className="py-2 px-2">
+                                <input
+                                  type="text"
+                                  value={editForm.descricao}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, descricao: e.target.value })
+                                  }
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  value={editForm.quantidade}
+                                  onChange={(e) =>
+                                    setEditForm({
+                                      ...editForm,
+                                      quantidade: Number(e.target.value),
+                                    })
+                                  }
+                                  min={1}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="number"
+                                  value={editForm.meses}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, meses: Number(e.target.value) })
+                                  }
+                                  min={1}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                                />
+                              </td>
+                              <td className="py-2 px-2">
+                                <MoneyInput
+                                  valueCents={Math.round(editForm.valorUnitario * 100)}
+                                  onValueChange={(cents) =>
+                                    setEditForm({ ...editForm, valorUnitario: cents / 100 })
+                                  }
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-right font-medium text-gray-700">
+                                {formatCurrency(
+                                  editForm.quantidade * editForm.meses * editForm.valorUnitario
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-right text-gray-400">-</td>
+                              <td className="py-2 px-2 text-right text-gray-400">-</td>
+                              <td className="py-2 px-2 text-right text-gray-400">-</td>
+                              <td className="py-2 px-2">
+                                <select
+                                  value={editForm.metaId || ''}
+                                  onChange={(e) =>
+                                    setEditForm({
+                                      ...editForm,
+                                      metaId: e.target.value || undefined,
+                                    })
+                                  }
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                >
+                                  <option value="">Selecione uma meta</option>
+                                  {metas.map((meta) => (
+                                    <option key={meta.id} value={meta.id}>
+                                      {meta.numero} - {meta.titulo}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-2">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => void handleSaveEdit(rubrica.id)}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Salvar"
                                   >
-                                    <option value="">Selecione uma meta</option>
-                                    {metasMock.map((meta) => (
-                                      <option key={meta.id} value={meta.id}>
-                                        {meta.numero} - {meta.titulo}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => handleSaveEdit(rubrica.id)}
-                                      className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                      title="Salvar"
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Cancelar"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2 px-2 text-gray-900">{item.descricao}</td>
+                              <td className="py-2 px-2 text-center text-gray-700">
+                                {item.quantidade}
+                              </td>
+                              <td className="py-2 px-2 text-center text-gray-700">{item.meses}</td>
+                              <td className="py-2 px-2 text-right text-gray-700">
+                                {formatCurrency(item.valorUnitario)}
+                              </td>
+                              <td className="py-2 px-2 text-right font-medium text-gray-900">
+                                {formatCurrency(item.valorTotal)}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {(() => {
+                                  const { debito } = calcularRemanejamentosItem(item.id);
+                                  return debito > 0 ? (
+                                    <span className="text-red-600 font-medium">
+                                      {formatCurrency(debito)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  );
+                                })()}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {(() => {
+                                  const { credito } = calcularRemanejamentosItem(item.id);
+                                  return credito > 0 ? (
+                                    <span className="text-green-600 font-medium">
+                                      {formatCurrency(credito)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  );
+                                })()}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                <span className="font-semibold text-blue-600">
+                                  {formatCurrency(calcularValorFinalItem(item))}
+                                </span>
+                              </td>
+                              <td className="py-2 px-2 text-gray-700">
+                                {item.metaId
+                                  ? metas.find((meta) => meta.id === item.metaId)?.titulo ||
+                                    item.meta ||
+                                    '-'
+                                  : item.meta || '-'}
+                              </td>
+                              <td className="py-2 px-2">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => handleAbrirRemanejamento(item)}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-[#004225] hover:bg-emerald-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Remanejar"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="lucide lucide-arrow-up-down-icon lucide-arrow-up-down"
                                     >
-                                      <Check className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={handleCancelEdit}
-                                      className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                                      title="Cancelar"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              // Modo visualização
-                              <>
-                                <td className="py-2 px-2 text-gray-900">{item.descricao}</td>
-                                <td className="py-2 px-2 text-center text-gray-700">{item.quantidade}</td>
-                                <td className="py-2 px-2 text-center text-gray-700">{item.meses}</td>
-                                <td className="py-2 px-2 text-right text-gray-700">{formatCurrency(item.valorUnitario)}</td>
-                                <td className="py-2 px-2 text-right font-medium text-gray-900">{formatCurrency(item.valorTotal)}</td>
-                                <td className="py-2 px-2 text-right">
-                                  {(() => {
-                                    const { debito } = calcularRemanejamentosItem(item.id);
-                                    return debito > 0 ? (
-                                      <span className="text-red-600 font-medium">{formatCurrency(debito)}</span>
-                                    ) : (
-                                      <span className="text-gray-400">—</span>
-                                    );
-                                  })()}
-                                </td>
-                                <td className="py-2 px-2 text-right">
-                                  {(() => {
-                                    const { credito } = calcularRemanejamentosItem(item.id);
-                                    return credito > 0 ? (
-                                      <span className="text-green-600 font-medium">{formatCurrency(credito)}</span>
-                                    ) : (
-                                      <span className="text-gray-400">—</span>
-                                    );
-                                  })()}
-                                </td>
-                                <td className="py-2 px-2 text-right">
-                                  <span className="font-semibold text-blue-600">
-                                    {formatCurrency(calcularValorFinalItem(item))}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2 text-gray-700">
-                                  {item.metaId
-                                    ? metasMock.find((m) => m.id === item.metaId)?.titulo || item.meta || '-'
-                                    : item.meta || '-'}
-                                </td>
-                                <td className="py-2 px-2">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => handleAbrirRemanejamento(item)}
-                                      className="p-1 text-[#004225] hover:bg-emerald-50 rounded"
-                                      title="Remanejar"
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up-down-icon lucide-arrow-up-down">
-                                        <path d="m21 16-4 4-4-4"/>
-                                        <path d="M17 20V4"/>
-                                        <path d="m3 8 4-4 4 4"/>
-                                        <path d="M7 4v16"/>
-                                      </svg>
-                                    </button>
-                                    <button
-                                      onClick={() => handleStartEdit(item)}
-                                      className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                                      title="Editar"
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleRemoveItem(rubrica.id, item.id)}
-                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                      title="Remover"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
+                                      <path d="m21 16-4 4-4-4" />
+                                      <path d="M17 20V4" />
+                                      <path d="m3 8 4-4 4 4" />
+                                      <path d="M7 4v16" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleStartEdit(item)}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Editar"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => void handleRemoveItem(rubrica.id, item.id)}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Remover"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
 
-                        {/* Form para adicionar novo item */}
-                        {addingToRubrica === rubrica.id && (
-                          <tr className="bg-blue-50">
-                            <td className="py-2 px-2">
-                              <input
-                                type="text"
-                                value={newItem.descricao || ''}
-                                onChange={(e) => setNewItem({ ...newItem, descricao: e.target.value })}
-                                placeholder="Descrição do item"
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
-                                autoFocus
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <input
-                                type="number"
-                                value={newItem.quantidade || 1}
-                                onChange={(e) => setNewItem({ ...newItem, quantidade: Number(e.target.value) })}
-                                min={1}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <input
-                                type="number"
-                                value={newItem.meses || 1}
-                                onChange={(e) => setNewItem({ ...newItem, meses: Number(e.target.value) })}
-                                min={1}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
-                              />
-                            </td>
-                            <td className="py-2 px-2">
-                              <MoneyInput
-                                valueCents={Math.round((newItem.valorUnitario || 0) * 100)}
-                                onValueChange={(cents) => setNewItem({ ...newItem, valorUnitario: cents / 100 })}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-right"
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-right font-medium text-blue-700">
-                              {formatCurrency((newItem.quantidade || 0) * (newItem.meses || 0) * (newItem.valorUnitario || 0))}
-                            </td>
-                            <td className="py-2 px-2 text-right text-gray-400">—</td>
-                            <td className="py-2 px-2 text-right text-gray-400">—</td>
-                            <td className="py-2 px-2 text-right text-gray-400">—</td>
-                            <td className="py-2 px-2">
-                              <select
-                                value={newItem.metaId || ''}
-                                onChange={(e) => setNewItem({ ...newItem, metaId: e.target.value || undefined })}
-                                className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                      {addingToRubrica === rubrica.id && (
+                        <tr className="bg-blue-50">
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={newItem.descricao || ''}
+                              onChange={(e) =>
+                                setNewItem({ ...newItem, descricao: e.target.value })
+                              }
+                              placeholder="Descricao do item"
+                              className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                              autoFocus
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <input
+                              type="number"
+                              value={newItem.quantidade || 1}
+                              onChange={(e) =>
+                                setNewItem({ ...newItem, quantidade: Number(e.target.value) })
+                              }
+                              min={1}
+                              className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <input
+                              type="number"
+                              value={newItem.meses || 1}
+                              onChange={(e) =>
+                                setNewItem({ ...newItem, meses: Number(e.target.value) })
+                              }
+                              min={1}
+                              className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-center"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <MoneyInput
+                              valueCents={Math.round((newItem.valorUnitario || 0) * 100)}
+                              onValueChange={(cents) =>
+                                setNewItem({ ...newItem, valorUnitario: cents / 100 })
+                              }
+                              className="w-full px-2 py-1 border border-blue-300 rounded text-sm text-right"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-right font-medium text-blue-700">
+                            {formatCurrency(
+                              (newItem.quantidade || 0) *
+                                (newItem.meses || 0) *
+                                (newItem.valorUnitario || 0)
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right text-gray-400">-</td>
+                          <td className="py-2 px-2 text-right text-gray-400">-</td>
+                          <td className="py-2 px-2 text-right text-gray-400">-</td>
+                          <td className="py-2 px-2">
+                            <select
+                              value={newItem.metaId || ''}
+                              onChange={(e) =>
+                                setNewItem({ ...newItem, metaId: e.target.value || undefined })
+                              }
+                              className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                            >
+                              <option value="">Selecione uma meta</option>
+                              {metas.map((meta) => (
+                                <option key={meta.id} value={meta.id}>
+                                  {meta.numero} - {meta.titulo}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 px-2">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => void handleAddItem(rubrica.id)}
+                                disabled={isSubmitting || !newItem.descricao?.trim()}
+                                className="p-1 text-green-600 hover:bg-green-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Adicionar"
                               >
-                                <option value="">Selecione uma meta</option>
-                                {metasMock.map((meta) => (
-                                  <option key={meta.id} value={meta.id}>
-                                    {meta.numero} - {meta.titulo}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="py-2 px-2">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => handleAddItem(rubrica.id)}
-                                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                                  title="Adicionar"
-                                  disabled={!newItem.descricao?.trim()}
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setAddingToRubrica(null);
-                                    setNewItem({
-                                      descricao: '',
-                                      quantidade: 1,
-                                      meses: 1,
-                                      valorUnitario: 0,
-                                      metaId: undefined,
-                                    });
-                                  }}
-                                  className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                                  title="Cancelar"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </ResizableTable>
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setAddingToRubrica(null);
+                                  setNewItem({
+                                    descricao: '',
+                                    quantidade: 1,
+                                    meses: 1,
+                                    valorUnitario: 0,
+                                    metaId: undefined,
+                                  });
+                                }}
+                                disabled={isSubmitting}
+                                className="p-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Cancelar"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </ResizableTable>
                 )}
 
-                {/* Botão adicionar quando não há form visível */}
                 {rubrica.itens.length === 0 && addingToRubrica !== rubrica.id && (
                   <div className="flex justify-center py-2">
                     <button
                       onClick={() => setAddingToRubrica(rubrica.id)}
-                      className="flex items-center gap-1 px-4 py-2 text-[#004225] hover:bg-emerald-50 rounded-md text-sm"
+                      disabled={isSubmitting}
+                      className="flex items-center gap-1 px-4 py-2 text-[#004225] hover:bg-emerald-50 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-4 h-4" />
                       Adicionar primeiro item
@@ -895,35 +1109,31 @@ export default function RubricasPage() {
         ))}
       </div>
 
-      {/* Resumo por rubrica */}
       <div className="bg-gray-50 rounded-lg p-4 mt-6">
         <h4 className="font-medium text-gray-900 mb-3">Resultado por Rubrica</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {rubricas.filter(r => r.itens.length > 0).map((rubrica) => (
-            <div key={rubrica.id} className="bg-white p-3 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 font-mono">[{rubrica.codigo}]</p>
-              <p className="text-sm font-medium text-gray-700 truncate">{rubrica.nome}</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {formatCurrency(calcularTotalRubrica(rubrica))}
-              </p>
-              <p className="text-xs text-gray-500">{rubrica.itens.length} itens</p>
-            </div>
-          ))}
+          {rubricas
+            .filter((rubrica) => rubrica.itens.length > 0)
+            .map((rubrica) => (
+              <div key={rubrica.id} className="bg-white p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-500 font-mono">[{rubrica.codigo}]</p>
+                <p className="text-sm font-medium text-gray-700 truncate">{rubrica.nome}</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {formatCurrency(calcularTotalRubrica(rubrica))}
+                </p>
+                <p className="text-xs text-gray-500">{rubrica.itens.length} itens</p>
+              </div>
+            ))}
         </div>
 
-        {/* Total Geral no rodapé */}
         <div className="mt-4 pt-4 border-t border-gray-300 flex justify-end">
           <div className="text-right">
             <p className="text-sm text-gray-600">Total Geral de Rubricas</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {formatCurrency(calcularTotalGeral())}
-            </p>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(calcularTotalGeral())}</p>
           </div>
-
         </div>
       </div>
 
-      {/* Modais */}
       {itemParaRemanejamento && (
         <RemanejamentoModal
           isOpen={remanejamentoModalOpen}
@@ -947,4 +1157,3 @@ export default function RubricasPage() {
     </div>
   );
 }
-

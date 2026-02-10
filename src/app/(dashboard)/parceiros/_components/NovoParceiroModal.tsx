@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { X, Users, Building, GraduationCap, MapPin, Mail, Phone, Globe, FileText } from "lucide-react";
@@ -9,7 +9,6 @@ import {
   type ParceiroTipo,
   type ParceiroStatus,
   UF_LIST,
-  TIPO_SHORT_LABELS,
 } from "../types";
 
 // =============================================================================
@@ -19,7 +18,9 @@ import {
 interface NovoParceiroModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (parceiro: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">) => void;
+  onSubmit: (
+    parceiro: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">
+  ) => Promise<void> | void;
 }
 
 type FormData = {
@@ -59,6 +60,8 @@ export function NovoParceiroModal({
 }: NovoParceiroModalProps) {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,10 +88,12 @@ export function NovoParceiroModal({
     if (!isOpen) {
       setForm(INITIAL_FORM);
       setErrors({});
+      setSubmitError(null);
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
-  // Handler de mudança de campo
+  // Handler de mudanÃ§a de campo
   const handleChange = (field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     // Limpa erro do campo ao editar
@@ -97,12 +102,12 @@ export function NovoParceiroModal({
     }
   };
 
-  // Validação
+  // ValidaÃ§Ã£o
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormData, string>> = {};
 
     if (!form.nome.trim()) {
-      newErrors.nome = "Nome é obrigatório";
+      newErrors.nome = "Nome Ã© obrigatÃ³rio";
     }
     if (!form.tipo) {
       newErrors.tipo = "Selecione o tipo";
@@ -111,10 +116,10 @@ export function NovoParceiroModal({
       newErrors.uf = "Selecione o UF";
     }
     if (!form.municipio.trim()) {
-      newErrors.municipio = "Município é obrigatório";
+      newErrors.municipio = "MunicÃ­pio Ã© obrigatÃ³rio";
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "E-mail inválido";
+      newErrors.email = "E-mail invÃ¡lido";
     }
 
     setErrors(newErrors);
@@ -122,27 +127,40 @@ export function NovoParceiroModal({
   };
 
   // Submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validate()) return;
 
-    onSubmit({
-      nome: form.nome.trim(),
-      sigla: form.sigla.trim() || undefined,
-      tipo: form.tipo as ParceiroTipo,
-      cnpj: form.cnpj.trim() || undefined,
-      email: form.email.trim() || undefined,
-      telefone: form.telefone.trim() || undefined,
-      site: form.site.trim() || undefined,
-      uf: form.uf,
-      municipio: form.municipio.trim(),
-      endereco: form.endereco.trim() || undefined,
-      status: form.status,
-      observacoes: form.observacoes.trim() || undefined,
-    });
+    setIsSubmitting(true);
+    setSubmitError(null);
 
-    onClose();
+    try {
+      await onSubmit({
+        nome: form.nome.trim(),
+        sigla: form.sigla.trim() || undefined,
+        tipo: form.tipo as ParceiroTipo,
+        cnpj: form.cnpj.trim() || undefined,
+        email: form.email.trim() || undefined,
+        telefone: form.telefone.trim() || undefined,
+        site: form.site.trim() || undefined,
+        uf: form.uf,
+        municipio: form.municipio.trim(),
+        endereco: form.endereco.trim() || undefined,
+        status: form.status,
+        observacoes: form.observacoes.trim() || undefined,
+      });
+
+      onClose();
+    } catch (submitFailure) {
+      setSubmitError(
+        submitFailure instanceof Error
+          ? submitFailure.message
+          : "Nao foi possivel cadastrar o parceiro."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -152,7 +170,7 @@ export function NovoParceiroModal({
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
+        onClick={() => !isSubmitting && onClose()}
       />
 
       {/* Modal */}
@@ -172,12 +190,13 @@ export function NovoParceiroModal({
                   Novo Parceiro
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Cadastre um novo IFES ou Fundação
+                  Cadastre um novo IFES ou FundaÃ§Ã£o
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
+                disabled={isSubmitting}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="h-5 w-5 text-gray-500" />
@@ -218,7 +237,7 @@ export function NovoParceiroModal({
                     )}
                   >
                     <Building className="h-5 w-5" />
-                    <span className="font-medium">Fundação</span>
+                    <span className="font-medium">FundaÃ§Ã£o</span>
                   </button>
                 </div>
                 {errors.tipo && (
@@ -238,7 +257,7 @@ export function NovoParceiroModal({
                     type="text"
                     value={form.nome}
                     onChange={(e) => handleChange("nome", e.target.value)}
-                    placeholder="Ex.: Instituto Federal do Maranhão"
+                    placeholder="Ex.: Instituto Federal do MaranhÃ£o"
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
                       errors.nome ? "border-red-300" : "border-gray-200"
@@ -277,7 +296,7 @@ export function NovoParceiroModal({
                 />
               </div>
 
-              {/* Localização */}
+              {/* LocalizaÃ§Ã£o */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -305,13 +324,13 @@ export function NovoParceiroModal({
                 </div>
                 <div className="col-span-2 space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Município <span className="text-red-500">*</span>
+                    MunicÃ­pio <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.municipio}
                     onChange={(e) => handleChange("municipio", e.target.value)}
-                    placeholder="Ex.: São Luís"
+                    placeholder="Ex.: SÃ£o LuÃ­s"
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
                       errors.municipio ? "border-red-300" : "border-gray-200"
@@ -323,16 +342,16 @@ export function NovoParceiroModal({
                 </div>
               </div>
 
-              {/* Endereço */}
+              {/* EndereÃ§o */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Endereço Completo
+                  EndereÃ§o Completo
                 </label>
                 <input
                   type="text"
                   value={form.endereco}
                   onChange={(e) => handleChange("endereco", e.target.value)}
-                  placeholder="Ex.: Av. Getúlio Vargas, 04 - Monte Castelo"
+                  placeholder="Ex.: Av. GetÃºlio Vargas, 04 - Monte Castelo"
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
                 />
               </div>
@@ -388,20 +407,26 @@ export function NovoParceiroModal({
                 />
               </div>
 
-              {/* Observações */}
+              {/* ObservaÃ§Ãµes */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Observações
+                  ObservaÃ§Ãµes
                 </label>
                 <textarea
                   value={form.observacoes}
                   onChange={(e) => handleChange("observacoes", e.target.value)}
-                  placeholder="Informações adicionais sobre o parceiro..."
+                  placeholder="InformaÃ§Ãµes adicionais sobre o parceiro..."
                   rows={3}
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors resize-none"
                 />
               </div>
             </div>
+
+            {submitError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {submitError}
+              </div>
+            )}
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
@@ -409,15 +434,17 @@ export function NovoParceiroModal({
                 type="button"
                 variant="outline"
                 onClick={onClose}
+                disabled={isSubmitting}
                 className="px-5"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
+                disabled={isSubmitting}
                 className="px-5 bg-[#004225] hover:bg-[#003319]"
               >
-                Cadastrar Parceiro
+                {isSubmitting ? "Salvando..." : "Cadastrar Parceiro"}
               </Button>
             </div>
           </form>
@@ -426,3 +453,6 @@ export function NovoParceiroModal({
     </>
   );
 }
+
+
+

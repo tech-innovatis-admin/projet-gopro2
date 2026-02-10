@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
 import {
@@ -24,58 +24,117 @@ import { ResizableTable } from "@/components/ui/resizable-table";
 import { MoneyInput } from "./[contratoId]/desembolso/_components/MoneyImput";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import * as XLSX from "xlsx";
-import type { ProjectStatus } from "../../../types/api_gopro_java/projects";
-import { getOrganizationsParceiras, getOrganizationsFinanciadoras } from "./mockData";
+import {
+  listPartners,
+  listPeople,
+  listProjects,
+  listPublicAgencies,
+} from "@/src/lib/api/endpoints";
+import {
+  HttpError,
+  type ProjectResponseDTO,
+  type ProjectStatusEnum,
+} from "@/src/lib/api/types";
 
 // Tipos
 type ContratoTipo = "PROJETO" | "PRODUTO";
+type ProjectStatus = ProjectStatusEnum;
+type MetricCardToneKey =
+  | "TOTAL"
+  | "PRE_PROJETO"
+  | "PLANEJAMENTO"
+  | "EXECUCAO"
+  | "FINALIZADO"
+  | "SUSPENSO";
 
-// Configuração centralizada dos status (fonte única de verdade)
-const STATUS_CONFIG = {
-  0: {
-    label: "Pré-Projeto",
-    stringKeys: ["PRE_PROJETO"],
+// Configuracao centralizada dos status (fonte unica de verdade)
+const STATUS_CONFIG: Record<
+  ProjectStatus,
+  { label: string; bg: string; text: string }
+> = {
+  PRE_PROJETO: {
+    label: "Pre-Projeto",
     bg: "bg-gray-100",
     text: "text-gray-800",
   },
-  1: {
-    label: "Execução",
-    stringKeys: ["EM_EXECUCAO", "EM_ANDAMENTO"],
+  PLANEJAMENTO: {
+    label: "Planejamento",
+    bg: "bg-slate-100",
+    text: "text-slate-800",
+  },
+  EXECUCAO: {
+    label: "Execucao",
     bg: "bg-blue-100",
     text: "text-blue-800",
   },
-  2: {
-    label: "Concluído",
-    stringKeys: ["CONCLUIDO"],
+  FINALIZADO: {
+    label: "Finalizado",
     bg: "bg-green-100",
     text: "text-green-800",
   },
-  3: {
+  SUSPENSO: {
     label: "Suspenso",
-    stringKeys: ["SUSPENSO"],
     bg: "bg-yellow-100",
     text: "text-yellow-800",
   },
-  4: {
-    label: "Cancelado",
-    stringKeys: ["CANCELADO"],
-    bg: "bg-red-100",
-    text: "text-red-800",
-  },
-} as const;
+};
 
-// Funções auxiliares usando a configuração centralizada
+// Funcoes auxiliares usando a configuracao centralizada
 const getStatusLabel = (status: ProjectStatus): string => {
   return STATUS_CONFIG[status].label;
 };
 
-const getStatusFromString = (status: string): ProjectStatus | null => {
-  for (const [key, config] of Object.entries(STATUS_CONFIG)) {
-    if ((config.stringKeys as readonly string[]).includes(status)) {
-      return Number(key) as ProjectStatus;
-    }
-  }
-  return null;
+type MetricCardTone = {
+  accent: string;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
+  border: string;
+};
+
+const CARD_TONE_BY_STATUS: Record<MetricCardToneKey, MetricCardTone> = {
+  PRE_PROJETO: {
+    accent: "bg-sky-500",
+    iconBg: "bg-sky-100",
+    iconColor: "text-sky-700",
+    valueColor: "text-sky-800",
+    border: "border-sky-100 hover:border-sky-200",
+  },
+  PLANEJAMENTO: {
+    accent: "bg-amber-500",
+    iconBg: "bg-amber-100",
+    iconColor: "text-amber-700",
+    valueColor: "text-amber-800",
+    border: "border-amber-100 hover:border-amber-200",
+  },
+  EXECUCAO: {
+    accent: "bg-orange-500",
+    iconBg: "bg-orange-100",
+    iconColor: "text-orange-700",
+    valueColor: "text-orange-800",
+    border: "border-orange-100 hover:border-orange-200",
+  },
+  FINALIZADO: {
+    accent: "bg-emerald-500",
+    iconBg: "bg-emerald-100",
+    iconColor: "text-emerald-700",
+    valueColor: "text-emerald-800",
+    border: "border-emerald-100 hover:border-emerald-200",
+  },
+  SUSPENSO: {
+    accent: "bg-rose-500",
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-700",
+    valueColor: "text-rose-800",
+    border: "border-rose-100 hover:border-rose-200",
+  },
+  TOTAL: {
+    accent: "bg-zinc-500",
+    iconBg: "bg-zinc-100",
+    iconColor: "text-zinc-700",
+    valueColor: "text-zinc-800",
+    border: "border-zinc-200 hover:border-zinc-300",
+  },
 };
 
 type Contrato = {
@@ -121,10 +180,10 @@ type SortConfig = {
   direction: "asc" | "desc";
 };
 
-// Segmentos alinhados com o formulário de cadastro
+// Segmentos alinhados com o formulario de cadastro
 const segmentoOptions = [
-  "Educação",
-  "Saúde",
+  "Educacao",
+  "Saude",
   "Cidades",
   "Meio Ambiente",
   "Tecnologia",
@@ -132,110 +191,105 @@ const segmentoOptions = [
   "Social",
   "Economia",
   "Cultura",
-  "Ciência",
+  "Ciencia",
   "Esporte",
   "Agricultura",
   "Outro",
 ];
 
-// Mock de dados atualizado com nova estrutura
-const mockContratos: Contrato[] = [
-  {
-    id: "1",
-    codigo: "PRJ-001",
-    nome: "Sistema de Gestão Integrada",
-    govIf: "IF",
-    tipo: "PROJETO",
-    clientePrimario: "CNPq - Conselho Nacional de Desenvolvimento Científico e Tecnológico",
-    clienteSecundario: "CAPES - Coordenação de Aperfeiçoamento de Pessoal de Nível Superior",
-    parceiroPrimario: "Fundação de Apoio à Pesquisa",
-    parceiroSecundario: "FAPTO - Fundação de Apoio à Pesquisa do Tocantins",
-    segmentos: ["Tecnologia", "Ciência"],
-    status: 1, // EM_EXECUCAO
-    valorTotal: 1250000,
-    dataInicio: "2025-01-15",
-    dataTermino: "2025-12-31",
-    dataInicioEfetivo: "2025-02-01",
-    coordenador: "João Silva",
-    localidade: "São Paulo - SP",
-    scope: "Desenvolvimento de sistema integrado de gestão para pesquisas científicas",
-  },
-  {
-    id: "2",
-    codigo: "PRD-010",
-    nome: "Licença GoPro Enterprise",
-    govIf: "Gov",
-    tipo: "PRODUTO",
-    clientePrimario: "Prefeitura de São Paulo",
-    parceiroPrimario: "Fundação XYZ",
-    segmentos: ["Tecnologia", "Cidades"],
-    status: 2, // CONCLUIDO
-    valorTotal: 240000,
-    dataInicio: "2025-03-01",
-    dataTermino: "2025-09-01",
-    dataInicioEfetivo: "2025-03-15",
-    dataFimEfetivo: "2025-08-30",
-    coordenador: "Maria Santos",
-    localidade: "Rio de Janeiro - RJ",
-    scope: "Licenciamento e implantação do sistema GoPro Enterprise para gestão municipal",
-  },
-  {
-    id: "3",
-    codigo: "PRJ-015",
-    nome: "Portal de Transparência",
-    govIf: "IF",
-    tipo: "PROJETO",
-    clientePrimario: "MEC - Ministério da Educação",
-    parceiroPrimario: "IFES-MG - Instituto Federal de Educação, Ciência e Tecnologia de Minas Gerais",
-    parceiroSecundario: "Fundação Araucária",
-    segmentos: ["Educação", "Tecnologia"],
-    status: 3, // SUSPENSO
-    valorTotal: 800000,
-    dataInicio: "2025-06-20",
-    coordenador: "Carlos Oliveira",
-    localidade: "Belo Horizonte - MG",
-    scope: "Desenvolvimento de portal web para transparência de dados educacionais",
-  },
-  {
-    id: "4",
-    codigo: "PRJ-020",
-    nome: "Modernização de Infraestrutura",
-    govIf: "Gov",
-    tipo: "PROJETO",
-    clientePrimario: "Governo do Estado de São Paulo",
-    clienteSecundario: "MEC - Ministério da Educação",
-    parceiroPrimario: "Fundação Araucária",
-    segmentos: ["Tecnologia", "Educação"],
-    status: 1, // EM_EXECUCAO
-    valorTotal: 2100000,
-    dataInicio: "2025-02-01",
-    dataTermino: "2026-06-30",
-    dataInicioEfetivo: "2025-02-15",
-    coordenador: "Ana Costa",
-    localidade: "Curitiba - PR",
-    scope: "Projeto de modernização da infraestrutura tecnológica de instituições de ensino",
-  },
-  {
-    id: "5",
-    codigo: "PRD-025",
-    nome: "Suporte Premium Anual",
-    govIf: "IF",
-    tipo: "PRODUTO",
-    clientePrimario: "CAPES - Coordenação de Aperfeiçoamento de Pessoal de Nível Superior",
-    parceiroPrimario: "Fundação UFRGS",
-    segmentos: ["Educação", "Ciência"],
-    status: 0, // PRE_PROJETO
-    valorTotal: 180000,
-    dataInicio: "2025-04-01",
-    coordenador: "Pedro Mendes",
-    localidade: "Porto Alegre - RS",
-    scope: "Contrato de suporte técnico premium para sistemas acadêmicos",
-  },
-];
+const NO_INFO_LABEL = "Nao informado";
 
-// Extrair lista de coordenadores e localidades dos contratos
-const coordenadores = [...new Set(mockContratos.map((c) => c.coordenador))];
-const localidades = [...new Set(mockContratos.map((c) => c.localidade))];
+function normalizeMoneyValue(value: number | string | null | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function normalizeSegments(value: string | null): string[] {
+  if (!value || !value.trim()) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function normalizeLocation(
+  city: string | null,
+  state: string | null,
+  executionLocation: string | null
+): string {
+  if (city && state) {
+    return `${city} - ${state}`;
+  }
+  if (city) {
+    return city;
+  }
+  if (state) {
+    return state;
+  }
+  if (executionLocation && executionLocation.trim()) {
+    return executionLocation.trim();
+  }
+  return NO_INFO_LABEL;
+}
+
+function mapProjectToContrato(
+  project: ProjectResponseDTO,
+  partnersById: Record<number, string>,
+  clientsById: Record<number, string>,
+  peopleById: Record<number, string>
+): Contrato {
+  const codigo = project.code || `PROJ-${project.id}`;
+  const govIf = project.projectGovIf === "GOV" ? "Gov" : "IF";
+  const tipo: ContratoTipo = project.projectType === "PRODUTO" ? "PRODUTO" : "PROJETO";
+  const parceiroPrimario = project.primaryPartnerId
+    ? (partnersById[project.primaryPartnerId] ?? NO_INFO_LABEL)
+    : NO_INFO_LABEL;
+  const parceiroSecundario = project.secundaryPartnerId
+    ? (partnersById[project.secundaryPartnerId] ?? undefined)
+    : undefined;
+  const clientePrimario = project.primaryClientId
+    ? (clientsById[project.primaryClientId] ?? NO_INFO_LABEL)
+    : NO_INFO_LABEL;
+  const clienteSecundario = project.secundaryClientId
+    ? (clientsById[project.secundaryClientId] ?? undefined)
+    : undefined;
+  const coordenador = project.cordinatorId
+    ? (peopleById[project.cordinatorId] ?? `Pessoa #${project.cordinatorId}`)
+    : NO_INFO_LABEL;
+
+  return {
+    id: String(project.id),
+    codigo,
+    nome: project.name,
+    govIf,
+    tipo,
+    clientePrimario,
+    clienteSecundario,
+    parceiroPrimario,
+    parceiroSecundario,
+    segmentos: normalizeSegments(project.areaSegmento),
+    status: project.projectStatus,
+    valorTotal: normalizeMoneyValue(project.contractValue),
+    dataInicio: project.startDate ?? project.openingDate ?? "",
+    dataTermino: project.endDate ?? project.closingDate ?? undefined,
+    dataInicioEfetivo: project.openingDate ?? undefined,
+    dataFimEfetivo: project.closingDate ?? undefined,
+    coordenador,
+    localidade: normalizeLocation(project.city, project.state, project.executionLocation),
+    scope: project.object,
+  };
+}
 
 export default function ContratosPage() {
   const [filters, setFilters] = useState<Filters>({
@@ -259,18 +313,21 @@ export default function ContratosPage() {
   });
   const [loading, setLoading] = useState(false);
   const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [availablePartners, setAvailablePartners] = useState<string[]>([]);
+  const [availableClients, setAvailableClients] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Opções para os dropdowns de filtros
+  // Opcoes para os dropdowns de filtros
   const statusDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "TODOS", label: "Todos os status" },
-    { value: "0", label: "Pré-Projeto" },
-    { value: "1", label: "Execução" },
-    { value: "2", label: "Concluído" },
-    { value: "3", label: "Suspenso" },
-    { value: "4", label: "Cancelado" },
+    { value: "PRE_PROJETO", label: "Pre-Projeto" },
+    { value: "PLANEJAMENTO", label: "Planejamento" },
+    { value: "EXECUCAO", label: "Execucao" },
+    { value: "FINALIZADO", label: "Finalizado" },
+    { value: "SUSPENSO", label: "Suspenso" },
   ], []);
 
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => [
@@ -281,19 +338,19 @@ export default function ContratosPage() {
 
   const parceiroDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "", label: "Todos os parceiros" },
-    ...getOrganizationsParceiras().map(org => ({
-      value: org.name,
-      label: org.name,
+    ...availablePartners.map((name) => ({
+      value: name,
+      label: name,
     })),
-  ], []);
+  ], [availablePartners]);
 
   const clienteDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "", label: "Todos os clientes" },
-    ...getOrganizationsFinanciadoras().map(org => ({
-      value: org.name,
-      label: org.name,
+    ...availableClients.map((name) => ({
+      value: name,
+      label: name,
     })),
-  ], []);
+  ], [availableClients]);
 
   const segmentoDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "", label: "Todos os segmentos" },
@@ -303,13 +360,29 @@ export default function ContratosPage() {
     })),
   ], []);
 
+  const coordenadores = useMemo(
+    () =>
+      [...new Set(contratos.map((contrato) => contrato.coordenador).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b)
+      ),
+    [contratos]
+  );
+
+  const localidades = useMemo(
+    () =>
+      [...new Set(contratos.map((contrato) => contrato.localidade).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b)
+      ),
+    [contratos]
+  );
+
   const coordenadorDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "", label: "Todos os coordenadores" },
     ...coordenadores.map(coord => ({
       value: coord,
       label: coord,
     })),
-  ], []);
+  ], [coordenadores]);
 
   const localidadeDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "", label: "Todas as localidades" },
@@ -317,64 +390,71 @@ export default function ContratosPage() {
       value: loc,
       label: loc,
     })),
-  ], []);
-
-  // Simulação de fetch
-  useEffect(() => {
+  ], [localidades]);
+  const loadContratos = useCallback(async () => {
     setLoading(true);
-    const timeout = setTimeout(() => {
-      setContratos(mockContratos);
+    setError(null);
+
+    try {
+      const [projectsPage, partnersPage, clientsPage, peoplePage] = await Promise.all([
+        listProjects({ page: 0, size: 20 }),
+        listPartners({ page: 0, size: 20 }),
+        listPublicAgencies({ page: 0, size: 20 }),
+        listPeople({ page: 0, size: 20 }),
+      ]);
+
+      const partnersById: Record<number, string> = {};
+      partnersPage.content.forEach((partner) => {
+        partnersById[partner.id] = partner.name;
+      });
+
+      const clientsById: Record<number, string> = {};
+      clientsPage.content.forEach((agency) => {
+        clientsById[agency.id] = agency.name;
+      });
+
+      const peopleById: Record<number, string> = {};
+      peoplePage.content.forEach((person) => {
+        peopleById[person.id] = person.fullName;
+      });
+
+      const mappedProjects = projectsPage.content.map((project) =>
+        mapProjectToContrato(project, partnersById, clientsById, peopleById)
+      );
+
+      setAvailablePartners(
+        [...new Set(partnersPage.content.map((partner) => partner.name).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b)
+        )
+      );
+      setAvailableClients(
+        [
+          ...new Set(
+            clientsPage.content
+              .filter((agency) => agency.isClient)
+              .map((agency) => agency.name)
+              .filter(Boolean)
+          ),
+        ].sort((a, b) => a.localeCompare(b))
+      );
+      setContratos(mappedProjects);
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof HttpError
+          ? fetchError.message
+          : "Nao foi possivel carregar os contratos.";
+      setError(message);
+      setContratos([]);
+    } finally {
       setLoading(false);
-    }, 300);
-    return () => clearTimeout(timeout);
+    }
   }, []);
 
-  // Listener para quando um contrato for criado (via modal global)
   useEffect(() => {
-    const handleContratoCriado = (event: CustomEvent) => {
-      const data = event.detail;
-      
-      // Buscar nomes das organizações
-      const parceiros = getOrganizationsParceiras();
-      const clientes = getOrganizationsFinanciadoras();
-      const parceiroPrimario = parceiros.find(p => p.id === data.parceiroId)?.name || "";
-      const parceiroSecundario = data.parceiroSecundarioId ? parceiros.find(p => p.id === data.parceiroSecundarioId)?.name : undefined;
-      const clientePrimario = clientes.find(c => c.id === data.clientePrimarioId)?.name || "";
-      const clienteSecundario = data.clienteSecundarioId ? clientes.find(c => c.id === data.clienteSecundarioId)?.name : undefined;
-      
-      // Cria o novo contrato com os dados recebidos
-      const novoContrato: Contrato = {
-        id: String(Date.now()),
-        codigo: data.tipo === "PROJETO" ? `PRJ-${String(contratos.length + 1).padStart(3, "0")}` : `PRD-${String(contratos.length + 1).padStart(3, "0")}`,
-        nome: data.titulo,
-        govIf: data.govIf || "IF",
-        tipo: data.tipo as ContratoTipo,
-        clientePrimario,
-        clienteSecundario,
-        parceiroPrimario,
-        parceiroSecundario,
-        segmentos: typeof data.segmentos === "string" ? data.segmentos.split(", ") : data.segmentos || [],
-        status: getStatusFromString(data.status) ?? 0, // Default para PRE_PROJETO se não encontrar
-        valorTotal: data.contract_value || 0,
-        dataInicio: data.dataInicio,
-        dataTermino: data.dataFim || undefined,
-        dataInicioEfetivo: data.dataInicioEfetivo || undefined,
-        dataFimEfetivo: data.dataFimEfetivo || undefined,
-        coordenador: data.coordenador,
-        localidade: data.localidade,
-        scope: data.scope || "",
-      };
-      
-      setContratos((prev) => [novoContrato, ...prev]);
-    };
+    void loadContratos();
+  }, [loadContratos]);
 
-    window.addEventListener('contrato-criado', handleContratoCriado as EventListener);
-    return () => {
-      window.removeEventListener('contrato-criado', handleContratoCriado as EventListener);
-    };
-  }, [contratos.length]);
-
-  // Filtragem e ordenação
+  // Filtragem e ordenacao
   const filtered = useMemo(() => {
     let result = contratos
       .filter((c) => (filters.govIf === "TODOS" ? true : c.govIf === filters.govIf))
@@ -410,7 +490,7 @@ export default function ContratosPage() {
           : true
       );
 
-    // Ordenação
+    // Ordenacao
     if (sortConfig.key) {
       result = [...result].sort((a, b) => {
         const aVal = a[sortConfig.key!];
@@ -426,34 +506,47 @@ export default function ContratosPage() {
     return result;
   }, [contratos, filters, sortConfig]);
 
-  // Métricas (baseadas nos dados filtrados)
+  // Metricas (baseadas nos dados filtrados)
   const counts = useMemo(() => {
     const total = filtered.length;
-    const emExecucao = filtered.filter((c) => c.status === 1).length; // EM_EXECUCAO
-    const concluidos = filtered.filter((c) => c.status === 2).length; // CONCLUIDO
-    const suspensos = filtered.filter((c) => c.status === 3).length; // SUSPENSO
-    const preProjetos = filtered.filter((c) => c.status === 0).length; // PRE_PROJETO
-    const cancelados = filtered.filter((c) => c.status === 4).length; // CANCELADO
+    const emExecucao = filtered.filter((c) => c.status === "EXECUCAO").length;
+    const concluidos = filtered.filter((c) => c.status === "FINALIZADO").length;
+    const suspensos = filtered.filter((c) => c.status === "SUSPENSO").length;
+    const preProjetos = filtered.filter((c) => c.status === "PRE_PROJETO").length;
+    const emPlanejamento = filtered.filter((c) => c.status === "PLANEJAMENTO").length;
     const valorTotal = filtered.reduce((acc, c) => acc + c.valorTotal, 0);
     const valorEmExecucao = filtered
-      .filter((c) => c.status === 1) // EM_EXECUCAO
+      .filter((c) => c.status === "EXECUCAO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
     const valorConcluidos = filtered
-      .filter((c) => c.status === 2) // CONCLUIDO
+      .filter((c) => c.status === "FINALIZADO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
     const valorSuspensos = filtered
-      .filter((c) => c.status === 3) // SUSPENSO
+      .filter((c) => c.status === "SUSPENSO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
     const valorPreProjetos = filtered
-      .filter((c) => c.status === 0) // PRE_PROJETO
+      .filter((c) => c.status === "PRE_PROJETO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorCancelados = filtered
-      .filter((c) => c.status === 4) // CANCELADO
+    const valorPlanejamento = filtered
+      .filter((c) => c.status === "PLANEJAMENTO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    return { total, emExecucao, concluidos, suspensos, preProjetos, cancelados, valorTotal, valorEmExecucao, valorConcluidos, valorSuspensos, valorPreProjetos, valorCancelados };
+    return {
+      total,
+      emExecucao,
+      concluidos,
+      suspensos,
+      preProjetos,
+      emPlanejamento,
+      valorTotal,
+      valorEmExecucao,
+      valorConcluidos,
+      valorSuspensos,
+      valorPreProjetos,
+      valorPlanejamento,
+    };
   }, [filtered]);
 
-  // Paginação
+  // Paginacao
   const paginatedData = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
@@ -503,24 +596,24 @@ export default function ContratosPage() {
     filters.periodoFim !== "" ||
     filters.q !== "";
 
-  // Função para exportar para Excel
+  // Funcao para exportar para Excel
   const exportToExcel = () => {
-    // Preparar dados para exportação
+    // Preparar dados para exportacao
     const exportData = filtered.map((contrato) => ({
-      Código: contrato.codigo,
+      Codigo: contrato.codigo,
       Nome: contrato.nome,
-      "Gov/IF": contrato.govIf,
+      GovIF: contrato.govIf,
       Tipo: contrato.tipo === "PROJETO" ? "Projeto" : "Produto",
-      "Cliente Primário": contrato.clientePrimario,
-      "Cliente Secundário": contrato.clienteSecundario || "—",
-      "Parceiro Primário": contrato.parceiroPrimario,
-      "Parceiro Secundário": contrato.parceiroSecundario || "—",
-      "Valor Total": `R$ ${contrato.valorTotal.toLocaleString("pt-BR")}`,
+      ClientePrimario: contrato.clientePrimario,
+      ClienteSecundario: contrato.clienteSecundario || "-",
+      ParceiroPrimario: contrato.parceiroPrimario,
+      ParceiroSecundario: contrato.parceiroSecundario || "-",
+      ValorTotal: `R$ ${contrato.valorTotal.toLocaleString("pt-BR")}`,
       Status: getStatusLabel(contrato.status),
-      Início: formatDate(contrato.dataInicio),
-      Término: contrato.dataTermino ? formatDate(contrato.dataTermino) : "—",
-      "Início Efetivo": contrato.dataInicioEfetivo ? formatDate(contrato.dataInicioEfetivo) : "—",
-      "Fim Efetivo": contrato.dataFimEfetivo ? formatDate(contrato.dataFimEfetivo) : "—",
+      Inicio: formatDate(contrato.dataInicio),
+      Termino: contrato.dataTermino ? formatDate(contrato.dataTermino) : "-",
+      InicioEfetivo: contrato.dataInicioEfetivo ? formatDate(contrato.dataInicioEfetivo) : "-",
+      FimEfetivo: contrato.dataFimEfetivo ? formatDate(contrato.dataFimEfetivo) : "-",
       Coordenador: contrato.coordenador,
       Localidade: contrato.localidade,
       Segmentos: contrato.segmentos.join(", "),
@@ -532,19 +625,19 @@ export default function ContratosPage() {
 
     // Ajustar largura das colunas
     const colWidths = [
-      { wch: 12 }, // Código
+      { wch: 12 }, // Codigo
       { wch: 35 }, // Nome
       { wch: 8 },  // Gov/IF
       { wch: 10 }, // Tipo
-      { wch: 40 }, // Cliente Primário
-      { wch: 30 }, // Cliente Secundário
-      { wch: 35 }, // Parceiro Primário
-      { wch: 30 }, // Parceiro Secundário
+      { wch: 40 }, // Cliente Primario
+      { wch: 30 }, // Cliente Secundario
+      { wch: 35 }, // Parceiro Primario
+      { wch: 30 }, // Parceiro Secundario
       { wch: 18 }, // Valor Total
       { wch: 12 }, // Status
-      { wch: 12 }, // Início
-      { wch: 12 }, // Término
-      { wch: 12 }, // Início Efetivo
+      { wch: 12 }, // Inicio
+      { wch: 12 }, // Termino
+      { wch: 12 }, // Inicio Efetivo
       { wch: 12 }, // Fim Efetivo
       { wch: 25 }, // Coordenador
       { wch: 20 }, // Localidade
@@ -578,7 +671,7 @@ export default function ContratosPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-            <p className="text-sm text-gray-500">Gestão unificada de Projetos e Produtos</p>
+            <p className="text-sm text-gray-500">Gestao unificada de Projetos e Produtos</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -591,49 +684,49 @@ export default function ContratosPage() {
           </div>
         </div>
 
-        {/* Cards de Métricas */}
+        {/* Cards de Metricas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
           <MetricCard
-            title="Total"
+            title="Total de Contratos"
             value={counts.total}
             icon={FileText}
-            color="#004225"
+            tone="TOTAL"
             subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Pré-Projetos"
+            title="Pre-Projetos"
             value={counts.preProjetos}
             icon={Clock}
-            color="#3B82F6"
+            tone="PRE_PROJETO"
             subtitle={`R$ ${counts.valorPreProjetos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Execução"
+            title="Execucao"
             value={counts.emExecucao}
             icon={TrendingUp}
-            color="#0B7A4B"
+            tone="EXECUCAO"
             subtitle={`R$ ${counts.valorEmExecucao.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Concluídos"
+            title="Concluidos"
             value={counts.concluidos}
             icon={CheckCircle}
-            color="#6D28D9"
+            tone="FINALIZADO"
             subtitle={`R$ ${counts.valorConcluidos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
             title="Suspensos"
             value={counts.suspensos}
             icon={PauseCircle}
-            color="#F59E0B"
+            tone="SUSPENSO"
             subtitle={`R$ ${counts.valorSuspensos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Cancelados"
-            value={counts.cancelados}
-            icon={XCircle}
-            color="#EF4444"
-            subtitle={`R$ ${counts.valorCancelados.toLocaleString("pt-BR")}`}
+            title="Planejamento"
+            value={counts.emPlanejamento}
+            icon={Clock}
+            tone="PLANEJAMENTO"
+            subtitle={`R$ ${counts.valorPlanejamento.toLocaleString("pt-BR")}`}
           />
         </div>
 
@@ -646,7 +739,7 @@ export default function ContratosPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por código, nome, cliente ou responsável..."
+                placeholder="Buscar por codigo, nome, cliente ou responsavel..."
                 className="w-full h-10 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-transparent"
                 value={filters.q}
                 onChange={(e) => {
@@ -676,7 +769,7 @@ export default function ContratosPage() {
               ))}
             </div>
 
-            {/* Botão de filtros */}
+            {/* Botao de filtros */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
@@ -721,13 +814,13 @@ export default function ContratosPage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <Dropdown
                   options={statusDropdownOptions}
-                  value={filters.status === "TODOS" ? "TODOS" : String(filters.status)}
+                  value={filters.status}
                   placeholder="Todos os status"
                   searchable={true}
                   onChange={(value) => {
                     setFilters((f) => ({ 
                       ...f, 
-                      status: value === undefined || value === "TODOS" ? "TODOS" : (Number(value) as ProjectStatus)
+                      status: value === undefined || value === "TODOS" ? "TODOS" : (value as ProjectStatus)
                     }));
                     setPage(1);
                   }}
@@ -752,9 +845,9 @@ export default function ContratosPage() {
                 />
               </div>
 
-              {/* Parceiro Primário */}
+              {/* Parceiro Primario */}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Parceiro Primário</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Parceiro Primario</label>
                 <Dropdown
                   options={parceiroDropdownOptions}
                   value={filters.parceiroPrimario || undefined}
@@ -767,9 +860,9 @@ export default function ContratosPage() {
                 />
               </div>
 
-              {/* Cliente Primário */}
+              {/* Cliente Primario */}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Cliente Primário</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Cliente Primario</label>
                 <Dropdown
                   options={clienteDropdownOptions}
                   value={filters.clientePrimario || undefined}
@@ -827,10 +920,10 @@ export default function ContratosPage() {
                 />
               </div>
 
-              {/* Valor Mínimo */}
+              {/* Valor Minimo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Valor mínimo
+                  Valor minimo
                 </label>
                 <MoneyInput
                   valueCents={filters.valorMinimo}
@@ -843,10 +936,10 @@ export default function ContratosPage() {
                 />
               </div>
 
-              {/* Valor Máximo */}
+              {/* Valor Maximo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Valor máximo
+                  Valor maximo
                 </label>
                 <MoneyInput
                   valueCents={filters.valorMaximo}
@@ -884,16 +977,16 @@ export default function ContratosPage() {
           <ResizableTable
             columnCount={10}
             defaultWidths={[
-              120, // Código
+              120, // Codigo
               290, // Nome
               100, // Gov/IF
               100, // Tipo
               220, // Cliente / Parceiro
               140, // Valor Total
               130, // Status
-              110, // Início
-              110, // Término
-              200, // Responsável
+              110, // Inicio
+              110, // Termino
+              200, // Responsavel
             ]}
             minColumnWidth={80}
             className="divide-y divide-gray-200"
@@ -901,7 +994,7 @@ export default function ContratosPage() {
             <thead className="bg-gray-50">
               <tr>
                 <Th onClick={() => handleSort("codigo")} sortable className="text-center">
-                  Código
+                  Codigo
                   <SortIcon column="codigo" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("nome")} sortable className="text-center">
@@ -923,11 +1016,11 @@ export default function ContratosPage() {
                 </Th>
                 <Th className="text-center">Status</Th>
                 <Th onClick={() => handleSort("dataInicio")} sortable className="text-center">
-                  Início
+                  Inicio
                   <SortIcon column="dataInicio" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("dataTermino")} sortable className="text-center">
-                  Término
+                  Termino
                   <SortIcon column="dataTermino" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("coordenador")} sortable className="text-center">
@@ -943,6 +1036,24 @@ export default function ContratosPage() {
                       <div className="flex flex-col items-center gap-2">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
                         <span className="text-sm text-gray-500">Carregando contratos...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <XCircle className="h-12 w-12 text-red-300" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Falha ao carregar contratos</p>
+                          <p className="text-sm text-gray-500">{error}</p>
+                        </div>
+                        <button
+                          onClick={() => void loadContratos()}
+                          className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
+                        >
+                          Tentar novamente
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -983,7 +1094,9 @@ export default function ContratosPage() {
                     <tr
                       key={contrato.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => (window.location.href = `/contratos/${contrato.id}`)}
+                      onClick={() =>
+                        (window.location.href = `/contratos/${contrato.id}/meta-etapa-fase`)
+                      }
                     >
                       <Td className="font-mono text-sm text-center">{contrato.codigo}</Td>
                       <Td className="font-medium text-gray-900 max-w-[200px] truncate">
@@ -1009,7 +1122,7 @@ export default function ContratosPage() {
                       </Td>
                       <Td className="text-sm text-gray-600 text-center">{formatDate(contrato.dataInicio)}</Td>
                       <Td className="text-sm text-gray-600 text-center">
-                        {contrato.dataTermino ? formatDate(contrato.dataTermino) : "—"}
+                        {contrato.dataTermino ? formatDate(contrato.dataTermino) : "-"}
                       </Td>
                       <Td className="text-sm text-gray-600">{contrato.coordenador}</Td>
                     </tr>
@@ -1018,7 +1131,7 @@ export default function ContratosPage() {
               </tbody>
           </ResizableTable>
 
-          {/* Paginação */}
+          {/* Paginacao */}
           {!loading && filtered.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
@@ -1072,7 +1185,7 @@ export default function ContratosPage() {
                   disabled={page === totalPages}
                   className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Próxima
+                  Proxima
                 </button>
               </div>
             </div>
@@ -1088,26 +1201,46 @@ function MetricCard({
   title,
   value,
   icon: Icon,
-  color,
+  tone,
   subtitle,
 }: {
   title: string;
   value: number | string;
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  color: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: MetricCardToneKey;
   subtitle?: string;
 }) {
+  const toneStyle = CARD_TONE_BY_STATUS[tone];
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2.5">
-          <Icon className="h-6 w-6" style={{ color }} />
-          <p className="text-base font-semibold text-gray-600">{title}</p>
+    <article
+      className={`group relative h-full overflow-hidden rounded-xl border bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${toneStyle.border}`}
+      aria-label={`${title}: ${value} contratos`}
+    >
+      <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${toneStyle.accent}`} />
+
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneStyle.iconBg}`}>
+            <Icon className={`h-5 w-5 ${toneStyle.iconColor}`} />
+          </span>
+          <p className="text-sm font-medium leading-5 text-zinc-700">{title}</p>
         </div>
-        <p className="text-4xl font-bold text-gray-900">{value}</p>
-        {subtitle && <p className="text-base font-medium text-gray-600">{subtitle}</p>}
+
+        <div className="mt-4 flex items-baseline gap-2">
+          <p className="text-3xl font-bold leading-none tracking-tight text-zinc-900 tabular-nums">
+            {value}
+          </p>
+          <span className="text-xs font-normal leading-none text-zinc-500">contratos</span>
+        </div>
+
+        {subtitle && (
+          <p className={`mt-3 break-words text-sm font-semibold leading-tight ${toneStyle.valueColor}`}>
+            {subtitle}
+          </p>
+        )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -1189,9 +1322,16 @@ function TipoBadge({ tipo }: { tipo: ContratoTipo }) {
 }
 
 function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR");
-  } catch {
+  if (!iso) {
+    return "-";
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
     return iso;
   }
+
+  return date.toLocaleDateString("pt-BR");
 }
+
+

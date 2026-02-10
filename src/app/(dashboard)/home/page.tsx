@@ -1,125 +1,387 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BarChart3, CheckCircle2, Clock3, ListChecks, PauseCircle, PlayCircle, type LucideIcon } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
-import { CategoryPieChart, ContractsLineChart, PartnerBarChart, ContractsMap } from "./_components";
+import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { getProjectDashboard } from "@/src/lib/api/endpoints";
+import { HttpError, type ProjectDashboardResponseDTO, type ProjectStatusEnum } from "@/src/lib/api/types";
+import { CategoryPieChart } from "./_components/CategoryPieChart";
+import { ContractsLineChart } from "./_components/ContractsLineChart";
+import { ContractsMap } from "./_components/ContractsMap";
+import { PartnerBarChart } from "./_components/PartnerBarChart";
+
+type SummaryCard = {
+  key: ProjectStatusEnum | "TOTAL";
+  title: string;
+  contracts: number;
+  totalValue: number;
+  icon: LucideIcon;
+};
+
+type CardTone = {
+  accent: string;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
+  border: string;
+};
+
+const statusLabels: Record<ProjectStatusEnum, string> = {
+  PRE_PROJETO: "Pré-Projetos",
+  PLANEJAMENTO: "Planejamento",
+  EXECUCAO: "Execução",
+  FINALIZADO: "Finalizados",
+  SUSPENSO: "Suspensos",
+};
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+
+const formatNumber = (value: number) =>
+  new Intl.NumberFormat("pt-BR").format(value);
+
+const cardToneByStatus: Record<ProjectStatusEnum | "TOTAL", CardTone> = {
+  PRE_PROJETO: {
+    accent: "bg-sky-500",
+    iconBg: "bg-sky-100",
+    iconColor: "text-sky-700",
+    valueColor: "text-sky-800",
+    border: "border-sky-100 hover:border-sky-200",
+  },
+  PLANEJAMENTO: {
+    accent: "bg-amber-500",
+    iconBg: "bg-amber-100",
+    iconColor: "text-amber-700",
+    valueColor: "text-amber-800",
+    border: "border-amber-100 hover:border-amber-200",
+  },
+  EXECUCAO: {
+    accent: "bg-orange-500",
+    iconBg: "bg-orange-100",
+    iconColor: "text-orange-700",
+    valueColor: "text-orange-800",
+    border: "border-orange-100 hover:border-orange-200",
+  },
+  FINALIZADO: {
+    accent: "bg-emerald-500",
+    iconBg: "bg-emerald-100",
+    iconColor: "text-emerald-700",
+    valueColor: "text-emerald-800",
+    border: "border-emerald-100 hover:border-emerald-200",
+  },
+  SUSPENSO: {
+    accent: "bg-rose-500",
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-700",
+    valueColor: "text-rose-800",
+    border: "border-rose-100 hover:border-rose-200",
+  },
+  TOTAL: {
+    accent: "bg-zinc-500",
+    iconBg: "bg-zinc-100",
+    iconColor: "text-zinc-700",
+    valueColor: "text-zinc-800",
+    border: "border-zinc-200 hover:border-zinc-300",
+  },
+};
+
+const neutralTone: CardTone = {
+  accent: "bg-zinc-300",
+  iconBg: "bg-zinc-100",
+  iconColor: "text-zinc-500",
+  valueColor: "text-zinc-600",
+  border: "border-zinc-200 hover:border-zinc-300",
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Falha ao carregar dashboard.";
+}
 
 export default function HomePage() {
+  const [dashboard, setDashboard] = useState<ProjectDashboardResponseDTO | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [yearOptions, setYearOptions] = useState<number[]>([]);
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getProjectDashboard({
+        year: selectedYear ?? undefined,
+      });
+      setDashboard(response);
+      const availableYears = (response.availableYears ?? [])
+        .filter((year) => Number.isFinite(year))
+        .sort((first, second) => second - first);
+      setYearOptions(
+        availableYears.length > 0 ? availableYears : [CURRENT_YEAR]
+      );
+    } catch (fetchError) {
+      setDashboard(null);
+      setYearOptions([CURRENT_YEAR]);
+      setError(getErrorMessage(fetchError));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedYear]);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  const statusMetricMap = useMemo(() => {
+    const byStatus = dashboard?.byStatus ?? [];
+    return new Map(byStatus.map((metric) => [metric.status, metric]));
+  }, [dashboard?.byStatus]);
+
+  const categoryData = useMemo(() => {
+    const byType = dashboard?.byType ?? [];
+    const projeto = byType.find((item) => item.type === "PROJETO");
+    const produto = byType.find((item) => item.type === "PRODUTO");
+    return [
+      {
+        name: "Projetos",
+        quantidade: projeto?.contracts ?? 0,
+        percentual: projeto?.percentageOfTypeTotal ?? 0,
+        valor: projeto?.totalValue ?? 0,
+      },
+      {
+        name: "Produtos",
+        quantidade: produto?.contracts ?? 0,
+        percentual: produto?.percentageOfTypeTotal ?? 0,
+        valor: produto?.totalValue ?? 0,
+      },
+    ];
+  }, [dashboard?.byType]);
+
+  const partnerData = useMemo(
+    () =>
+      (dashboard?.byPartner ?? [])
+        .slice(0, 7)
+        .map((item) => ({
+          name: item.partnerName,
+          contratos: item.contracts,
+          valor: item.totalValue,
+        })),
+    [dashboard?.byPartner]
+  );
+
+  const locationData = useMemo(
+    () =>
+      (dashboard?.byLocation ?? []).map((item) => ({
+        location: item.location,
+        city: item.city,
+        state: item.state,
+        contracts: item.contracts,
+        totalValue: item.totalValue,
+      })),
+    [dashboard?.byLocation]
+  );
+
+  const monthlyData = useMemo(
+    () =>
+      (dashboard?.byMonth ?? []).map((item) => ({
+        month: item.label.replace(".", ""),
+        contratos: item.contracts,
+      })),
+    [dashboard?.byMonth]
+  );
+
+  const yearDropdownOptions = useMemo<DropdownOption[]>(
+    () =>
+      yearOptions.map((year) => ({
+        value: String(year),
+        label: String(year),
+      })),
+    [yearOptions]
+  );
+
+  const cards: SummaryCard[] = [
+    {
+      key: "PRE_PROJETO",
+      title: statusLabels.PRE_PROJETO,
+      contracts: statusMetricMap.get("PRE_PROJETO")?.contracts ?? 0,
+      totalValue: statusMetricMap.get("PRE_PROJETO")?.totalValue ?? 0,
+      icon: Clock3,
+    },
+    {
+      key: "PLANEJAMENTO",
+      title: statusLabels.PLANEJAMENTO,
+      contracts: statusMetricMap.get("PLANEJAMENTO")?.contracts ?? 0,
+      totalValue: statusMetricMap.get("PLANEJAMENTO")?.totalValue ?? 0,
+      icon: ListChecks,
+    },
+    {
+      key: "EXECUCAO",
+      title: statusLabels.EXECUCAO,
+      contracts: statusMetricMap.get("EXECUCAO")?.contracts ?? 0,
+      totalValue: statusMetricMap.get("EXECUCAO")?.totalValue ?? 0,
+      icon: PlayCircle,
+    },
+    {
+      key: "FINALIZADO",
+      title: statusLabels.FINALIZADO,
+      contracts: statusMetricMap.get("FINALIZADO")?.contracts ?? 0,
+      totalValue: statusMetricMap.get("FINALIZADO")?.totalValue ?? 0,
+      icon: CheckCircle2,
+    },
+    {
+      key: "SUSPENSO",
+      title: statusLabels.SUSPENSO,
+      contracts: statusMetricMap.get("SUSPENSO")?.contracts ?? 0,
+      totalValue: statusMetricMap.get("SUSPENSO")?.totalValue ?? 0,
+      icon: PauseCircle,
+    },
+    {
+      key: "TOTAL",
+      title: "Total de Contratos",
+      contracts: dashboard?.summary.totalContracts ?? 0,
+      totalValue: dashboard?.summary.totalValue ?? 0,
+      icon: BarChart3,
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
       <NavBar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-8">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-zinc-900 mb-2">
-                  Bem-vindo à GoPro2
-                </h1>
-                <p className="text-zinc-600">
-                  Gerenciar com eficiência e inteligência
-                </p>
+                <h1 className="text-3xl font-bold text-zinc-900 mb-2">Bem-vindo a GoPro2</h1>
+                <p className="text-zinc-600">Gerenciar com eficiencia e inteligencia</p>
               </div>
+              {/* Temporarily disabled (no auth for now):
               <div className="hidden md:flex items-center gap-4">
                 <div className="text-right">
-                  <p className="text-sm text-zinc-500">Olá,</p>
+                  <p className="text-sm text-zinc-500">Ola,</p>
                   <p className="text-lg font-semibold text-zinc-900">Administrador</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold">
                   A
                 </div>
               </div>
+              */}
             </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-500 text-centermb-1">Pré-Projetos</p>
-                  <p className="text-2xl font-bold text-zinc-900">28</p>
-                  <p className="text-sm font-medium text-sky-700 mt-1">R$ 3.450.000,00</p>
-                </div>
-                <div className="p-3 bg-sky-50 rounded-lg">
-                  <svg className="h-3 w-3 text-sky-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h10m-4 5h14" />
-                  </svg>
-                </div>
-              </div>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm flex items-center justify-between">
+              <span>{error}</span>
+              <button
+                onClick={() => void loadDashboard()}
+                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs"
+              >
+                Tentar novamente
+              </button>
             </div>
+          )}
 
-            <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-500 text-center mb-1">Em Andamento</p>
-                  <p className="text-2xl font-bold text-zinc-900">42</p>
-                  <p className="text-sm font-medium text-[#00C48B] mt-1">R$ 8.423.120,00</p>
-                </div>
-                <div className="p-3 bg-[#00C48B]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#00C48B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+          <div
+            className="grid grid-cols-6 auto-rows-fr gap-4 lg:gap-5"
+            aria-busy={loading}
+          >
+            {cards.map((card) => {
+              const isEmpty = card.contracts === 0 && card.totalValue === 0;
+              const tone = isEmpty ? neutralTone : cardToneByStatus[card.key];
+              return (
+                <article
+                  key={card.title}
+                  aria-labelledby={`summary-card-title-${card.key}`}
+                  className={`group relative h-full overflow-hidden rounded-xl border bg-white p-5 sm:p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${tone.border}`}
+                >
+                  <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${tone.accent}`} />
 
-            <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-500 text-center mb-1">Concluídos</p>
-                  <p className="text-2xl font-bold text-zinc-900">58</p>
-                  <p className="text-sm font-medium text-[#1E7F4B] mt-1">R$ 9.124.730,00</p>
-                </div>
-                <div className="p-3 bg-[#1E7F4B]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#1E7F4B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+                  <div className="flex h-full flex-col">
+                    <header className="flex items-center gap-3">
+                      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone.iconBg}`}>
+                        <card.icon className={`h-5 w-5 ${tone.iconColor}`} />
+                      </span>
+                      <h2 id={`summary-card-title-${card.key}`} className="text-sm font-medium leading-5 text-zinc-700">
+                        {card.title}
+                      </h2>
+                    </header>
 
-            <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-500 text-center mb-1">Suspensos</p>
-                  <p className="text-2xl font-bold text-zinc-900">16</p>
-                  <p className="text-sm font-medium text-orange-600 mt-1">R$ 1.700.000,00</p>
-                </div>
-                <div className="p-3 bg-orange-50 rounded-lg">
-                  <svg className="h-3 w-3 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+                    <div className="mt-4 flex items-baseline gap-2">
+                      {loading ? (
+                        <span className="inline-block h-10 w-20 animate-pulse rounded bg-zinc-200" aria-hidden />
+                      ) : (
+                        <span className={`text-3xl font-bold leading-none tabular-nums tracking-tight ${isEmpty ? "text-zinc-500" : "text-zinc-900"}`}>
+                          {formatNumber(card.contracts)}
+                        </span>
+                      )}
+                      <span className="text-xs font-normal leading-none text-zinc-500">
+                        contratos
+                      </span>
+                    </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-500 text-center mb-1">Total de Contratos</p>
-                  <p className="text-2xl font-bold text-zinc-900">116</p>
-                  <p className="text-sm font-medium text-[#1F4E79] mt-1">R$ 19.247.850,00</p>
-                </div>
-                <div className="p-3 bg-[#1F4E79]/10 rounded-lg">
-                  <svg className="h-3 w-3 text-[#1F4E79]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-              </div>
+                    <p className={`mt-3 text-sm font-semibold leading-tight break-words ${tone.valueColor}`}>
+                      {loading ? (
+                        <span className="inline-block h-5 w-36 animate-pulse rounded bg-zinc-200" aria-hidden />
+                      ) : (
+                        formatCurrency(card.totalValue)
+                      )}
+                    </p>
+
+                    {!loading && (
+                      <p className="sr-only">
+                        {`${card.title}. ${formatNumber(card.contracts)} contratos. Valor total ${formatCurrency(card.totalValue)}.`}
+                      </p>
+                    )}
+                    </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="flex items-start justify-start">
+            <div className="w-full max-w-[220px]">
+              <p className="mb-2 text-xs font-medium text-zinc-600">Periodo</p>
+              <Dropdown
+                options={yearDropdownOptions}
+                value={selectedYear == null ? undefined : String(selectedYear)}
+                placeholder="Tempo todo"
+                onChange={(value) => {
+                  if (!value) {
+                    setSelectedYear(null);
+                    return;
+                  }
+                  const parsedYear = Number(value);
+                  if (Number.isFinite(parsedYear)) {
+                    setSelectedYear(parsedYear);
+                  }
+                }}
+                className="w-full"
+              />
             </div>
           </div>
 
-          {/* Charts Row 1 - Pie Chart + Line Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <CategoryPieChart />
-            <ContractsLineChart />
+            <CategoryPieChart data={categoryData} isLoading={loading} />
+            <ContractsLineChart
+              data={monthlyData}
+              isLoading={loading}
+            />
           </div>
 
-          {/* Charts Row 2 - Map + Bar Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ContractsMap />
-            <PartnerBarChart />
+            <ContractsMap data={locationData} isLoading={loading} />
+            <PartnerBarChart data={partnerData} isLoading={loading} />
           </div>
         </div>
       </main>

@@ -8,7 +8,6 @@ import {
   FileText,
   ExternalLink,
   Mail,
-  Phone,
   Globe,
   GraduationCap,
   Building,
@@ -23,7 +22,6 @@ import {
   TIPO_SHORT_LABELS,
   STATUS_CONFIG,
 } from "../types";
-import { formatCurrency } from "../mockData";
 
 // =============================================================================
 // GRID DE PARCEIROS EM CARDS
@@ -33,6 +31,13 @@ interface ParceirosGridProps {
   parceiros: Parceiro[];
   filters: ParceirosFiltersState;
   onFiltersChange: (filters: ParceirosFiltersState) => void;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 export function ParceirosGrid({

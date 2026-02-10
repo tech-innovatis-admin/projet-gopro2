@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
@@ -17,7 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getPersonById, formatDate, formatCurrency } from "../data";
+import { fetchPersonById, formatDate, formatCurrency } from "../data";
 import {
   PROJECT_PERSON_STATUS_CONFIG,
   CONTRACT_TYPE_LABELS,
@@ -25,14 +25,47 @@ import {
 } from "../types";
 
 // =============================================================================
-// PÁGINA DE DETALHES DA PESSOA
+// PÃGINA DE DETALHES DA PESSOA
 // =============================================================================
 
 export default function PessoaDetalhesPage() {
   const params = useParams();
   const pessoaId = params.pessoasId as string;
 
-  const person = useMemo(() => getPersonById(pessoaId), [pessoaId]);
+  const [person, setPerson] = useState<Awaited<ReturnType<typeof fetchPersonById>>>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPerson = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetchPersonById(pessoaId);
+        if (isMounted) {
+          setPerson(response);
+        }
+      } catch (loadError) {
+        if (isMounted) {
+          setError(loadError instanceof Error ? loadError.message : "Falha ao carregar pessoa.");
+          setPerson(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPerson();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pessoaId]);
 
   // Ordena projetos: ativos primeiro, depois pendentes, depois encerrados
   const sortedProjects = useMemo(() => {
@@ -53,7 +86,7 @@ export default function PessoaDetalhesPage() {
     };
   }, [person]);
 
-  // Função para obter iniciais do nome
+  // FunÃ§Ã£o para obter iniciais do nome
   const getInitials = (name: string): string => {
     return name
       .split(" ")
@@ -63,6 +96,19 @@ export default function PessoaDetalhesPage() {
       .toUpperCase();
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+        <NavBar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
+            <p className="mt-4 text-sm">Carregando pessoa...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
   if (!person) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
@@ -71,10 +117,10 @@ export default function PessoaDetalhesPage() {
           <div className="flex flex-col items-center justify-center py-20">
             <User className="h-16 w-16 text-gray-300 mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Pessoa não encontrada
+              Pessoa nÃ£o encontrada
             </h2>
             <p className="text-gray-500 mb-6">
-              A pessoa solicitada não existe ou foi removida.
+              {error || "A pessoa solicitada nao existe ou foi removida."}
             </p>
             <Link
               href="/recursos-humanos/pessoas"
@@ -180,7 +226,7 @@ export default function PessoaDetalhesPage() {
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
               <p className="text-xs text-blue-600 font-medium mb-1">
-                Carga Horária Ativa
+                Carga HorÃ¡ria Ativa
               </p>
               <p className="text-2xl font-bold text-blue-700">
                 {totals.activeHours}h
@@ -200,14 +246,14 @@ export default function PessoaDetalhesPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                Vínculos com Projetos
+                VÃ­nculos com Projetos
               </h2>
             </div>
 
             {sortedProjects.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>Nenhum vínculo com projeto</p>
+                <p>Nenhum vÃ­nculo com projeto</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -218,19 +264,19 @@ export default function PessoaDetalhesPage() {
                         Projeto
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Função
+                        FunÃ§Ã£o
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Vínculo
+                        VÃ­nculo
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                         Contrato
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Carga Horária
+                        Carga HorÃ¡ria
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Período
+                        PerÃ­odo
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                         Valor
@@ -250,11 +296,11 @@ export default function PessoaDetalhesPage() {
             )}
           </div>
 
-          {/* Observações */}
+          {/* ObservaÃ§Ãµes */}
           {person.notes && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">
-                Observações
+                ObservaÃ§Ãµes
               </h2>
               <p className="text-sm text-gray-700">{person.notes}</p>
             </div>
@@ -322,3 +368,4 @@ function ProjectRow({ project }: { project: ProjectPerson }) {
     </tr>
   );
 }
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, Fragment } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -13,47 +13,75 @@ import {
   Pencil,
   Save,
 } from 'lucide-react';
-import { rubricasMock, parcelasMock } from '../rubricas/page';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
+import {
+  createExpense,
+  createIncome,
+  deleteExpense,
+  deleteIncome,
+  listBudgetCategories,
+  listBudgetItems,
+  listExpenses,
+  listGoals,
+  listIncomes,
+  updateExpense,
+  updateIncome,
+} from '@/src/lib/api/endpoints';
+import type {
+  BudgetCategoryResponseDTO,
+  BudgetItemResponseDTO,
+  ExpenseRequestDTO,
+  ExpenseResponseDTO,
+  ExpenseUpdateDTO,
+  GoalResponseDTO,
+  IncomeResponseDTO,
+  PageResponseDTO,
+} from '@/src/lib/api/types';
+import { HttpError } from '@/src/lib/api/types';
 
 type ID = string;
+const PAGE_SIZE = 20;
+const MAX_PAGE_REQUESTS = 1000;
 
 type Lancamento = {
-  valor: number;    // valor pago daquele subitem na parcela
-  dataPag: string;  // data do pagamento (AAAA-MM-DD)
+  valor: number;
+  dataPag: string;
+  expenseId?: ID;
 };
 
 type Subitem = {
   id: ID;
-  empresaRh: string; // "Empresa/RH" na planilha
-  lancamentos: Record<ID, Lancamento | undefined>; // chave = parcelaId
+  empresaRh: string;
+  lancamentos: Record<ID, Lancamento | undefined>;
 };
 
 type ItemRubrica = {
-  id: ID;
-  codigo?: string; // ex: "2.4"
-  descricao: string; // ex: "Bolsa Ministério"
+  id: ID; // budget item id
+  categoryId: number;
+  codigo?: string;
+  descricao: string;
   quantidade: number;
   meses: number;
   valorUnitario: number;
   meta?: string;
+  goalId?: number;
   subitens?: Subitem[];
 };
 
 type Rubrica = {
-  id: ID;
-  codigo: string; // código da rubrica (ex: "MC", "PP")
-  nome: string; // ex: "Auxílio financeiro a pesquisadores (33.90.20)"
+  id: ID; // category id
+  codigo: string;
+  nome: string;
   expanded: boolean;
   itens: ItemRubrica[];
 };
 
 type Parcela = {
-  id: ID;
-  numero: number; // 1,2,3...
+  id: ID; // income id
+  numero: number;
   valorRecebido: number;
-  dataRecebimento: string; // AAAA-MM-DD (entrada de recurso)
+  dataRecebimento: string;
 };
 
 function formatCurrency(value: number) {
@@ -63,8 +91,8 @@ function formatCurrency(value: number) {
 function formatDate(dateString: string): string {
   if (!dateString) return '-';
   try {
-    const date = new Date(dateString + 'T00:00:00'); // Adiciona hora para evitar problemas de timezone
-    if (isNaN(date.getTime())) return dateString; // Se não for uma data válida, retorna o original
+    const date = new Date(dateString + 'T00:00:00');
+    if (isNaN(date.getTime())) return dateString;
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
@@ -83,16 +111,70 @@ function safeNumber(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toPositiveInt(value: number | null | undefined, fallback = 1): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.trunc(parsed));
+}
+
+function toMoneyValue(value: number | null | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Number(parsed.toFixed(2));
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof HttpError) return error.message;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
+
+function isPersistedId(id: string | null | undefined): id is string {
+  return typeof id === 'string' && /^\d+$/.test(id);
+}
+
+function parsePersistedId(id: string | null | undefined): number | null {
+  if (!isPersistedId(id)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(id, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function getLancamento(sub: Subitem, parcelaId: ID): Lancamento {
-  return sub.lancamentos[parcelaId] ?? { valor: 0, dataPag: '' };
+  return sub.lancamentos[parcelaId] ?? { valor: 0, dataPag: '', expenseId: undefined };
+}
+
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let page = 0;
+
+  for (let i = 0; i < MAX_PAGE_REQUESTS; i += 1) {
+    const response = await fetchPage({ page, size: PAGE_SIZE });
+    allItems.push(...response.content);
+    if (response.last) break;
+    page += 1;
+  }
+
+  return allItems;
 }
 
 export default function PagamentosPlanilhaPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
+  const projectId = useMemo(() => Number.parseInt(contratoId, 10), [contratoId]);
 
-  const [parcelas, setParcelas] = useState<Parcela[]>(parcelasMock);
-  const [rubricas, setRubricas] = useState<Rubrica[]>(rubricasMock);
+  const [parcelas, setParcelas] = useState<Parcela[]>([]);
+  const [rubricas, setRubricas] = useState<Rubrica[]>([]);
+  const [backendExpenses, setBackendExpenses] = useState<ExpenseResponseDTO[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPersisting, setIsPersisting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   // UI: adicionar/editar parcela
   const [isAddingParcela, setIsAddingParcela] = useState(false);
@@ -110,6 +192,182 @@ export default function PagamentosPlanilhaPage() {
 
   // UI: modo de edição global dos subitens
   const [isEditingSubitens, setIsEditingSubitens] = useState(false);
+
+  const showSavedMessage = (message: string) => {
+    setSavedMessage(message);
+    setTimeout(() => setSavedMessage(null), 2500);
+  };
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    setActionError(null);
+
+    if (!Number.isFinite(projectId)) {
+      setParcelas([]);
+      setRubricas([]);
+      setBackendExpenses([]);
+      setLoadError('ID do contrato inválido para carregar pagamentos.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const [categories, items, goals, incomes, expenses] = await Promise.all([
+        fetchAllPages<BudgetCategoryResponseDTO>((query) =>
+          listBudgetCategories({ ...query, projectId })
+        ),
+        fetchAllPages<BudgetItemResponseDTO>((query) =>
+          listBudgetItems({ ...query, projectId })
+        ),
+        fetchAllPages<GoalResponseDTO>((query) => listGoals({ ...query, projectId })),
+        fetchAllPages<IncomeResponseDTO>((query) => listIncomes({ ...query, projectId })),
+        fetchAllPages<ExpenseResponseDTO>((query) => listExpenses({ ...query, projectId })),
+      ]);
+
+      const projectCategories = categories.filter((category) => category.projectId === projectId);
+      const categoryIds = new Set(projectCategories.map((category) => category.id));
+
+      const goalsMap = new Map<number, string>();
+      for (const goal of goals) {
+        if (goal.projectId !== projectId) continue;
+        goalsMap.set(goal.id, `Meta ${goal.numero} - ${goal.titulo}`);
+      }
+
+      const parcelasMapped = incomes
+        .slice()
+        .sort((a, b) => a.numero - b.numero || a.id - b.id)
+        .map<Parcela>((income) => ({
+          id: String(income.id),
+          numero: income.numero,
+          valorRecebido: toMoneyValue(income.amount),
+          dataRecebimento: income.receivedAt || '',
+        }));
+      const parcelasSet = new Set(parcelasMapped.map((parcela) => parcela.id));
+
+      const itemsByCategory = new Map<number, ItemRubrica[]>();
+      const itemById = new Map<number, ItemRubrica>();
+
+      for (const item of items) {
+        if (!categoryIds.has(item.categoryId)) continue;
+
+        const quantidade = toPositiveInt(item.quantity, 1);
+        const meses = toPositiveInt(item.months, 1);
+        const fator = quantidade * meses || 1;
+        const valorUnitario = toMoneyValue(
+          item.unitCost ?? (item.plannedAmount != null ? item.plannedAmount / fator : 0)
+        );
+
+        const mappedItem: ItemRubrica = {
+          id: String(item.id),
+          categoryId: item.categoryId,
+          codigo: undefined,
+          descricao: item.description,
+          quantidade,
+          meses,
+          valorUnitario,
+          meta: item.goalId ? goalsMap.get(item.goalId) : undefined,
+          goalId: item.goalId ?? undefined,
+          subitens: [],
+        };
+
+        if (!itemsByCategory.has(item.categoryId)) {
+          itemsByCategory.set(item.categoryId, []);
+        }
+        itemsByCategory.get(item.categoryId)!.push(mappedItem);
+        itemById.set(item.id, mappedItem);
+      }
+
+      const subitemsByItem = new Map<number, Map<string, Subitem>>();
+      for (const expense of expenses
+        .slice()
+        .sort((a, b) => {
+          const aDate = a.createdAt ?? '';
+          const bDate = b.createdAt ?? '';
+          return aDate.localeCompare(bDate) || a.id - b.id;
+        })) {
+        const item = itemById.get(expense.budgetItemId);
+        if (!item) continue;
+
+        const parcelaId = String(expense.incomeId);
+        if (!parcelasSet.has(parcelaId)) continue;
+
+        const description = expense.description?.trim() || `Lançamento ${expense.id}`;
+        const baseKey = `${expense.personId ?? '0'}|${expense.organizationId ?? '0'}|${description.toLowerCase()}`;
+
+        if (!subitemsByItem.has(expense.budgetItemId)) {
+          subitemsByItem.set(expense.budgetItemId, new Map());
+        }
+        const subitemMap = subitemsByItem.get(expense.budgetItemId)!;
+
+        let key = baseKey;
+        if (subitemMap.has(key) && subitemMap.get(key)!.lancamentos[parcelaId]) {
+          key = `${baseKey}|${expense.id}`;
+        }
+
+        let subitem = subitemMap.get(key);
+        if (!subitem) {
+          subitem = {
+            id: `sub-${expense.budgetItemId}-${subitemMap.size + 1}`,
+            empresaRh: description,
+            lancamentos: {},
+          };
+          subitemMap.set(key, subitem);
+          item.subitens = [...(item.subitens ?? []), subitem];
+        }
+
+        subitem.lancamentos[parcelaId] = {
+          valor: toMoneyValue(expense.amount),
+          dataPag: expense.expenseDate || '',
+          expenseId: String(expense.id),
+        };
+      }
+
+      for (const item of itemById.values()) {
+        item.subitens = (item.subitens ?? []).sort((a, b) =>
+          a.empresaRh.localeCompare(b.empresaRh, 'pt-BR')
+        );
+      }
+
+      const mappedRubricas = projectCategories
+        .slice()
+        .sort((a, b) => {
+          const codeA = a.code || '';
+          const codeB = b.code || '';
+          return codeA.localeCompare(codeB, 'pt-BR') || a.id - b.id;
+        })
+        .map<Rubrica>((category) => ({
+          id: String(category.id),
+          codigo: category.code || `CAT-${category.id}`,
+          nome: category.name,
+          expanded: true,
+          itens: (itemsByCategory.get(category.id) ?? []).sort((a, b) =>
+            a.descricao.localeCompare(b.descricao, 'pt-BR')
+          ),
+        }));
+
+      setParcelas(parcelasMapped);
+      setRubricas((previous) => {
+        const previousExpanded = new Map(previous.map((rubrica) => [rubrica.id, rubrica.expanded]));
+        return mappedRubricas.map((rubrica) => ({
+          ...rubrica,
+          expanded: previousExpanded.get(rubrica.id) ?? rubrica.expanded,
+        }));
+      });
+      setBackendExpenses(expenses);
+    } catch (error) {
+      setParcelas([]);
+      setRubricas([]);
+      setBackendExpenses([]);
+      setLoadError(toErrorMessage(error, 'Não foi possível carregar a aba de pagamentos.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // Helpers de cálculo
   const calcularTotalOrcadoItem = (item: ItemRubrica) =>
@@ -176,22 +434,34 @@ export default function PagamentosPlanilhaPage() {
   };
 
   // Ações: Parcelas
-  const handleAddParcela = () => {
+  const handleAddParcela = async () => {
+    if (!Number.isFinite(projectId)) {
+      setActionError('ID do contrato inválido para criar parcela.');
+      return;
+    }
     if (!newParcela.dataRecebimento) return;
     if (!newParcela.valorRecebido || newParcela.valorRecebido <= 0) return;
 
     const nextNumero = (Math.max(0, ...parcelas.map(p => p.numero)) || 0) + 1;
 
-    const p: Parcela = {
-      id: `parc-${Date.now()}`,
-      numero: nextNumero,
-      valorRecebido: safeNumber(newParcela.valorRecebido),
-      dataRecebimento: newParcela.dataRecebimento,
-    };
-
-    setParcelas(prev => [...prev, p]);
-    setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
-    setIsAddingParcela(false);
+    setIsPersisting(true);
+    setActionError(null);
+    try {
+      await createIncome({
+        projectId,
+        numero: nextNumero,
+        amount: toMoneyValue(newParcela.valorRecebido),
+        receivedAt: newParcela.dataRecebimento,
+      });
+      setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
+      setIsAddingParcela(false);
+      await loadData();
+      showSavedMessage('Parcela criada com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível criar a parcela.'));
+    } finally {
+      setIsPersisting(false);
+    }
   };
 
   const handleStartEditParcela = (p: Parcela) => {
@@ -204,48 +474,63 @@ export default function PagamentosPlanilhaPage() {
     setEditParcelaForm(null);
   };
 
-  const handleSaveEditParcela = () => {
+  const handleSaveEditParcela = async () => {
     if (!editParcelaForm) return;
     if (!editParcelaForm.dataRecebimento) return;
     if (!editParcelaForm.valorRecebido || editParcelaForm.valorRecebido <= 0) return;
-
-    setParcelas(prev =>
-      prev.map(p => (p.id === editingParcelaId ? { ...p, ...editParcelaForm } : p))
-    );
-
-    setEditingParcelaId(null);
-    setEditParcelaForm(null);
-  };
-
-  const handleRemoveParcela = (parcelaId: ID) => {
-    const alvo = parcelas.find(p => p.id === parcelaId);
-    if (!alvo) return;
-
-    if (!confirm(`Remover a parcela ${ordinal(alvo.numero)}? Isso remove as colunas correspondentes da planilha.`)) {
+    if (!isPersistedId(editParcelaForm.id)) {
+      setActionError('Parcela inválida para atualização.');
       return;
     }
 
-    // 1) Remove a parcela
-    const novasParcelas = parcelas
-      .filter(p => p.id !== parcelaId)
-      .sort((a, b) => a.numero - b.numero)
-      .map((p, idx) => ({ ...p, numero: idx + 1 })); // reindex para manter 1º,2º...
+    setIsPersisting(true);
+    setActionError(null);
+    try {
+      await updateIncome(Number.parseInt(editParcelaForm.id, 10), {
+        numero: editParcelaForm.numero,
+        amount: toMoneyValue(editParcelaForm.valorRecebido),
+        receivedAt: editParcelaForm.dataRecebimento,
+      });
+      setEditingParcelaId(null);
+      setEditParcelaForm(null);
+      await loadData();
+      showSavedMessage('Parcela atualizada com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível atualizar a parcela.'));
+    } finally {
+      setIsPersisting(false);
+    }
+  };
 
-    setParcelas(novasParcelas);
+  const handleRemoveParcela = async (parcelaId: ID) => {
+    const alvo = parcelas.find(p => p.id === parcelaId);
+    if (!alvo) return;
+    if (!isPersistedId(parcelaId)) {
+      setActionError('Parcela inválida para remoção.');
+      return;
+    }
 
-    // 2) Remove os lançamentos dessa parcela dos subitens
-    setRubricas(prev =>
-      prev.map(r => ({
-        ...r,
-        itens: r.itens.map(it => ({
-          ...it,
-          subitens: (it.subitens || []).map(s => {
-            const { [parcelaId]: _removed, ...rest } = s.lancamentos;
-            return { ...s, lancamentos: rest };
-          }),
-        })),
-      }))
-    );
+    if (!confirm(`Remover a parcela ${ordinal(alvo.numero)}?`)) {
+      return;
+    }
+
+    setIsPersisting(true);
+    setActionError(null);
+    try {
+      const incomeId = Number.parseInt(parcelaId, 10);
+      const relatedExpenseIds = backendExpenses
+        .filter((expense) => expense.incomeId === incomeId)
+        .map((expense) => expense.id);
+
+      await Promise.all(relatedExpenseIds.map((id) => deleteExpense(id)));
+      await deleteIncome(incomeId);
+      await loadData();
+      showSavedMessage('Parcela removida com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível remover a parcela.'));
+    } finally {
+      setIsPersisting(false);
+    }
   };
 
   // Ações: Subitens
@@ -318,6 +603,7 @@ export default function PagamentosPlanilhaPage() {
               const prox: Lancamento = {
                 valor: Math.max(0, safeNumber(patch.valor ?? atual.valor)),
                 dataPag: (patch.dataPag ?? atual.dataPag) || '',
+                expenseId: atual.expenseId,
               };
 
               return {
@@ -334,8 +620,204 @@ export default function PagamentosPlanilhaPage() {
     );
   };
 
+  const handleSaveSubitens = async () => {
+    if (!Number.isFinite(projectId)) {
+      setActionError('ID do contrato inválido para salvar pagamentos.');
+      return;
+    }
+
+    const currentExpenseById = new Map(backendExpenses.map((expense) => [expense.id, expense]));
+    const keepExpenseIds = new Set<number>();
+    const createPayloads: ExpenseRequestDTO[] = [];
+    const updatePayloads: Array<{ id: number; payload: ExpenseUpdateDTO }> = [];
+    const validationErrors: string[] = [];
+
+    for (const rubrica of rubricas) {
+      for (const item of rubrica.itens) {
+        const budgetItemId = parsePersistedId(item.id);
+
+        if (!budgetItemId) {
+          validationErrors.push(`Item "${item.descricao}" inválido para persistência.`);
+          continue;
+        }
+
+        const categoryId = item.categoryId;
+        if (!Number.isFinite(categoryId)) {
+          validationErrors.push(`Categoria inválida para o item "${item.descricao}".`);
+          continue;
+        }
+
+        for (const subitem of item.subitens ?? []) {
+          const description = subitem.empresaRh.trim();
+
+          for (const parcela of parcelas) {
+            const incomeId = parsePersistedId(parcela.id);
+            if (!incomeId) {
+              validationErrors.push(`Parcela ${ordinal(parcela.numero)} inválida para persistência.`);
+              continue;
+            }
+
+            const cell = getLancamento(subitem, parcela.id);
+            const amount = toMoneyValue(cell.valor);
+            const expenseDate = (cell.dataPag || '').trim();
+            const hasAmount = amount > 0;
+            const hasDate = expenseDate.length > 0;
+            const expenseId = parsePersistedId(cell.expenseId);
+
+            if (!hasAmount && !hasDate) {
+              continue;
+            }
+
+            if (!hasAmount || !hasDate) {
+              validationErrors.push(
+                `Preencha valor e data no subitem "${description || item.descricao}" da parcela ${ordinal(parcela.numero)}.`
+              );
+              continue;
+            }
+
+            if (!description) {
+              validationErrors.push(
+                `Informe o nome do subitem no item "${item.descricao}" para a parcela ${ordinal(parcela.numero)}.`
+              );
+              continue;
+            }
+
+            if (expenseId) {
+              keepExpenseIds.add(expenseId);
+              const currentExpense = currentExpenseById.get(expenseId);
+
+              if (!currentExpense) {
+                createPayloads.push({
+                  budgetItemId,
+                  categoryId,
+                  incomeId,
+                  expenseDate,
+                  quantity: 1,
+                  amount,
+                  description,
+                });
+                continue;
+              }
+
+              const payload: ExpenseUpdateDTO = {
+                budgetItemId,
+                categoryId,
+                incomeId,
+                expenseDate,
+                quantity: toPositiveInt(currentExpense.quantity, 1),
+                amount,
+                personId: currentExpense.personId ?? undefined,
+                organizationId: currentExpense.organizationId ?? undefined,
+                description,
+                invoiceNumber: currentExpense.invoiceNumber ?? undefined,
+                invoiceDate: currentExpense.invoiceDate ?? undefined,
+                documentId: currentExpense.documentId ?? undefined,
+              };
+
+              const shouldUpdate =
+                currentExpense.budgetItemId !== payload.budgetItemId ||
+                currentExpense.categoryId !== payload.categoryId ||
+                currentExpense.incomeId !== payload.incomeId ||
+                (currentExpense.expenseDate || '') !== payload.expenseDate ||
+                toPositiveInt(currentExpense.quantity, 1) !== payload.quantity ||
+                toMoneyValue(currentExpense.amount) !== payload.amount ||
+                (currentExpense.description || '') !== (payload.description || '');
+
+              if (shouldUpdate) {
+                updatePayloads.push({ id: expenseId, payload });
+              }
+            } else {
+              createPayloads.push({
+                budgetItemId,
+                categoryId,
+                incomeId,
+                expenseDate,
+                quantity: 1,
+                amount,
+                description,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      setActionError(validationErrors[0]);
+      return;
+    }
+
+    const deleteIds = backendExpenses
+      .map((expense) => expense.id)
+      .filter((expenseId) => !keepExpenseIds.has(expenseId));
+
+    const totalOperations = createPayloads.length + updatePayloads.length + deleteIds.length;
+    if (totalOperations === 0) {
+      setIsEditingSubitens(false);
+      await loadData();
+      showSavedMessage('Nenhuma alteração pendente para salvar.');
+      return;
+    }
+
+    setIsPersisting(true);
+    setActionError(null);
+
+    try {
+      for (const payload of createPayloads) {
+        await createExpense(payload);
+      }
+
+      for (const { id, payload } of updatePayloads) {
+        await updateExpense(id, payload);
+      }
+
+      for (const id of deleteIds) {
+        await deleteExpense(id);
+      }
+
+      await loadData();
+      setIsEditingSubitens(false);
+      showSavedMessage('Pagamentos salvos com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível salvar os pagamentos.'));
+    } finally {
+      setIsPersisting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {isLoading && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Carregando pagamentos...
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-800">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="mt-2 inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {actionError}
+        </div>
+      )}
+
+      {savedMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {savedMessage}
+        </div>
+      )}
+
       {/* Resumo topo */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="font-medium text-gray-900 mb-3">Resumo Financeiro</h4>
@@ -369,6 +851,7 @@ export default function PagamentosPlanilhaPage() {
               {isEditingSubitens && (
                 <button
                   onClick={() => setIsEditingSubitens(false)}
+                  disabled={isPersisting}
                   className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
                 >
                   <X className="w-4 h-4" />
@@ -376,7 +859,15 @@ export default function PagamentosPlanilhaPage() {
                 </button>
               )}
               <button
-                onClick={() => setIsEditingSubitens(!isEditingSubitens)}
+                onClick={() => {
+                  if (isEditingSubitens) {
+                    void handleSaveSubitens();
+                    return;
+                  }
+                  setActionError(null);
+                  setIsEditingSubitens(true);
+                }}
+                disabled={isPersisting || isLoading || Boolean(loadError)}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
                   ${isEditingSubitens
                     ? 'bg-[#003319] text-white'
@@ -397,6 +888,7 @@ export default function PagamentosPlanilhaPage() {
               </button>
               <button
                 onClick={() => setIsAddingParcela(true)}
+                disabled={isPersisting || isLoading || Boolean(loadError)}
                 className="flex items-center gap-2 px-4 py-2 bg-[#004225] text-white text-sm font-medium rounded-lg hover:bg-[#003319] transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -416,6 +908,7 @@ export default function PagamentosPlanilhaPage() {
                 <MoneyInput
                   valueCents={Math.round(newParcela.valorRecebido * 100)}
                   onValueChange={(cents) => setNewParcela(v => ({ ...v, valorRecebido: cents / 100 }))}
+                  disabled={isPersisting}
                   className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                 />
               </div>
@@ -428,6 +921,7 @@ export default function PagamentosPlanilhaPage() {
                   type="date"
                   value={newParcela.dataRecebimento}
                   onChange={(e) => setNewParcela(v => ({ ...v, dataRecebimento: e.target.value }))}
+                  disabled={isPersisting}
                   className="w-full px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                 />
               </div>
@@ -436,7 +930,7 @@ export default function PagamentosPlanilhaPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleAddParcela}
-                disabled={!newParcela.dataRecebimento || newParcela.valorRecebido <= 0}
+                disabled={isPersisting || !newParcela.dataRecebimento || newParcela.valorRecebido <= 0}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4" />
@@ -447,6 +941,7 @@ export default function PagamentosPlanilhaPage() {
                   setIsAddingParcela(false);
                   setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
                 }}
+                disabled={isPersisting}
                 className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -496,6 +991,7 @@ export default function PagamentosPlanilhaPage() {
                                 <MoneyInput
                                   valueCents={Math.round(editParcelaForm.valorRecebido * 100)}
                                   onValueChange={(cents) => setEditParcelaForm(v => (v ? { ...v, valorRecebido: cents / 100 } : v))}
+                                  disabled={isPersisting}
                                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                                 />
                               </div>
@@ -506,6 +1002,7 @@ export default function PagamentosPlanilhaPage() {
                                   type="date"
                                   value={editParcelaForm.dataRecebimento}
                                   onChange={(e) => setEditParcelaForm(v => (v ? { ...v, dataRecebimento: e.target.value } : v))}
+                                  disabled={isPersisting}
                                   className="px-2 py-1 border border-gray-300 rounded text-sm"
                                 />
                               </div>
@@ -518,6 +1015,7 @@ export default function PagamentosPlanilhaPage() {
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   onClick={handleSaveEditParcela}
+                                  disabled={isPersisting}
                                   className="p-1 text-green-600 hover:bg-green-50 rounded"
                                   title="Salvar"
                                 >
@@ -525,6 +1023,7 @@ export default function PagamentosPlanilhaPage() {
                                 </button>
                                 <button
                                   onClick={handleCancelEditParcela}
+                                  disabled={isPersisting}
                                   className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                                   title="Cancelar"
                                 >
@@ -546,6 +1045,7 @@ export default function PagamentosPlanilhaPage() {
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   onClick={() => handleStartEditParcela(p)}
+                                  disabled={isPersisting}
                                   className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                                   title="Editar"
                                 >
@@ -553,6 +1053,7 @@ export default function PagamentosPlanilhaPage() {
                                 </button>
                                 <button
                                   onClick={() => handleRemoveParcela(p.id)}
+                                  disabled={isPersisting}
                                   className="p-1 text-red-600 hover:bg-red-50 rounded"
                                   title="Remover"
                                 >
@@ -693,9 +1194,9 @@ export default function PagamentosPlanilhaPage() {
                                     {addingToItemId !== it.id ? (
                                       <button
                                         onClick={() => setAddingToItemId(it.id)}
-                                        disabled={!isEditingSubitens}
+                                        disabled={!isEditingSubitens || isPersisting}
                                         className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm ${
-                                          isEditingSubitens
+                                          isEditingSubitens && !isPersisting
                                             ? 'text-[#004225] hover:bg-emerald-50'
                                             : 'text-gray-400 cursor-not-allowed bg-gray-100'
                                         }`}
@@ -709,12 +1210,13 @@ export default function PagamentosPlanilhaPage() {
                                           type="text"
                                           value={newSubitemEmpresa}
                                           onChange={(e) => setNewSubitemEmpresa(e.target.value)}
+                                          disabled={isPersisting}
                                           className="w-full px-2 py-1 border border-emerald-300 rounded text-sm"
                                           autoFocus
                                         />
                                         <button
                                           onClick={() => handleAddSubitem(it.id)}
-                                          disabled={!newSubitemEmpresa.trim()}
+                                          disabled={isPersisting || !newSubitemEmpresa.trim()}
                                           className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
                                           title="Adicionar"
                                         >
@@ -725,6 +1227,7 @@ export default function PagamentosPlanilhaPage() {
                                             setAddingToItemId(null);
                                             setNewSubitemEmpresa('');
                                           }}
+                                          disabled={isPersisting}
                                           className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                                           title="Cancelar"
                                         >
@@ -783,14 +1286,14 @@ export default function PagamentosPlanilhaPage() {
                                               type="text"
                                               value={sub.empresaRh}
                                               onChange={(e) => updateSubitemEmpresa(it.id, sub.id, e.target.value)}
-                                              disabled={!isEditingSubitens}
+                                              disabled={!isEditingSubitens || isPersisting}
                                               className={`w-full px-2 py-1 border border-gray-300 rounded text-sm ${
-                                                isEditingSubitens
+                                                isEditingSubitens && !isPersisting
                                                   ? 'bg-white'
                                                   : 'bg-gray-50 cursor-not-allowed'
                                               }`}
                                             />
-                                            {isEditingSubitens && (
+                                            {isEditingSubitens && !isPersisting && (
                                               <button
                                                 onClick={() => handleRemoveSubitem(it.id, sub.id)}
                                                 className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -820,6 +1323,7 @@ export default function PagamentosPlanilhaPage() {
                                                       onValueChange={(cents) =>
                                                         updateLancamentoCampo(it.id, sub.id, p.id, { valor: cents / 100 })
                                                       }
+                                                      disabled={isPersisting}
                                                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center bg-white"
                                                     />
                                                   </div>
@@ -838,6 +1342,7 @@ export default function PagamentosPlanilhaPage() {
                                                       onChange={(e) =>
                                                         updateLancamentoCampo(it.id, sub.id, p.id, { dataPag: e.target.value })
                                                       }
+                                                      disabled={isPersisting}
                                                       className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                                                     />
                                                   </div>
@@ -871,3 +1376,4 @@ export default function PagamentosPlanilhaPage() {
     </div>
   );
 }
+

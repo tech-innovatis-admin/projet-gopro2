@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToJava(req, `/api/peoples/${id}`);
+  return proxyToJava(req, `/peoples/${id}`);
 }
 
 export async function PUT(
@@ -14,7 +14,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToJava(req, `/api/peoples/${id}`, { method: 'PUT' });
+  return proxyToJava(req, `/peoples/${id}`, { method: 'PUT' });
 }
 
 export async function DELETE(
@@ -22,5 +22,5 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return proxyToJava(req, `/api/peoples/${id}`, { method: 'DELETE' });
+  return proxyToJava(req, `/peoples/${id}`, { method: 'DELETE' });
 }

@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
 import { ResizableTable } from "@/components/ui/resizable-table";
+import {
+  deleteProject,
+  listDocumentsByOwner,
+  listPartners,
+  listProjects,
+  updateProject,
+} from "@/src/lib/api/endpoints";
+import {
+  HttpError,
+  type DocumentResponseDTO,
+  type ProjectResponseDTO,
+} from "@/src/lib/api/types";
 import {
   ChevronRight,
   Home,
@@ -16,10 +28,10 @@ import {
   FolderOpen,
   ChevronDown,
   ArrowUpDown,
-  Eye,
   Edit,
-  Download,
-  MoreHorizontal,
+  Loader2,
+  Rocket,
+  Trash2,
   FileCheck,
 } from "lucide-react";
 
@@ -54,63 +66,114 @@ type SortConfig = {
   direction: "asc" | "desc";
 };
 
-// Mock de dados
-const mockPreProjetos: PreProjeto[] = [
-  {
-    id: "1",
-    titulo: "Sistema de Gestão Acadêmica Integrado",
-    govIf: "IF",
-    tipo: "PROJETO",
-    parceiro: "Fapto",
-    localidade: "Campina Grande - PB",
-    valorTotal: 850000,
-    dataCriacao: "2025-12-01",
-    documentos: {
-      tr: "tr_sistema_gestao.pdf",
-      planoTrabalho: "plano_trabalho_v1.pdf",
-    },
-  },
-  {
-    id: "2",
-    titulo: "Licença Software GoPro Enterprise Premium",
-    govIf: "Gov",
-    tipo: "PRODUTO",
-    parceiro: "Fadex",
-    localidade: "Estado do Rio de Janeiro",
-    valorTotal: 320000,
-    dataCriacao: "2025-12-03",
-    documentos: {
-      contrato: "contrato_proposta.pdf",
-    },
-  },
-  {
-    id: "3",
-    titulo: "Portal de Transparência e Controle Social",
-    govIf: "IF",
-    tipo: "PROJETO",
-    parceiro: "IFMA",
-    localidade: "São Luís - MA",
-    valorTotal: 1200000,
-    dataCriacao: "2025-12-05",
-    documentos: {
-      tr: "termo_referencia_portal.pdf",
-      planoTrabalho: "plano_trabalho_portal.pdf",
-      outro: "especificacoes_tecnicas.pdf",
-    },
-  },
-  {
-    id: "4",
-    titulo: "Modernização Infraestrutura TI",
-    govIf: "Gov",
-    tipo: "PROJETO",
-    parceiro: "Fundação Araucária",
-    localidade: "Curitiba - PR",
-    valorTotal: 2500000,
-    dataCriacao: "2025-12-07",
-  },
-];
+const NO_INFO_LABEL = "Nao informado";
+const PAGE_SIZE = 20;
 
-const parceiros = ["Fapto", "Fadex", "IFMA", "Fundação Araucária", "Fundação UFRGS", "Fundação XYZ"];
+function normalizeMoneyValue(value: number | string | null | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function normalizeLocation(
+  city: string | null,
+  state: string | null,
+  executionLocation: string | null
+): string {
+  if (city && state) {
+    return `${city} - ${state}`;
+  }
+  if (city) {
+    return city;
+  }
+  if (state) {
+    return state;
+  }
+  if (executionLocation && executionLocation.trim()) {
+    return executionLocation.trim();
+  }
+  return NO_INFO_LABEL;
+}
+
+function mapProjectToPreProjeto(
+  project: ProjectResponseDTO,
+  partnersById: Record<number, string>,
+  documentos?: PreProjeto["documentos"]
+): PreProjeto {
+  return {
+    id: String(project.id),
+    titulo: project.name,
+    govIf: project.projectGovIf === "GOV" ? "Gov" : "IF",
+    tipo: project.projectType === "PRODUTO" ? "PRODUTO" : "PROJETO",
+    parceiro: project.primaryPartnerId
+      ? (partnersById[project.primaryPartnerId] ?? NO_INFO_LABEL)
+      : NO_INFO_LABEL,
+    localidade: normalizeLocation(project.city, project.state, project.executionLocation),
+    valorTotal: normalizeMoneyValue(project.contractValue),
+    dataCriacao:
+      project.createdAt ??
+      project.openingDate ??
+      project.startDate ??
+      new Date().toISOString(),
+    documentos,
+  };
+}
+
+function mapDocumentsToPreProjeto(
+  documents: DocumentResponseDTO[]
+): PreProjeto["documentos"] | undefined {
+  if (!documents || documents.length === 0) {
+    return undefined;
+  }
+
+  const mapped: NonNullable<PreProjeto["documentos"]> = {};
+
+  documents.forEach((document) => {
+    const category = (document.category ?? "").trim().toUpperCase();
+    const fileLabel = document.originalName || document.id;
+
+    if (category === "CONTRATO" && !mapped.contrato) {
+      mapped.contrato = fileLabel;
+      return;
+    }
+
+    if (category === "TERMO_REFERENCIA" && !mapped.tr) {
+      mapped.tr = fileLabel;
+      return;
+    }
+
+    if (category === "PLANO_TRABALHO" && !mapped.planoTrabalho) {
+      mapped.planoTrabalho = fileLabel;
+      return;
+    }
+
+    if (!mapped.outro) {
+      mapped.outro = fileLabel;
+    }
+  });
+
+  return Object.keys(mapped).length > 0 ? mapped : undefined;
+}
+
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof HttpError && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
+function buildPartnerOptions(items: PreProjeto[]): string[] {
+  return [...new Set(items.map((item) => item.parceiro).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
 
 export default function PreProjetosPage() {
   const [filters, setFilters] = useState<Filters>({
@@ -123,44 +186,156 @@ export default function PreProjetosPage() {
     direction: "desc",
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [processingAction, setProcessingAction] = useState<{
+    id: string;
+    type: "delete" | "promote";
+  } | null>(null);
   const [preProjetos, setPreProjetos] = useState<PreProjeto[]>([]);
+  const [availablePartners, setAvailablePartners] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Simulação de fetch
-  useEffect(() => {
+  const loadPreProjetos = useCallback(async () => {
     setLoading(true);
-    const timeout = setTimeout(() => {
-      setPreProjetos(mockPreProjetos);
+    setError(null);
+    try {
+      const [firstProjectsPage, firstPartnersPage] = await Promise.all([
+        listProjects({ page: 0, size: PAGE_SIZE }),
+        listPartners({ page: 0, size: PAGE_SIZE }),
+      ]);
+
+      const projectPageRequests = Array.from(
+        { length: Math.max(0, firstProjectsPage.totalPages - 1) },
+        (_, index) => listProjects({ page: index + 1, size: PAGE_SIZE })
+      );
+      const partnerPageRequests = Array.from(
+        { length: Math.max(0, firstPartnersPage.totalPages - 1) },
+        (_, index) => listPartners({ page: index + 1, size: PAGE_SIZE })
+      );
+
+      const [otherProjectsPages, otherPartnersPages] = await Promise.all([
+        Promise.all(projectPageRequests),
+        Promise.all(partnerPageRequests),
+      ]);
+
+      const allProjects = [firstProjectsPage, ...otherProjectsPages].flatMap(
+        (pageResponse) => pageResponse.content
+      );
+      const allPartners = [firstPartnersPage, ...otherPartnersPages].flatMap(
+        (pageResponse) => pageResponse.content
+      );
+
+      const partnersById: Record<number, string> = {};
+      allPartners.forEach((partner) => {
+        partnersById[partner.id] = partner.name;
+      });
+
+      const preProjectEntities = allProjects.filter(
+        (project) => project.projectStatus === "PRE_PROJETO"
+      );
+
+      const documentsByProjectId: Record<number, PreProjeto["documentos"]> = {};
+      const documentsLookupResults = await Promise.allSettled(
+        preProjectEntities.map(async (project) => {
+          const documents = await listDocumentsByOwner({
+            ownerType: "PROJECT",
+            ownerId: project.id,
+          });
+          return {
+            projectId: project.id,
+            documents: mapDocumentsToPreProjeto(documents),
+          };
+        })
+      );
+
+      documentsLookupResults.forEach((result) => {
+        if (result.status !== "fulfilled") {
+          return;
+        }
+
+        if (result.value.documents) {
+          documentsByProjectId[result.value.projectId] = result.value.documents;
+        }
+      });
+
+      const mappedPreProjetos = preProjectEntities.map((project) =>
+        mapProjectToPreProjeto(project, partnersById, documentsByProjectId[project.id])
+      );
+
+      setPreProjetos(mappedPreProjetos);
+      setAvailablePartners(buildPartnerOptions(mappedPreProjetos));
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof HttpError
+          ? fetchError.message
+          : "Nao foi possivel carregar os pre-contratos.";
+      setError(message);
+      setPreProjetos([]);
+      setAvailablePartners([]);
+    } finally {
       setLoading(false);
-    }, 300);
-    return () => clearTimeout(timeout);
+    }
   }, []);
 
-  // Listener para quando um pré-projeto for criado (via modal global)
   useEffect(() => {
-    const handlePreProjetoCriado = (event: CustomEvent) => {
+    void loadPreProjetos();
+  }, [loadPreProjetos]);
+
+  // Listener para quando um pre-projeto for criado (via modal global)
+  useEffect(() => {
+    const handlePreProjetoCriado = (
+      event: CustomEvent<{
+        id?: string;
+        titulo?: string;
+        govIf?: "IF" | "Gov";
+        tipo?: "PROJETO" | "PRODUTO";
+        parceiro?: string;
+        localidade?: string;
+        valorTotal?: number | string;
+        dataCriacao?: string;
+        documentos?: PreProjeto["documentos"];
+        uploadWarnings?: string[];
+      }>
+    ) => {
       const data = event.detail;
 
-      // Converter valorTotal de string formatada para número
+      // Converter valorTotal para numero
       const valorTotalNumero = typeof data.valorTotal === "string"
         ? parseFloat(data.valorTotal.replace(/\./g, "").replace(",", ".")) || 0
         : data.valorTotal || 0;
 
       const novoPreProjeto: PreProjeto = {
-        id: String(Date.now()),
-        titulo: data.titulo,
+        id: data.id ?? String(Date.now()),
+        titulo: data.titulo ?? "Sem titulo",
         govIf: data.govIf || "IF",
-        tipo: data.tipo,
-        parceiro: data.parceiro,
-        localidade: data.localidade,
+        tipo: data.tipo === "PRODUTO" ? "PRODUTO" : "PROJETO",
+        parceiro: data.parceiro || NO_INFO_LABEL,
+        localidade: data.localidade || NO_INFO_LABEL,
         valorTotal: valorTotalNumero,
-        dataCriacao: new Date().toISOString().split("T")[0],
+        dataCriacao: data.dataCriacao ?? new Date().toISOString(),
         documentos: data.documentos,
       };
 
       setPreProjetos((prev) => [novoPreProjeto, ...prev]);
+      setAvailablePartners((prev) =>
+        [...new Set([novoPreProjeto.parceiro, ...prev].filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b)
+        )
+      );
+      setPage(1);
+
+      if (data.uploadWarnings && data.uploadWarnings.length > 0) {
+        setActionError(
+          `Pre-contrato criado, mas ${data.uploadWarnings.length} documento(s) falharam no upload.`
+        );
+      } else {
+        setActionError(null);
+        setActionMessage("Pre-contrato criado com sucesso.");
+      }
     };
 
     window.addEventListener("pre-projeto-criado", handlePreProjetoCriado as EventListener);
@@ -169,7 +344,7 @@ export default function PreProjetosPage() {
     };
   }, []);
 
-  // Filtragem e ordenação
+  // Filtragem e ordenacao
   const filtered = useMemo(() => {
     let result = preProjetos
       .filter((p) => (filters.govIf === "TODOS" ? true : p.govIf === filters.govIf))
@@ -182,7 +357,7 @@ export default function PreProjetosPage() {
           : true
       );
 
-    // Ordenação
+    // Ordenacao
     if (sortConfig.key) {
       result = [...result].sort((a, b) => {
         const aVal = a[sortConfig.key!];
@@ -198,7 +373,7 @@ export default function PreProjetosPage() {
     return result;
   }, [preProjetos, filters, sortConfig]);
 
-  // Métricas
+  // M?tricas
   const counts = useMemo(() => {
     const total = preProjetos.length;
     const projetos = preProjetos.filter((p) => p.tipo === "PROJETO").length;
@@ -207,7 +382,7 @@ export default function PreProjetosPage() {
     return { total, projetos, produtos, valorTotal };
   }, [preProjetos]);
 
-  // Paginação
+  // Paginacao
   const paginatedData = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
@@ -235,6 +410,63 @@ export default function PreProjetosPage() {
   const hasActiveFilters =
     filters.govIf !== "TODOS" || filters.parceiro !== "" || filters.q !== "";
 
+  const removeItemFromState = useCallback((id: string) => {
+    setPreProjetos((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      setAvailablePartners(buildPartnerOptions(updated));
+      return updated;
+    });
+    setPage(1);
+  }, []);
+
+  const handlePromoteToPlanning = useCallback(
+    async (preProjeto: PreProjeto) => {
+      if (!window.confirm(`Deseja mover "${preProjeto.titulo}" para PLANEJAMENTO?`)) {
+        return;
+      }
+
+      setActionError(null);
+      setActionMessage(null);
+      setProcessingAction({ id: preProjeto.id, type: "promote" });
+
+      try {
+        await updateProject(preProjeto.id, { projectStatus: "PLANEJAMENTO" });
+        removeItemFromState(preProjeto.id);
+        setActionMessage("Pre-contrato movido para planejamento com sucesso.");
+      } catch (actionErr) {
+        setActionError(
+          extractErrorMessage(actionErr, "Nao foi possivel mover o pre-contrato para planejamento.")
+        );
+      } finally {
+        setProcessingAction(null);
+      }
+    },
+    [removeItemFromState]
+  );
+
+  const handleSoftDelete = useCallback(
+    async (preProjeto: PreProjeto) => {
+      if (!window.confirm(`Deseja excluir "${preProjeto.titulo}"?`)) {
+        return;
+      }
+
+      setActionError(null);
+      setActionMessage(null);
+      setProcessingAction({ id: preProjeto.id, type: "delete" });
+
+      try {
+        await deleteProject(preProjeto.id);
+        removeItemFromState(preProjeto.id);
+        setActionMessage("Pre-contrato excluido com sucesso.");
+      } catch (actionErr) {
+        setActionError(extractErrorMessage(actionErr, "Nao foi possivel excluir o pre-contrato."));
+      } finally {
+        setProcessingAction(null);
+      }
+    },
+    [removeItemFromState]
+  );
+
   const handleOpenModal = () => {
     window.dispatchEvent(
       new CustomEvent("open-modal", { detail: { modalName: "novo-pre-projeto" } })
@@ -257,15 +489,15 @@ export default function PreProjetosPage() {
             Contratos
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-900 font-medium">Pré-Contratos</span>
+          <span className="text-gray-900 font-medium">Pre-Contratos</span>
         </nav>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pré-Contratos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Pre-Contratos</h1>
             <p className="text-sm text-gray-500">
-              Gerenciamento de propostas antes da formalização
+              Gerenciamento de propostas antes da formalizacao
             </p>
           </div>
           <button
@@ -273,13 +505,13 @@ export default function PreProjetosPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Novo Pré-Contrato
+            Novo Pre-Contrato
           </button>
         </div>
 
-        {/* Cards de Métricas */}
+        {/* Cards de M?tricas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <MetricCard title="Total de Pré-Projetos" value={counts.total} icon={FolderOpen} color="#004225" />
+          <MetricCard title="Total de Pre-Projetos" value={counts.total} icon={FolderOpen} color="#004225" />
           <MetricCard title="Projetos" value={counts.projetos} icon={FileText} color="#0B7A4B" />
           <MetricCard title="Produtos" value={counts.produtos} icon={FileCheck} color="#00B894" />
           <MetricCard
@@ -299,7 +531,7 @@ export default function PreProjetosPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por título, parceiro ou localidade..."
+                placeholder="Buscar por titulo, parceiro ou localidade..."
                 className="w-full h-10 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-transparent"
                 value={filters.q}
                 onChange={(e) => {
@@ -329,7 +561,7 @@ export default function PreProjetosPage() {
               ))}
             </div>
 
-            {/* Botão de filtros */}
+            {/* Bot?o de filtros */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
@@ -365,7 +597,7 @@ export default function PreProjetosPage() {
                   }}
                 >
                   <option value="">Todos os parceiros</option>
-                  {parceiros.map((p) => (
+                  {availablePartners.map((p) => (
                     <option key={p} value={p}>
                       {p}
                     </option>
@@ -395,18 +627,29 @@ export default function PreProjetosPage() {
 
         {/* Tabela */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          {(actionError || actionMessage) && (
+            <div
+              className={`mx-4 mt-4 rounded-lg border px-4 py-3 text-sm ${
+                actionError
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {actionError ?? actionMessage}
+            </div>
+          )}
           <ResizableTable
             columnCount={9}
             defaultWidths={[
-              250, // Título
+              250, // Titulo
               100, // Gov/IF
               100, // Tipo
               150, // Parceiro
               180, // Localidade
-              140, // Valor Estimado
+              190, // Valor Estimado
               120, // Documentos
-              130, // Data de Criação
-              140, // Ações
+              130, // Data de Criacao
+              180, // Ações
             ]}
             minColumnWidth={80}
             className="divide-y divide-gray-200"
@@ -414,7 +657,7 @@ export default function PreProjetosPage() {
             <thead className="bg-gray-50">
               <tr>
                 <Th onClick={() => handleSort("titulo")} sortable className="text-center">
-                  Título
+                  Titulo
                   <SortIcon column="titulo" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("govIf")} sortable className="text-center">
@@ -436,10 +679,10 @@ export default function PreProjetosPage() {
                 </Th>
                 <Th className="text-center">Documentos</Th>
                 <Th onClick={() => handleSort("dataCriacao")} sortable className="text-center">
-                  Data de Criação
+                  Data de Criacao
                   <SortIcon column="dataCriacao" sortConfig={sortConfig} />
                 </Th>
-                <Th className="text-center">Ações</Th>
+                <Th className="text-center">Acoes</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -448,7 +691,25 @@ export default function PreProjetosPage() {
                   <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                      <span className="text-sm text-gray-500">Carregando pré-contratos...</span>
+                      <span className="text-sm text-gray-500">Carregando pre-contratos...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <X className="h-10 w-10 text-red-300" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Falha ao carregar pre-contratos</p>
+                        <p className="text-sm text-gray-500">{error}</p>
+                      </div>
+                      <button
+                        onClick={() => void loadPreProjetos()}
+                        className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
+                      >
+                        Tentar novamente
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -459,10 +720,10 @@ export default function PreProjetosPage() {
                       <FolderOpen className="h-12 w-12 text-gray-300" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          Nenhum pré-contrato encontrado
+                          Nenhum pre-contrato encontrado
                         </p>
                         <p className="text-sm text-gray-500">
-                          Crie seu primeiro pré-contrato para começar.
+                          Crie seu primeiro pre-contrato para comecar.
                         </p>
                       </div>
                       <div className="flex gap-2 mt-2">
@@ -478,7 +739,7 @@ export default function PreProjetosPage() {
                           onClick={handleOpenModal}
                           className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
                         >
-                          Criar pré-contrato
+                          Criar pre-contrato
                         </button>
                       </div>
                     </div>
@@ -504,7 +765,7 @@ export default function PreProjetosPage() {
                         {preProjeto.localidade}
                       </div>
                     </Td>
-                    <Td className="text-right font-medium">
+                    <Td className="text-right font-semibold text-sm tabular-nums whitespace-nowrap">
                       R$ {preProjeto.valorTotal.toLocaleString("pt-BR")}
                     </Td>
                     <Td>
@@ -512,30 +773,37 @@ export default function PreProjetosPage() {
                     </Td>
                     <Td className="text-sm text-gray-600">{formatDate(preProjeto.dataCriacao)}</Td>
                     <Td>
-                      <div className="flex items-center justify-center gap-1">
-                        <button
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Link
+                          href={`/contratos/${preProjeto.id}?edit=true`}
                           className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Ver detalhes"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Editar"
+                          title="Editar pre-contrato"
                         >
                           <Edit className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={() => void handlePromoteToPlanning(preProjeto)}
+                          disabled={processingAction?.id === preProjeto.id}
+                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Tornar projeto em planejamento"
+                        >
+                          {processingAction?.id === preProjeto.id && processingAction.type === "promote" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Rocket className="h-4 w-4" />
+                          )}
                         </button>
                         <button
-                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Exportar"
+                          onClick={() => void handleSoftDelete(preProjeto)}
+                          disabled={processingAction?.id === preProjeto.id}
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Excluir (soft delete)"
                         >
-                          <Download className="h-4 w-4" />
-                        </button>
-                        <button
-                          className="p-2 text-gray-500 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Mais opções"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
+                          {processingAction?.id === preProjeto.id && processingAction.type === "delete" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </Td>
@@ -545,12 +813,12 @@ export default function PreProjetosPage() {
             </tbody>
           </ResizableTable>
 
-          {/* Paginação */}
+          {/* Paginacao */}
           {!loading && filtered.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
               <span className="text-sm text-gray-600">
                 Mostrando {(page - 1) * pageSize + 1} a{" "}
-                {Math.min(page * pageSize, filtered.length)} de {filtered.length} pré-contratos
+                {Math.min(page * pageSize, filtered.length)} de {filtered.length} pre-contratos
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -592,7 +860,7 @@ export default function PreProjetosPage() {
                   disabled={page === totalPages}
                   className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Próxima
+                  Proxima
                 </button>
               </div>
             </div>
@@ -721,3 +989,5 @@ function formatDate(iso: string) {
     return iso;
   }
 }
+
+

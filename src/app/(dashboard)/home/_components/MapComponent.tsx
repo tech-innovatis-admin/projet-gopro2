@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Fix para ícones do Leaflet no Next.js
 const customIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -16,18 +15,28 @@ const customIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-interface Location {
+export interface MapLocation {
   id: number;
-  city: string;
-  state: string;
+  location: string;
+  city?: string | null;
+  state?: string | null;
   lat: number;
   lng: number;
   contracts: number;
+  totalValue: number;
 }
 
 interface MapComponentProps {
-  locations: Location[];
+  locations: MapLocation[];
 }
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 
 export default function MapComponent({ locations }: MapComponentProps) {
   const [isMounted, setIsMounted] = useState(false);
@@ -36,8 +45,10 @@ export default function MapComponent({ locations }: MapComponentProps) {
     setIsMounted(true);
   }, []);
 
-  // Centro do mapa focado no Nordeste brasileiro
-  const center: [number, number] = [-6.5, -37.5];
+  const center: [number, number] =
+    locations.length > 0
+      ? [locations[0].lat, locations[0].lng]
+      : [-14.235, -51.925];
 
   if (!isMounted) {
     return null;
@@ -46,7 +57,7 @@ export default function MapComponent({ locations }: MapComponentProps) {
   return (
     <MapContainer
       center={center}
-      zoom={6}
+      zoom={4}
       scrollWheelZoom={true}
       style={{ height: "100%", width: "100%" }}
       className="z-0"
@@ -56,19 +67,14 @@ export default function MapComponent({ locations }: MapComponentProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {locations.map((location) => (
-        <Marker
-          key={location.id}
-          position={[location.lat, location.lng]}
-          icon={customIcon}
-        >
+        <Marker key={location.id} position={[location.lat, location.lng]} icon={customIcon}>
           <Popup>
             <div className="text-center">
-              <p className="font-semibold text-zinc-900">
-                {location.city}, {location.state}
-              </p>
+              <p className="font-semibold text-zinc-900">{location.location}</p>
               <p className="text-sm text-zinc-600">
-                {location.contracts} contrato{location.contracts > 1 ? "s" : ""} ativo{location.contracts > 1 ? "s" : ""}
+                {location.contracts} contrato{location.contracts > 1 ? "s" : ""}
               </p>
+              <p className="text-xs text-zinc-500">{formatCurrency(location.totalValue)}</p>
             </div>
           </Popup>
         </Marker>

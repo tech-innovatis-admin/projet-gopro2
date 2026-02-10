@@ -9,9 +9,13 @@ import type { Organization } from './organizations';
 // ENUMS
 // =============================================================================
 
-/** Status do projeto (smallint no banco) */
-export type ProjectStatus = 0 | 1 | 2 | 3 | 4;
-// 0 = PRE_PROJETO, 1 = EM_EXECUCAO, 2 = CONCLUIDO, 3 = SUSPENSO, 4 = CANCELADO
+/** Status do projeto (enum no backend Java) */
+export type ProjectStatus =
+  | 'PRE_PROJETO'
+  | 'EXECUCAO'
+  | 'FINALIZADO'
+  | 'SUSPENSO'
+  | 'PLANEJAMENTO';
 
 /** Tipo Gov/IF (smallint no banco) */
 export type GovIf = 0 | 1;

@@ -1,12 +1,11 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
   Building,
-  GraduationCap,
   MapPin,
   Mail,
   Phone,
@@ -22,40 +21,68 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  getParceiroById,
-  formatCurrency,
-  getContratosByParceiro,
-} from "../mockData";
+import { getPartnerById, listProjects } from "@/src/lib/api/endpoints";
+import { getFriendlyApiError, isProjectLinkedToPartner, mapPartnerToParceiro, mapProjectToParceiroContrato } from "../mappers";
 import { TIPO_CONFIG, STATUS_CONFIG, type ParceiroContratoVinculado } from "../types";
 import type { Parceiro } from "../types";
 
 // =============================================================================
-// PÁGINA DE DETALHES DO PARCEIRO
+// PÃGINA DE DETALHES DO PARCEIRO
 // =============================================================================
 
 export default function ParceiroDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const [parceiro, setParceiro] = useState<Parceiro | null>(null);
+  const [contratos, setContratos] = useState<ParceiroContratoVinculado[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Carrega dados do parceiro
   useEffect(() => {
-    const id = params.parceiroId as string;
-    const found = getParceiroById(id);
+    let isMounted = true;
 
-    if (found) {
-      setParceiro(found);
-    }
-    setLoading(false);
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const partnerId = params.parceiroId as string;
+        const [partnerResponse, projectsResponse] = await Promise.all([
+          getPartnerById(partnerId),
+          listProjects({ page: 0, size: 20 }),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setParceiro(mapPartnerToParceiro(partnerResponse, projectsResponse.content));
+        setContratos(
+          projectsResponse.content
+            .filter((project) => isProjectLinkedToPartner(project, partnerResponse.id))
+            .map(mapProjectToParceiroContrato)
+        );
+      } catch (loadError) {
+        if (!isMounted) {
+          return;
+        }
+        setParceiro(null);
+        setContratos([]);
+        setError(getFriendlyApiError(loadError));
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [params.parceiroId]);
-
-  // Contratos vinculados
-  const contratos: ParceiroContratoVinculado[] = useMemo(() => {
-    if (!parceiro) return [];
-    return getContratosByParceiro(parceiro.id);
-  }, [parceiro]);
 
   // Config de tipo
   const tipoConfig = parceiro ? TIPO_CONFIG[parceiro.tipo] : null;
@@ -81,10 +108,10 @@ export default function ParceiroDetalhePage() {
           <Users className="h-8 w-8 text-red-600" />
         </div>
         <h1 className="text-xl font-semibold text-gray-900">
-          Parceiro não encontrado
+          Parceiro nÃ£o encontrado
         </h1>
         <p className="text-gray-500">
-          O parceiro que você está procurando não existe ou foi removido.
+          {error || "O parceiro que voce esta procurando nao existe ou foi removido."}
         </p>
         <Button
           onClick={() => router.push("/parceiros")}
@@ -129,7 +156,7 @@ export default function ParceiroDetalhePage() {
           <div className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
-                {/* Ícone */}
+                {/* Ãcone */}
                 <div
                   className={cn(
                     "p-4 rounded-xl",
@@ -180,7 +207,7 @@ export default function ParceiroDetalhePage() {
                       {statusConfig?.label}
                     </span>
 
-                    {/* Localização */}
+                    {/* LocalizaÃ§Ã£o */}
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm">
                       <MapPin className="h-4 w-4" />
                       <span>
@@ -191,7 +218,7 @@ export default function ParceiroDetalhePage() {
                 </div>
               </div>
 
-              {/* Ações */}
+              {/* AÃ§Ãµes */}
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -261,7 +288,7 @@ export default function ParceiroDetalhePage() {
                               {formatCurrency(contrato.valor)}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {contrato.dataInicio} {contrato.dataFim ? `até ${contrato.dataFim}` : ""}
+                              {contrato.dataInicio} {contrato.dataFim ? `atÃ© ${contrato.dataFim}` : ""}
                             </p>
                           </div>
                           <span
@@ -274,7 +301,7 @@ export default function ParceiroDetalhePage() {
                                 : "bg-yellow-100 text-yellow-700"
                             )}
                           >
-                            {contrato.status === "EM_ANDAMENTO" ? "Em Andamento" : contrato.status === "CONCLUIDO" ? "Concluído" : contrato.status}
+                            {contrato.status === "EM_ANDAMENTO" ? "Em Andamento" : contrato.status === "CONCLUIDO" ? "ConcluÃ­do" : contrato.status}
                           </span>
                           <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-[#004225]" />
                         </div>
@@ -285,12 +312,12 @@ export default function ParceiroDetalhePage() {
               </div>
             </div>
 
-            {/* Observações */}
+            {/* ObservaÃ§Ãµes */}
             {parceiro.observacoes && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-lg font-semibold text-gray-900">
-                    Observações
+                    ObservaÃ§Ãµes
                   </h2>
                 </div>
                 <div className="p-6">
@@ -342,7 +369,7 @@ export default function ParceiroDetalhePage() {
               </div>
             </div>
 
-            {/* Informações de Contato */}
+            {/* InformaÃ§Ãµes de Contato */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">
@@ -382,17 +409,17 @@ export default function ParceiroDetalhePage() {
                 )}
                 {!parceiro.email && !parceiro.telefone && !parceiro.site && (
                   <p className="text-sm text-gray-400 italic">
-                    Nenhuma informação de contato cadastrada.
+                    Nenhuma informaÃ§Ã£o de contato cadastrada.
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Endereço */}
+            {/* EndereÃ§o */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Endereço
+                  EndereÃ§o
                 </h2>
               </div>
               <div className="p-6">
@@ -420,3 +447,11 @@ export default function ParceiroDetalhePage() {
     </div>
   );
 }
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+

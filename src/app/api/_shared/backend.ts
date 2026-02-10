@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import type {
   ProxyOptions,
   RequestContext,
@@ -14,29 +13,67 @@ import {
 } from './errors';
 
 let proxyConfig: ProxyConfig | null = null;
+const DEFAULT_DEV_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_PAGE_SIZE = 20;
+const MIN_PAGE_SIZE = 1;
+const MAX_PAGE_SIZE = 100;
+
+function getConfiguredBaseUrl(): string | undefined {
+  const envCandidates = [
+    process.env.API_BASE_URL,
+    process.env.BACKEND_API_BASE_URL,
+    process.env.NEXT_PUBLIC_API_BASE_URL,
+  ];
+
+  for (const candidate of envCandidates) {
+    const value = candidate?.trim()?.replace(/^['"]|['"]$/g, '');
+    if (!value) {
+      continue;
+    }
+
+    // NEXT_PUBLIC_API_BASE_URL is usually "/api/backend" on the frontend.
+    // For the server-side proxy we only accept absolute upstream URLs.
+    if (!/^https?:\/\//i.test(value)) {
+      continue;
+    }
+
+    return value;
+  }
+
+  return undefined;
+}
 
 function getProxyConfig(): ProxyConfig {
   if (proxyConfig) {
     return proxyConfig;
   }
 
-  const baseUrl = process.env.API_BASE_URL;
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  const configuredBaseUrl = getConfiguredBaseUrl();
+  const baseUrl = configuredBaseUrl || (isDevelopment ? DEFAULT_DEV_API_BASE_URL : undefined);
+
+  if (!configuredBaseUrl && isDevelopment) {
+    console.warn(
+      `[BFF Config] API_BASE_URL not set. Using default ${DEFAULT_DEV_API_BASE_URL} for development.`
+    );
+  }
+
   if (!baseUrl) {
     throw new Error(
-      'API_BASE_URL não configurada. Configure a variável de ambiente API_BASE_URL no .env.local'
+      'API_BASE_URL nao configurada. Defina API_BASE_URL (ou BACKEND_API_BASE_URL) com URL absoluta do backend.'
     );
   }
 
   try {
     new URL(baseUrl);
   } catch {
-    throw new Error(`API_BASE_URL inválida: ${baseUrl}`);
+    throw new Error(`API_BASE_URL invalida: ${baseUrl}`);
   }
 
   proxyConfig = {
     baseUrl: baseUrl.replace(/\/$/, ''),
-    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '30000', 10), // 15s default
-    isDevelopment: process.env.NODE_ENV === 'development',
+    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '30000', 10), // 30s default
+    isDevelopment,
     defaultHeaders: {
       Accept: 'application/json',
       'User-Agent': 'GoPro-BFF/1.0',
@@ -50,15 +87,34 @@ function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-async function getAuthToken(): Promise<string | null> {
-  try {
-    const cookieStore = await cookies();
-    const token =
-      cookieStore.get('access_token')?.value || cookieStore.get('token')?.value;
-    return token || null;
-  } catch {
-    return null;
+function normalizePaginationQuery(searchParams: URLSearchParams): string {
+  const normalized = new URLSearchParams(searchParams);
+  const page = normalized.get('page');
+  const size = normalized.get('size');
+
+  if (page !== null) {
+    const parsedPage = Number.parseInt(page, 10);
+    if (!Number.isFinite(parsedPage) || parsedPage < 0) {
+      normalized.set('page', '0');
+    }
+
+    if (size === null) {
+      normalized.set('size', String(DEFAULT_PAGE_SIZE));
+    }
   }
+
+  if (size !== null) {
+    const parsedSize = Number.parseInt(size, 10);
+    if (
+      !Number.isFinite(parsedSize) ||
+      parsedSize < MIN_PAGE_SIZE ||
+      parsedSize > MAX_PAGE_SIZE
+    ) {
+      normalized.set('size', String(DEFAULT_PAGE_SIZE));
+    }
+  }
+
+  return normalized.toString();
 }
 
 async function buildHeaders(
@@ -69,13 +125,6 @@ async function buildHeaders(
   const headers: Record<string, string> = {
     ...config.defaultHeaders,
   };
-
-  if (options.requireAuth !== false) {
-    const token = await getAuthToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-  }
 
   const contentType = req.headers.get('content-type');
   if (contentType && !options.headers?.['Content-Type']) {
@@ -113,7 +162,7 @@ async function getRequestBody(
   }
 
   const contentType = req.headers.get('content-type') || '';
-  
+
   if (contentType.includes('application/json')) {
     try {
       const json = await req.json();
@@ -123,8 +172,7 @@ async function getRequestBody(
     }
   }
 
-  // multipart/form-data: usar arrayBuffer para preservar binários (PDF, imagens, etc.)
-  // IMPORTANTE: não usar req.text() pois corrompe o boundary e payload binário
+  // multipart/form-data: use arrayBuffer to preserve binary payload.
   if (contentType.includes('multipart/form-data')) {
     try {
       const arrayBuffer = await req.arrayBuffer();
@@ -134,7 +182,6 @@ async function getRequestBody(
     }
   }
 
-  // application/x-www-form-urlencoded: pode usar text
   if (contentType.includes('application/x-www-form-urlencoded')) {
     try {
       return await req.text();
@@ -143,7 +190,7 @@ async function getRequestBody(
     }
   }
 
-  // Fallback: qualquer outro content-type, tratar como binário
+  // Fallback for unknown content-types as binary.
   try {
     const arrayBuffer = await req.arrayBuffer();
     return arrayBuffer.byteLength > 0 ? arrayBuffer : undefined;
@@ -153,18 +200,12 @@ async function getRequestBody(
 }
 
 /**
- * Faz proxy de requisição para a API Java
- * 
+ * Proxy request to Java API.
+ *
  * @example
- * ```typescript
  * export async function GET(req: NextRequest) {
  *   return proxyToJava(req, '/api/projects');
  * }
- * 
- * export async function POST(req: NextRequest) {
- *   return proxyToJava(req, '/api/projects', { method: 'POST' });
- * }
- * ```
  */
 export async function proxyToJava(
   req: NextRequest,
@@ -178,7 +219,7 @@ export async function proxyToJava(
 
   if (!endpoint || !endpoint.startsWith('/')) {
     const error: ApiError = {
-      message: 'Endpoint inválido. Deve começar com "/"',
+      message: 'Endpoint invalido. Deve comecar com "/"',
       code: 'INVALID_ENDPOINT',
       timestamp: new Date().toISOString(),
       path: endpoint,
@@ -192,7 +233,10 @@ export async function proxyToJava(
   }
 
   const url = new URL(req.url);
-  const upstreamUrl = `${config.baseUrl}${endpoint}${url.search}`;
+  const normalizedQuery = normalizePaginationQuery(url.searchParams);
+  const upstreamUrl = `${config.baseUrl}${endpoint}${
+    normalizedQuery ? `?${normalizedQuery}` : ''
+  }`;
 
   const context: RequestContext = {
     requestId,
@@ -222,32 +266,84 @@ export async function proxyToJava(
 
       clearTimeout(timeoutId);
 
-      const contentType = response.headers.get('content-type') || '';
-      const responseText = await response.text();
+      let resolvedResponse = response;
+      let resolvedResponseText = await response.text();
+      let resolvedEndpoint = endpoint;
+      let resolvedUpstreamUrl = upstreamUrl;
 
-      if (!response.ok) {
-        console.error(`[BFF Error] ${method} ${endpoint} -> ${response.status}`, {
-          upstream: upstreamUrl,
-          status: response.status,
+      if (config.isDevelopment && response.status === 404 && endpoint.startsWith('/api/')) {
+        const fallbackEndpoint = endpoint.replace(/^\/api/, '');
+
+        if (fallbackEndpoint !== endpoint) {
+          const fallbackUpstreamUrl = `${config.baseUrl}${fallbackEndpoint}${
+            normalizedQuery ? `?${normalizedQuery}` : ''
+          }`;
+          const fallbackController = new AbortController();
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeout);
+
+          try {
+            const fallbackResponse = await fetch(fallbackUpstreamUrl, {
+              method,
+              headers,
+              body,
+              signal: fallbackController.signal,
+            });
+            clearTimeout(fallbackTimeoutId);
+
+            if (fallbackResponse.status !== 404) {
+              resolvedResponse = fallbackResponse;
+              resolvedResponseText = await fallbackResponse.text();
+              resolvedEndpoint = fallbackEndpoint;
+              resolvedUpstreamUrl = fallbackUpstreamUrl;
+              console.warn(
+                `[BFF Compatibility] Falling back endpoint ${endpoint} -> ${fallbackEndpoint}.`
+              );
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId);
+
+            if (!(fallbackError instanceof Error && fallbackError.name === 'AbortError')) {
+              console.warn(
+                `[BFF Compatibility] Failed fallback request ${fallbackUpstreamUrl}.`,
+                fallbackError
+              );
+            }
+          }
+        }
+      }
+
+      if (!resolvedResponse.ok) {
+        console.error(`[BFF Error] ${method} ${resolvedEndpoint} -> ${resolvedResponse.status}`, {
+          upstream: resolvedUpstreamUrl,
+          status: resolvedResponse.status,
         });
 
         let errorData: unknown;
         try {
-          errorData = responseText ? JSON.parse(responseText) : null;
+          errorData = resolvedResponseText ? JSON.parse(resolvedResponseText) : null;
         } catch {
-          errorData = responseText;
+          errorData = resolvedResponseText;
         }
 
-        const error = normalizeApiError(errorData, response.status, context);
-        return createErrorResponse(error, response.status, context);
+        const error = normalizeApiError(errorData, resolvedResponse.status, context);
+        return createErrorResponse(error, resolvedResponse.status, context);
       }
 
-      const nextResponse = new NextResponse(responseText, {
-        status: response.status,
-        statusText: response.statusText,
+      const hasNoBodyStatus =
+        resolvedResponse.status === 204 ||
+        resolvedResponse.status === 205 ||
+        resolvedResponse.status === 304;
+
+      const responseBody =
+        hasNoBodyStatus || resolvedResponseText.length === 0
+          ? null
+          : resolvedResponseText;
+
+      const nextResponse = new NextResponse(responseBody, {
+        status: resolvedResponse.status,
       });
 
-      response.headers.forEach((value, key) => {
+      resolvedResponse.headers.forEach((value, key) => {
         if (
           key.toLowerCase() !== 'content-encoding' &&
           key.toLowerCase() !== 'content-length' &&
@@ -258,7 +354,6 @@ export async function proxyToJava(
       });
 
       return nextResponse;
-
     } catch (fetchError) {
       clearTimeout(timeoutId);
 

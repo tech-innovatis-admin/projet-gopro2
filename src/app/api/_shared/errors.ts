@@ -2,17 +2,17 @@ import { NextResponse } from 'next/server';
 import type { ApiError, RequestContext } from './types';
 
 const ERROR_MESSAGES: Record<number, string> = {
-  400: 'Requisição inválida. Verifique os dados enviados.',
-  401: 'Não autorizado. Faça login novamente.',
-  403: 'Acesso negado. Você não tem permissão para esta ação.',
-  404: 'Recurso não encontrado.',
-  409: 'Conflito. O recurso já existe ou está em uso.',
-  422: 'Dados inválidos. Verifique os campos obrigatórios.',
-  429: 'Muitas requisições. Tente novamente em alguns instantes.',
+  400: 'Requisicao invalida. Verifique os dados enviados.',
+  401: 'Nao autorizado. Faca login novamente.',
+  403: 'Acesso negado. Voce nao tem permissao para esta acao.',
+  404: 'Recurso nao encontrado.',
+  409: 'Conflito. O recurso ja existe ou esta em uso.',
+  422: 'Dados invalidos. Verifique os campos obrigatorios.',
+  429: 'Muitas requisicoes. Tente novamente em alguns instantes.',
   500: 'Erro interno do servidor. Tente novamente mais tarde.',
-  502: 'Serviço temporariamente indisponível. Tente novamente mais tarde.',
-  503: 'Serviço em manutenção. Tente novamente mais tarde.',
-  504: 'Timeout da requisição. Tente novamente mais tarde.',
+  502: 'Servico temporariamente indisponivel. Tente novamente mais tarde.',
+  503: 'Servico em manutencao. Tente novamente mais tarde.',
+  504: 'Timeout da requisicao. Tente novamente mais tarde.',
 };
 
 export function normalizeApiError(
@@ -63,7 +63,7 @@ function isApiError(error: unknown): error is ApiError {
 }
 
 function getDefaultErrorMessage(statusCode: number): string {
-  return ERROR_MESSAGES[statusCode] || `Erro ${statusCode}: Requisição falhou`;
+  return ERROR_MESSAGES[statusCode] || `Erro ${statusCode}: Requisicao falhou`;
 }
 
 export function createErrorResponse(
@@ -72,7 +72,7 @@ export function createErrorResponse(
   context?: RequestContext
 ): NextResponse {
   if (process.env.NODE_ENV === 'development' || statusCode >= 500) {
-    console.error('❌ [BFF Error]', {
+    console.error('[BFF Error]', {
       statusCode,
       error,
       context,
@@ -107,7 +107,7 @@ export function createConnectionErrorResponse(
     path: endpoint,
   };
 
-  console.error('❌ [BFF Connection Error]', {
+  console.error('[BFF Connection Error]', {
     endpoint,
     error: originalError,
   });
@@ -131,13 +131,13 @@ export function createTimeoutErrorResponse(
   timeoutMs: number
 ): NextResponse {
   const error: ApiError = {
-    message: `A requisição demorou mais de ${timeoutMs / 1000}s para responder. Tente novamente.`,
+    message: `A requisicao demorou mais de ${timeoutMs / 1000}s para responder. Tente novamente.`,
     code: 'TIMEOUT_ERROR',
     timestamp: new Date().toISOString(),
     path: endpoint,
   };
 
-  console.warn('⏱️ [BFF Timeout]', {
+  console.warn('[BFF Timeout]', {
     endpoint,
     timeoutMs,
   });

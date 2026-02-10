@@ -1,10 +1,11 @@
-import { NextRequest } from 'next/server';
+﻿import { NextRequest } from 'next/server';
 import { proxyToJava } from '../../_shared';
 
 export async function GET(req: NextRequest) {
-  return proxyToJava(req, '/api/expenses');
+  return proxyToJava(req, '/expenses');
 }
 
 export async function POST(req: NextRequest) {
-  return proxyToJava(req, '/api/expenses', { method: 'POST' });
+  return proxyToJava(req, '/expenses', { method: 'POST' });
 }
+

@@ -12,7 +12,12 @@
 // ENUMS (conforme Java)
 // =============================================================================
 
-export type StatusProjects = 'PRE_PROJETO' | 'EXECUCAO' | 'ENCERRADO' | 'SUSPENSO';
+export type StatusProjects =
+  | 'PRE_PROJETO'
+  | 'EXECUCAO'
+  | 'FINALIZADO'
+  | 'SUSPENSO'
+  | 'PLANEJAMENTO';
 
 export type OrganizationType = 'FUNDACAO' | 'ORGAO_PUBLICO' | 'EMPRESA' | 'PARCEIRA' | 'CLIENTE';
 

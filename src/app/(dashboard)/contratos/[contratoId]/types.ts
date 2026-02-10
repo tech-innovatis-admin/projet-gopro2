@@ -68,7 +68,7 @@ export const mockContrato: Contrato = {
   codigo: "PRJ-001",
   titulo: "Sistema de Gestão Integrada",
   tipo: "PROJETO",
-  status: "EM_ANDAMENTO",
+  status: "EXECUCAO",
   coordenador: "João Silva",
   parceiro: "Fundação de Apoio à Pesquisa",
   cliente: "Prefeitura de São Paulo",

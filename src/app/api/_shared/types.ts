@@ -34,7 +34,7 @@ export interface ApiResponse<T> {
 }
 
 export interface ProxyOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
   headers?: Record<string, string>;
   body?: unknown;
   timeout?: number;
