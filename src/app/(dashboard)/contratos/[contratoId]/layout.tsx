@@ -443,16 +443,16 @@ export default function ContratoLayout({
     //   href: `/contratos/${contratoId}/pagamentos`,
     //   description: "Historico de pagamentos",
     // },
-    // {
-    //   label: "Equipe",
-    //   href: `/contratos/${contratoId}/equipe-tecnica`,
-    //   description: "Membros",
-    // },
-    // {
-    //   label: "Empresas",
-    //   href: `/contratos/${contratoId}/empresas`,
-    //   description: "Empresas vinculadas",
-    // },
+    {
+      label: "Pessoas",
+      href: `/contratos/${contratoId}/equipe-tecnica`,
+      description: "Membros",
+    },
+    {
+      label: "Empresas",
+      href: `/contratos/${contratoId}/empresas`,
+      description: "Empresas vinculadas",
+    },
     {
       label: "Arquivos",
       href: `/contratos/${contratoId}/arquivos`,

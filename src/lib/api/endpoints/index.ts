@@ -8,6 +8,7 @@ export * from './companies';
 export * from './partners';
 export * from './people';
 export * from './project-people';
+export * from './project-companies';
 export * from './projects';
 export * from './public-agencies';
 export * from './secretaries';

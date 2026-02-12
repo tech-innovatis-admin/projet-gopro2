@@ -2,6 +2,7 @@
 import type {
   PageResponseDTO,
   ProjectDashboardResponseDTO,
+  ProjectGovIfEnum,
   ProjectLocationResponseDTO,
   ProjectMonthResponseDTO,
   ProjectPartnerResponseDTO,
@@ -25,6 +26,7 @@ export interface ListProjectsParams {
 export interface ProjectDashboardFilters {
   projectStatus?: ProjectStatusEnum;
   projectType?: ProjectTypeEnum;
+  projectGovIf?: ProjectGovIfEnum;
   month?: number;
   year?: number;
   location?: string;
@@ -74,6 +76,7 @@ export function getProjectDashboard(filters: ProjectDashboardFilters = {}) {
     query: {
       projectStatus: filters.projectStatus,
       projectType: filters.projectType,
+      projectGovIf: filters.projectGovIf,
       month: filters.month,
       year: filters.year,
       location: filters.location,

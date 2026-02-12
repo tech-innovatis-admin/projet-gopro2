@@ -1,34 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, X } from "lucide-react";
 import {
-  Edit,
-  Save,
-  X,
-  CheckCircle,
-  Plus,
-  Trash2,
-  Edit2,
-  Globe,
-  MapPin,
-  FileText,
-} from "lucide-react";
+  createCompany,
+  createProjectCompany,
+  deleteProjectCompany,
+  listCompanies,
+  listProjectCompaniesDetailed,
+  updateCompany,
+  updateProjectCompany,
+} from "@/src/lib/api/endpoints";
+import { HttpError, type CompanyResponseDTO } from "@/src/lib/api/types";
 
-// Ícone customizado de Briefcase Business
 const BriefcaseBusinessIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="lucide lucide-briefcase-business"
-  >
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase-business">
     <path d="M12 12h.01" />
     <path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
     <path d="M22 13a18.15 18.15 0 0 1-20 0" />
@@ -36,337 +23,390 @@ const BriefcaseBusinessIcon = () => (
   </svg>
 );
 
-// Tipos
 type TipoEmpresa = "INCUBADA" | "INDEPENDENTE";
 
-type VinculoRubrica = {
-  rubricaId: string;
-  itemIds: string[];
-};
-
-type Incubada = {
+type EmpresaProjeto = {
   id: string;
+  projectCompanyId?: number;
+  companyId?: number;
+  contractNumber?: string;
   razaoSocial: string;
-  nomeFantasia?: string;
+  nomeFantasia: string;
   cnpj: string;
-  tipoServico: string;
-  tipoEmpresa: TipoEmpresa; // Novo campo obrigatório
-  vinculos: VinculoRubrica[]; // Novo campo obrigatório - múltiplos vínculos
-  contato?: string;
-  email?: string;
-  telefone?: string;
-  endereco?: string;
-  cidade?: string;
-  uf?: string;
+  email: string;
+  telefone: string;
+  cep?: string;
+  endereco: string;
+  cidade: string;
+  uf: string;
+  tipoServico?: string;
+  tipoEmpresa: TipoEmpresa;
   valorContrato?: number;
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
 };
 
-// Tipos para rubricas (importados da estrutura de rubricas)
-interface ItemRubrica {
-  id: string;
-  descricao: string;
-  cnpjDestinacao: string;
-  quantidade: number;
-  meses: number;
-  valorUnitario: number;
-  valorTotal: number;
+const DEFAULT_PAGE_SIZE = 100;
+
+function parseProjectId(rawId: string) {
+  const parsed = Number(rawId);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-interface Rubrica {
-  id: string;
-  codigo: string;
-  nome: string;
-  itens: ItemRubrica[];
+function digits(value?: string) {
+  return (value || "").replace(/\D/g, "");
 }
 
-// Mock de rubricas (deve ser buscado do contrato atual)
-const mockRubricas: Rubrica[] = [
-  {
-    id: "1",
-    codigo: "MC",
-    nome: "Material de Consumo",
-    itens: [
-      {
-        id: "1-1",
-        descricao: "Reagentes químicos para laboratório",
-        cnpjDestinacao: "12.345.678/0001-00",
-        quantidade: 50,
-        meses: 12,
-        valorUnitario: 150.0,
-        valorTotal: 90000.0,
-      },
-      {
-        id: "1-2",
-        descricao: "Material de escritório",
-        cnpjDestinacao: "",
-        quantidade: 1,
-        meses: 12,
-        valorUnitario: 500.0,
-        valorTotal: 6000.0,
-      },
-    ],
-  },
-  {
-    id: "2",
-    codigo: "PP",
-    nome: "Pagamento de Pessoal",
-    itens: [
-      {
-        id: "2-1",
-        descricao: "Bolsa de pesquisador júnior",
-        cnpjDestinacao: "",
-        quantidade: 1,
-        meses: 12,
-        valorUnitario: 3500.0,
-        valorTotal: 42000.0,
-      },
-    ],
-  },
-  {
-    id: "3",
-    codigo: "OST-PJ",
-    nome: "Outros Serviços de Terceiros - Pessoa Jurídica",
-    itens: [],
-  },
-];
+function formatZipCode(value?: string) {
+  const onlyNumbers = digits(value).slice(0, 8);
+  if (onlyNumbers.length <= 5) return onlyNumbers;
+  return `${onlyNumbers.slice(0, 5)}-${onlyNumbers.slice(5)}`;
+}
 
-// Mock de dados
-const mockIncubadas: Incubada[] = [
-  {
-    id: "1",
-    razaoSocial: "Tech Solutions Ltda",
-    nomeFantasia: "TechSol",
-    cnpj: "12.345.678/0001-90",
-    tipoServico: "Desenvolvimento de Software",
-    tipoEmpresa: "INCUBADA",
-    vinculos: [
-      {
-        rubricaId: "3",
-        itemIds: [],
-      },
-    ],
-    contato: "Carlos Mendes",
-    email: "contato@techsol.com.br",
-    telefone: "(11) 3333-4444",
-    cidade: "São Paulo",
-    uf: "SP",
-    valorContrato: 150000,
-    dataInicio: "2025-02-01",
-    dataFim: "2025-08-31",
-  },
-  {
-    id: "2",
-    razaoSocial: "DataCore Análise de Dados Eireli",
-    nomeFantasia: "DataCore",
-    cnpj: "98.765.432/0001-21",
-    tipoServico: "Análise de Dados e BI",
-    tipoEmpresa: "INDEPENDENTE",
-    vinculos: [
-      {
-        rubricaId: "1",
-        itemIds: ["1-1", "1-2"],
-      },
-      {
-        rubricaId: "2",
-        itemIds: ["2-1"],
-      },
-    ],
-    contato: "Ana Paula",
-    email: "ana@datacore.com.br",
-    cidade: "Campinas",
-    uf: "SP",
-    valorContrato: 80000,
-    dataInicio: "2025-03-01",
-    dataFim: "2025-10-31",
-  },
-];
+type ViaCepResponse = {
+  cep?: string;
+  logradouro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+};
 
-function formatDate(iso?: string) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR");
-  } catch {
-    return iso;
+async function fetchViaCep(zipCode: string) {
+  const normalizedZipCode = digits(zipCode);
+  if (normalizedZipCode.length !== 8) return null;
+
+  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
+  if (!response.ok) {
+    throw new Error("Nao foi possivel consultar o CEP.");
   }
+
+  const data = (await response.json()) as ViaCepResponse;
+  if (data.erro) return null;
+  return data;
 }
 
-export default function IncubadasPage() {
+function isBlank(value?: string) {
+  return !value || value.trim().length === 0;
+}
+
+function hasRequiredCompanyFields(formData: Partial<EmpresaProjeto>) {
+  return (
+    !isBlank(formData.razaoSocial) &&
+    !isBlank(formData.nomeFantasia) &&
+    !isBlank(formData.cnpj) &&
+    !isBlank(formData.email) &&
+    !isBlank(formData.telefone) &&
+    !isBlank(formData.endereco) &&
+    !isBlank(formData.cidade) &&
+    !isBlank(formData.uf)
+  );
+}
+
+function toOptional(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function formatDateBr(value?: string) {
+  if (!value) return "—";
+  const parts = value.split("-");
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return value;
+}
+
+function formatCurrency(value?: number) {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function formatCurrencyInput(value?: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function parseCurrencyInput(input: string) {
+  const onlyDigits = input.replace(/\D/g, "");
+  if (!onlyDigits) return undefined;
+  const cents = Number(onlyDigits);
+  if (!Number.isFinite(cents)) return undefined;
+  return cents / 100;
+}
+
+function getCompanyLabel(company: CompanyResponseDTO) {
+  const tradeName = company.tradeName?.trim();
+  return tradeName || company.name;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof HttpError) return error.message;
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
+
+export default function EmpresasPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
+  const projectId = parseProjectId(contratoId);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [incubadas, setIncubadas] = useState<Incubada[]>(mockIncubadas);
-  const [editIncubadas, setEditIncubadas] = useState<Incubada[]>(mockIncubadas);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingIncubada, setEditingIncubada] = useState<Incubada | null>(null);
-  const [formData, setFormData] = useState<Partial<Incubada>>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [empresas, setEmpresas] = useState<EmpresaProjeto[]>([]);
+  const [allCompanies, setAllCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
-  const [rubricas] = useState<Rubrica[]>(mockRubricas);
-  const [novoVinculo, setNovoVinculo] = useState<{
-    rubricaId: string;
-    itemIds: string[];
-  }>({ rubricaId: "", itemIds: [] });
 
-  const handleEdit = () => {
-    setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
-    setIsEditing(true);
-  };
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [editingEmpresa, setEditingEmpresa] = useState<EmpresaProjeto | null>(null);
+  const [formData, setFormData] = useState<Partial<EmpresaProjeto>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleCancel = () => {
-    setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
-    setIsEditing(false);
-    setIsModalOpen(false);
-    setEditingIncubada(null);
-    setFormData({});
-    setNovoVinculo({ rubricaId: "", itemIds: [] });
-  };
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | "">("");
+  const [isLinking, setIsLinking] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIncubadas(JSON.parse(JSON.stringify(editIncubadas)));
-    setIsSaving(false);
-    setIsEditing(false);
-    setSavedMessage(true);
-    setTimeout(() => setSavedMessage(false), 3000);
-  };
+  const linkedCompanyIds = useMemo(
+    () => new Set(empresas.map((e) => e.companyId).filter((id): id is number => typeof id === "number")),
+    [empresas],
+  );
 
-  // Abrir modal para nova empresa
-  const openNewModal = () => {
-    if (!isEditing) {
-      setIsEditing(true);
-      setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
+  const availableCompanies = useMemo(
+    () =>
+      allCompanies
+        .filter((company) => !linkedCompanyIds.has(company.id))
+        .sort((a, b) => getCompanyLabel(a).localeCompare(getCompanyLabel(b), "pt-BR")),
+    [allCompanies, linkedCompanyIds],
+  );
+
+  const totalValor = empresas.reduce((acc, empresa) => acc + (empresa.valorContrato || 0), 0);
+
+  const loadProjectCompanies = async () => {
+    if (!projectId) {
+      setLoadError("ID do contrato invalido.");
+      setEmpresas([]);
+      setIsLoading(false);
+      return;
     }
-    setEditingIncubada(null);
+
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      setActionError(null);
+
+      const linksPage = await listProjectCompaniesDetailed({
+        page: 0,
+        size: DEFAULT_PAGE_SIZE,
+        projectId,
+      });
+
+      const links = linksPage.content.filter((item) => item.projectId === projectId);
+
+      const mapped: EmpresaProjeto[] = links.map((link) => {
+        return {
+          id: String(link.id),
+          projectCompanyId: link.id,
+          companyId: link.companyId,
+          contractNumber: link.contractNumber || undefined,
+          razaoSocial: link.companyName || `Empresa #${link.companyId}`,
+          nomeFantasia: link.companyTradeName || "",
+          cnpj: link.companyCnpj || "",
+          email: link.companyEmail || "",
+          telefone: link.companyPhone || "",
+          endereco: link.companyAddress || "",
+          cidade: link.companyCity || "",
+          uf: link.companyState || "",
+          tipoServico: link.serviceType || "",
+          tipoEmpresa: link.isIncubated ? "INCUBADA" : "INDEPENDENTE",
+          valorContrato: typeof link.totalValue === "number" ? link.totalValue : undefined,
+          dataInicio: link.startDate || undefined,
+          dataFim: link.endDate || undefined,
+          observacao: link.notes || undefined,
+        };
+      });
+
+      setEmpresas(mapped);
+    } catch (error) {
+      setLoadError(getErrorMessage(error, "Falha ao carregar empresas do projeto."));
+      setEmpresas([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadProjectCompanies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const openNewModal = () => {
+    setActionError(null);
+    setEditingEmpresa(null);
     setFormData({
       razaoSocial: "",
       nomeFantasia: "",
       cnpj: "",
-      tipoServico: "",
-      tipoEmpresa: undefined,
-      vinculos: [],
-      contato: "",
       email: "",
       telefone: "",
+      cep: "",
       endereco: "",
       cidade: "",
       uf: "",
-      valorContrato: 0,
+      tipoServico: "",
+      tipoEmpresa: "INDEPENDENTE",
+      valorContrato: undefined,
       dataInicio: "",
       dataFim: "",
       observacao: "",
     });
-    setNovoVinculo({ rubricaId: "", itemIds: [] });
-    setIsModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
-  // Abrir modal para editar
-  const openEditModal = (incubada: Incubada) => {
-    if (!isEditing) {
-      setIsEditing(true);
-      setEditIncubadas(JSON.parse(JSON.stringify(incubadas)));
+  const openEditModal = (empresa: EmpresaProjeto) => {
+    setActionError(null);
+    setEditingEmpresa(empresa);
+    setFormData({ ...empresa });
+    setIsFormModalOpen(true);
+  };
+
+  const openLinkModal = async () => {
+    try {
+      setActionError(null);
+      let currentCompanies = allCompanies;
+      if (allCompanies.length === 0) {
+        const page = await listCompanies({ page: 0, size: 500 });
+        currentCompanies = page.content;
+        setAllCompanies(currentCompanies);
+      }
+      const selectableCompanies = currentCompanies
+        .filter((company) => !linkedCompanyIds.has(company.id))
+        .sort((a, b) => getCompanyLabel(a).localeCompare(getCompanyLabel(b), "pt-BR"));
+      setSelectedCompanyId(selectableCompanies[0]?.id ?? "");
+      setIsLinkModalOpen(true);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "Nao foi possivel carregar empresas existentes."));
     }
-    setEditingIncubada(incubada);
-    setFormData({ ...incubada });
-    setNovoVinculo({ rubricaId: "", itemIds: [] });
-    setIsModalOpen(true);
   };
 
-  // Adicionar vínculo
-  const adicionarVinculo = () => {
-    if (!novoVinculo.rubricaId || novoVinculo.itemIds.length === 0) return;
-
-    const vinculosAtuais = formData.vinculos || [];
-    const novoVinculoCompleto: VinculoRubrica = {
-      rubricaId: novoVinculo.rubricaId,
-      itemIds: [...novoVinculo.itemIds],
-    };
-
-    setFormData({
-      ...formData,
-      vinculos: [...vinculosAtuais, novoVinculoCompleto],
-    });
-    setNovoVinculo({ rubricaId: "", itemIds: [] });
-  };
-
-  // Remover vínculo
-  const removerVinculo = (index: number) => {
-    const vinculosAtuais = formData.vinculos || [];
-    setFormData({
-      ...formData,
-      vinculos: vinculosAtuais.filter((_, i) => i !== index),
-    });
-  };
-
-  // Salvar empresa
-  const saveIncubada = () => {
-    if (!formData.razaoSocial || !formData.cnpj || !formData.tipoEmpresa) return;
-    if (!formData.vinculos || formData.vinculos.length === 0) {
-      alert("É obrigatório vincular a empresa a pelo menos uma rubrica e seus itens.");
+  const saveEmpresa = async () => {
+    if (!projectId) {
+      setActionError("ID do contrato invalido.");
+      return;
+    }
+    if (!hasRequiredCompanyFields(formData)) {
+      setActionError("Preencha os campos obrigatorios: razao social, nome fantasia, CNPJ, e-mail, telefone, endereco, cidade e UF.");
       return;
     }
 
-    if (editingIncubada) {
-      setEditIncubadas((prev) =>
-        prev.map((i) =>
-          i.id === editingIncubada.id ? { ...i, ...formData } as Incubada : i
-        )
-      );
-    } else {
-      const novaIncubada: Incubada = {
-        id: `incubada-${Date.now()}`,
-        razaoSocial: formData.razaoSocial!,
-        nomeFantasia: formData.nomeFantasia,
-        cnpj: formData.cnpj!,
-        tipoServico: formData.tipoServico || "",
-        tipoEmpresa: formData.tipoEmpresa!,
-        vinculos: formData.vinculos || [],
-        contato: formData.contato,
-        email: formData.email,
-        telefone: formData.telefone,
-        endereco: formData.endereco,
-        cidade: formData.cidade,
-        uf: formData.uf,
-        valorContrato: formData.valorContrato,
-        dataInicio: formData.dataInicio,
-        dataFim: formData.dataFim,
-        observacao: formData.observacao,
+    const cnpjDigits = digits(formData.cnpj);
+    if (cnpjDigits.length !== 14) {
+      setActionError("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setActionError(null);
+
+      const companyPayload = {
+        name: formData.razaoSocial!.trim(),
+        tradeName: formData.nomeFantasia!.trim(),
+        cnpj: cnpjDigits,
+        email: formData.email!.trim(),
+        phone: formData.telefone!.trim(),
+        address: formData.endereco!.trim(),
+        city: formData.cidade!.trim(),
+        state: formData.uf!.trim().toUpperCase(),
       };
-      setEditIncubadas((prev) => [...prev, novaIncubada]);
-    }
 
-    setIsModalOpen(false);
-    setFormData({});
-    setEditingIncubada(null);
-    setNovoVinculo({ rubricaId: "", itemIds: [] });
+      if (editingEmpresa?.projectCompanyId && editingEmpresa.companyId) {
+        await updateCompany(editingEmpresa.companyId, companyPayload);
+        await updateProjectCompany(editingEmpresa.projectCompanyId, {
+          serviceType: toOptional(formData.tipoServico),
+          totalValue: formData.valorContrato,
+          startDate: toOptional(formData.dataInicio),
+          endDate: toOptional(formData.dataFim),
+          notes: toOptional(formData.observacao),
+          isIncubated: formData.tipoEmpresa === "INCUBADA",
+          updatedBy: 1,
+        });
+      } else {
+        const company = await createCompany({ ...companyPayload, createdBy: 1 });
+        await createProjectCompany({
+          projectId,
+          companyId: company.id,
+          serviceType: toOptional(formData.tipoServico),
+          totalValue: formData.valorContrato,
+          startDate: toOptional(formData.dataInicio),
+          endDate: toOptional(formData.dataFim),
+          notes: toOptional(formData.observacao),
+          isIncubated: formData.tipoEmpresa === "INCUBADA",
+          createdBy: 1,
+        });
+      }
+
+      await loadProjectCompanies();
+      setIsFormModalOpen(false);
+      setEditingEmpresa(null);
+      setFormData({});
+      setSavedMessage(true);
+      setTimeout(() => setSavedMessage(false), 3000);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "Nao foi possivel salvar a empresa."));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Remover empresa
-  const removeIncubada = (id: string) => {
-    if (confirm("Deseja realmente excluir esta empresa?")) {
-      setEditIncubadas((prev) => prev.filter((i) => i.id !== id));
+  const removeEmpresa = async (empresaId: string) => {
+    if (!confirm("Deseja realmente excluir este vinculo da empresa com o projeto?")) return;
+    try {
+      setActionError(null);
+      const empresa = empresas.find((item) => item.id === empresaId);
+      if (!empresa?.projectCompanyId) throw new Error("Vinculo da empresa nao encontrado.");
+      await deleteProjectCompany(empresa.projectCompanyId);
+      await loadProjectCompanies();
+    } catch (error) {
+      setActionError(getErrorMessage(error, "Nao foi possivel excluir a empresa."));
     }
   };
 
-  // Dados a exibir
-  const currentIncubadas = isEditing ? editIncubadas : incubadas;
-  const totalValor = currentIncubadas.reduce((acc, i) => acc + (i.valorContrato || 0), 0);
+  const linkExistingCompany = async () => {
+    if (!projectId) {
+      setActionError("ID do contrato invalido.");
+      return;
+    }
+    if (!selectedCompanyId || typeof selectedCompanyId !== "number") {
+      setActionError("Selecione uma empresa para vincular.");
+      return;
+    }
+
+    try {
+      setIsLinking(true);
+      setActionError(null);
+      await createProjectCompany({ projectId, companyId: selectedCompanyId, isIncubated: false, createdBy: 1 });
+      await loadProjectCompanies();
+      setIsLinkModalOpen(false);
+      setSelectedCompanyId("");
+      setSavedMessage(true);
+      setTimeout(() => setSavedMessage(false), 3000);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "Nao foi possivel vincular a empresa."));
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            Empresas e Incubadas
-          </h2>
-          <p className="text-sm text-gray-500">
-            Empresas que realizam serviços vinculados ao projeto
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900">Empresas do Projeto</h2>
+          <p className="text-sm text-gray-500">Vincule empresas existentes ou cadastre novas para este projeto.</p>
         </div>
         <div className="flex items-center gap-3">
           {savedMessage && (
@@ -375,642 +415,337 @@ export default function IncubadasPage() {
               Salvo com sucesso!
             </div>
           )}
-          <button
-            onClick={openNewModal}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-          >
+          <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors">
+            <Link2 className="h-4 w-4" />
+            Vincular Existente
+          </button>
+          <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors">
             <Plus className="h-4 w-4" />
             Nova Empresa
           </button>
-          {!isEditing ? (
-            <button
-              onClick={handleEdit}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-            >
-              <Edit className="h-4 w-4" />
-              Editar
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {isSaving ? "Salvando..." : "Salvar"}
-              </button>
-            </>
-          )}
         </div>
       </div>
 
+      {loadError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>}
+      {actionError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>}
 
-      {/* Lista de Empresas */}
-      {currentIncubadas.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center"><p className="text-sm text-gray-500">Carregando empresas do projeto...</p></div>
+      ) : empresas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="p-4 bg-gray-100 rounded-full mb-4">
-            <div className="h-8 w-8 text-gray-400">
-              <BriefcaseBusinessIcon />
-            </div>
+          <div className="p-4 bg-gray-100 rounded-full mb-4"><div className="h-8 w-8 text-gray-400"><BriefcaseBusinessIcon /></div></div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Nenhuma empresa vinculada</h3>
+          <p className="text-sm text-gray-500 mb-4">Vincule uma empresa existente ou cadastre uma nova.</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors"><Link2 className="h-4 w-4" />Vincular Existente</button>
+            <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"><Plus className="h-4 w-4" />Nova Empresa</button>
           </div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">
-            Nenhuma empresa cadastrada
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Adicione empresas incubadas que realizam serviços no projeto.
-          </p>
-          <button
-            onClick={openNewModal}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar Empresa
-          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {currentIncubadas.map((incubada) => (
-            <div
-              key={incubada.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-            >
+          {empresas.map((empresa) => (
+            <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-start gap-3">
-                  <div className="p-2 bg-green-50 rounded-lg">
-                    <div className="h-5 w-5 text-green-600">
-                      <BriefcaseBusinessIcon />
-                    </div>
-                  </div>
+                  <div className="p-2 bg-green-50 rounded-lg"><div className="h-5 w-5 text-green-600"><BriefcaseBusinessIcon /></div></div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">
-                      {incubada.nomeFantasia || incubada.razaoSocial}
-                    </h3>
-                    {incubada.nomeFantasia && (
-                      <p className="text-xs text-gray-500">{incubada.razaoSocial}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      CNPJ: {incubada.cnpj}
-                    </p>
+                    <h3 className="font-semibold text-gray-900">{empresa.nomeFantasia || empresa.razaoSocial}</h3>
+                    <p className="text-xs text-gray-500">{empresa.razaoSocial}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">CNPJ: {empresa.cnpj || "—"}</p>
+                    <p className="text-xs text-gray-400">Contrato: {empresa.contractNumber || "—"}</p>
                   </div>
                 </div>
-                {isEditing && (
-                  <button
-                    onClick={() => openEditModal(incubada)}
-                    className="p-1.5 text-[#004225] hover:bg-emerald-50 rounded-lg transition-colors"
-                    title="Editar"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                )}
+                <button onClick={() => openEditModal(empresa)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#004225] border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors" title="Editar">
+                  <Edit2 className="h-4 w-4" />Editar
+                </button>
               </div>
 
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      incubada.tipoEmpresa === "INCUBADA"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {incubada.tipoEmpresa === "INCUBADA" ? "Incubada" : "Independente"}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${empresa.tipoEmpresa === "INCUBADA" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"}`}>
+                    {empresa.tipoEmpresa === "INCUBADA" ? "Incubada" : "Independente"}
                   </span>
                 </div>
-
-                <div className="flex items-center gap-2 text-gray-600">
-                  <FileText className="h-4 w-4 text-gray-400" />
-                  <span>{incubada.tipoServico || "—"}</span>
-                </div>
-
-                {(incubada.cidade || incubada.uf) && (
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <MapPin className="h-4 w-4 text-gray-400" />
-                    <span>
-                      {[incubada.cidade, incubada.uf].filter(Boolean).join(" - ")}
-                    </span>
-                  </div>
-                )}
-
-                {incubada.email && (
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Globe className="h-4 w-4 text-gray-400" />
-                    <span>{incubada.email}</span>
-                  </div>
-                )}
-
-                {incubada.vinculos && incubada.vinculos.length > 0 && (
-                  <div className="flex flex-col gap-1 pt-2 border-t border-gray-100">
-                    <span className="text-xs font-medium text-gray-500">Vínculos:</span>
-                    {incubada.vinculos.map((vinculo, idx) => {
-                      const rubrica = rubricas.find((r) => r.id === vinculo.rubricaId);
-                      return (
-                        <span key={idx} className="text-xs text-gray-600">
-                          • {rubrica ? `${rubrica.codigo}` : "Rubrica"} ({vinculo.itemIds.length} item{vinculo.itemIds.length !== 1 ? "s" : ""})
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-gray-600"><FileText className="h-4 w-4 text-gray-400" /><span>{empresa.tipoServico || "—"}</span></div>
+                {(empresa.cidade || empresa.uf) && <div className="flex items-center gap-2 text-gray-600"><MapPin className="h-4 w-4 text-gray-400" /><span>{[empresa.cidade, empresa.uf].filter(Boolean).join(" - ")}</span></div>}
+                {empresa.email && <div className="flex items-center gap-2 text-gray-600"><Globe className="h-4 w-4 text-gray-400" /><span>{empresa.email}</span></div>}
               </div>
 
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                <div className="text-xs text-gray-500">
-                  {incubada.dataInicio && incubada.dataFim && (
-                    <>
-                      {formatDate(incubada.dataInicio)} até {formatDate(incubada.dataFim)}
-                    </>
-                  )}
-                </div>
-                {incubada.valorContrato && (
-                  <span className="font-semibold text-[#004225]">
-                    R$ {incubada.valorContrato.toLocaleString("pt-BR")}
-                  </span>
-                )}
+                <div className="text-xs text-gray-500">{empresa.dataInicio && empresa.dataFim ? `${formatDateBr(empresa.dataInicio)} ate ${formatDateBr(empresa.dataFim)}` : "Periodo nao informado"}</div>
+                <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Resumo */}
-      {currentIncubadas.length > 0 && (
+      {empresas.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-          <span className="text-sm font-medium text-gray-700">
-            Total: <strong className="text-gray-900">{currentIncubadas.length}</strong>{" "}
-            empresa{currentIncubadas.length !== 1 ? "s" : ""}
-          </span>
-          <span className="text-sm text-gray-600">
-            Valor total:{" "}
-            <strong className="text-gray-900">
-              R$ {totalValor.toLocaleString("pt-BR")}
-            </strong>
-          </span>
+          <span className="text-sm font-medium text-gray-700">Total: <strong className="text-gray-900">{empresas.length}</strong> empresa{empresas.length !== 1 ? "s" : ""}</span>
+          <span className="text-sm text-gray-600">Valor total: <strong className="text-gray-900">{formatCurrency(totalValor)}</strong></span>
         </div>
       )}
 
-      {/* Modal de Adicionar/Editar */}
-      {isModalOpen && (
-        <IncubadaModal
+      {isFormModalOpen && (
+        <CompanyFormModal
           formData={formData}
           setFormData={setFormData}
-          onSave={saveIncubada}
-          onClose={() => {
-            setIsModalOpen(false);
-            setFormData({});
-            setEditingIncubada(null);
-            setNovoVinculo({ rubricaId: "", itemIds: [] });
-          }}
-          onDelete={editingIncubada ? () => removeIncubada(editingIncubada.id) : undefined}
-          isEditingItem={!!editingIncubada}
-          rubricas={rubricas}
-          novoVinculo={novoVinculo}
-          setNovoVinculo={setNovoVinculo}
-          adicionarVinculo={adicionarVinculo}
-          removerVinculo={removerVinculo}
+          isSaving={isSaving}
+          isEditingItem={!!editingEmpresa}
+          onClose={() => { setIsFormModalOpen(false); setEditingEmpresa(null); setFormData({}); }}
+          onSave={() => { void saveEmpresa(); }}
+          onDelete={editingEmpresa ? () => { void removeEmpresa(editingEmpresa.id); } : undefined}
+        />
+      )}
+
+      {isLinkModalOpen && (
+        <LinkExistingCompanyModal
+          companies={availableCompanies}
+          selectedCompanyId={selectedCompanyId}
+          setSelectedCompanyId={setSelectedCompanyId}
+          isLinking={isLinking}
+          onClose={() => { setIsLinkModalOpen(false); setSelectedCompanyId(""); }}
+          onConfirm={() => { void linkExistingCompany(); }}
         />
       )}
     </div>
   );
 }
 
-// Modal
-function IncubadaModal({
+function CompanyFormModal({
   formData,
   setFormData,
+  isSaving,
+  isEditingItem,
   onSave,
   onClose,
   onDelete,
-  isEditingItem,
-  rubricas,
-  novoVinculo,
-  setNovoVinculo,
-  adicionarVinculo,
-  removerVinculo,
 }: {
-  formData: Partial<Incubada>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<Incubada>>>;
+  formData: Partial<EmpresaProjeto>;
+  setFormData: React.Dispatch<React.SetStateAction<Partial<EmpresaProjeto>>>;
+  isSaving: boolean;
+  isEditingItem: boolean;
   onSave: () => void;
   onClose: () => void;
   onDelete?: () => void;
-  isEditingItem: boolean;
-  rubricas: Rubrica[];
-  novoVinculo: { rubricaId: string; itemIds: string[] };
-  setNovoVinculo: React.Dispatch<React.SetStateAction<{ rubricaId: string; itemIds: string[] }>>;
-  adicionarVinculo: () => void;
-  removerVinculo: (index: number) => void;
 }) {
-  const rubricaSelecionada = rubricas.find((r) => r.id === novoVinculo.rubricaId);
-  const itensDisponiveis = rubricaSelecionada?.itens || [];
+  const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
+  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+
+  const handleLookupZipCode = async () => {
+    const normalizedZipCode = digits(formData.cep);
+    if (normalizedZipCode.length !== 8) {
+      setZipCodeLookupError("CEP deve conter 8 digitos.");
+      return;
+    }
+
+    try {
+      setZipCodeLookupError(null);
+      setIsResolvingZipCode(true);
+      const viaCepData = await fetchViaCep(normalizedZipCode);
+
+      if (!viaCepData) {
+        setZipCodeLookupError("CEP nao encontrado.");
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        cep: formatZipCode(normalizedZipCode),
+        endereco: viaCepData.logradouro || prev.endereco,
+        cidade: viaCepData.localidade || prev.cidade,
+        uf: viaCepData.uf || prev.uf,
+      }));
+    } catch {
+      setZipCodeLookupError("Nao foi possivel consultar o CEP.");
+    } finally {
+      setIsResolvingZipCode(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
           <div className="flex items-center gap-3">
-            <div className="h-6 w-6">
-              <BriefcaseBusinessIcon />
-            </div>
-            <h2 className="text-lg font-bold">
-              {isEditingItem ? "Editar Empresa" : "Nova Empresa Incubada"}
-            </h2>
+            <div className="h-6 w-6"><BriefcaseBusinessIcon /></div>
+            <h2 className="text-lg font-bold">{isEditingItem ? "Editar Empresa" : "Nova Empresa"}</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors"><X className="h-5 w-5" /></button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Razão Social */}
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Razão Social <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.razaoSocial || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, razaoSocial: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Razão social da empresa"
-              />
-            </div>
-
-            {/* Nome Fantasia */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Nome Fantasia
-              </label>
-              <input
-                type="text"
-                value={formData.nomeFantasia || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, nomeFantasia: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Nome fantasia"
-              />
-            </div>
-
-            {/* CNPJ */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                CNPJ <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.cnpj || ""}
-                onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="00.000.000/0000-00"
-              />
-            </div>
-
-            {/* Tipo de Serviço */}
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Tipo de Serviço
-              </label>
-              <input
-                type="text"
-                value={formData.tipoServico || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, tipoServico: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Ex: Desenvolvimento de Software"
-              />
-            </div>
-
-            {/* Contato */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Contato
-              </label>
-              <input
-                type="text"
-                value={formData.contato || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, contato: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Nome do contato"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                E-mail
-              </label>
-              <input
-                type="email"
-                value={formData.email || ""}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="email@empresa.com.br"
-              />
-            </div>
-
-            {/* Cidade */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Cidade
-              </label>
-              <input
-                type="text"
-                value={formData.cidade || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, cidade: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Cidade"
-              />
-            </div>
-
-            {/* UF */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                UF
-              </label>
-              <input
-                type="text"
-                value={formData.uf || ""}
-                onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="UF"
-                maxLength={2}
-              />
-            </div>
-
-            {/* Valor do Contrato */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Valor do Contrato (R$)
-              </label>
-              <input
-                type="number"
-                value={formData.valorContrato || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    valorContrato: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="0,00"
-                min="0"
-                step="0.01"
-              />
-            </div>
-
-            {/* Tipo de Empresa */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Tipo de Empresa <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.tipoEmpresa || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    tipoEmpresa: e.target.value as TipoEmpresa,
-                  })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                <option value="">Selecione...</option>
-                <option value="INCUBADA">Incubada</option>
-                <option value="INDEPENDENTE">Não incubada / Independente</option>
-              </select>
-            </div>
-
-            {/* Data Início */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Data de Início
-              </label>
-              <input
-                type="date"
-                value={formData.dataInicio || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, dataInicio: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              />
-            </div>
-
-            {/* Data Fim */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Data de Término
-              </label>
-              <input
-                type="date"
-                value={formData.dataFim || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, dataFim: e.target.value })
-                }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              />
-            </div>
-
-            {/* Vínculos com Rubricas */}
-            <div className="md:col-span-2 space-y-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Vínculos com Rubricas <span className="text-red-500">*</span>
-              </label>
-              
-              {/* Lista de vínculos existentes */}
-              {formData.vinculos && formData.vinculos.length > 0 && (
-                <div className="space-y-2">
-                  {formData.vinculos.map((vinculo, index) => {
-                    const rubrica = rubricas.find((r) => r.id === vinculo.rubricaId);
-                    return (
-                      <div
-                        key={index}
-                        className="flex items-start justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                      >
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            {rubrica ? `${rubrica.codigo} - ${rubrica.nome}` : "Rubrica não encontrada"}
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            Itens:{" "}
-                            {vinculo.itemIds
-                              .map((itemId) => {
-                                const item = rubrica?.itens.find((i) => i.id === itemId);
-                                return item ? item.descricao : itemId;
-                              })
-                              .join(", ")}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removerVinculo(index)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Remover vínculo"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
+            <Field label="Razao Social" required>
+              <input type="text" value={formData.razaoSocial || ""} onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razao social da empresa" />
+            </Field>
+            <Field label="Nome Fantasia" required>
+              <input type="text" value={formData.nomeFantasia || ""} onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia" />
+            </Field>
+            <Field label="CNPJ" required>
+              <input type="text" value={formData.cnpj || ""} onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="00.000.000/0000-00" />
+            </Field>
+            <Field label="E-mail" required>
+              <input type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="email@empresa.com.br" />
+            </Field>
+            <Field label="Telefone" required>
+              <input type="text" value={formData.telefone || ""} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="(00) 00000-0000" />
+            </Field>
+            <Field label="CEP">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={formData.cep || ""}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cep: formatZipCode(e.target.value) })
+                    }
+                    onBlur={() => {
+                      if (digits(formData.cep).length === 8) {
+                        void handleLookupZipCode();
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                    placeholder="00000-000"
+                    maxLength={9}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleLookupZipCode();
+                    }}
+                    className="px-3 py-2 text-xs font-medium text-[#004225] border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isResolvingZipCode}
+                  >
+                    {isResolvingZipCode ? "Buscando..." : "Buscar CEP"}
+                  </button>
                 </div>
-              )}
-
-              {/* Formulário para adicionar novo vínculo */}
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">
-                  Adicionar Novo Vínculo
-                </h4>
-                <div className="space-y-3">
-                  {/* Seleção de Rubrica */}
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Rubrica <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={novoVinculo.rubricaId}
-                      onChange={(e) => {
-                        setNovoVinculo({ rubricaId: e.target.value, itemIds: [] });
-                      }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                    >
-                      <option value="">Selecione uma rubrica...</option>
-                      {rubricas.map((rubrica) => (
-                        <option key={rubrica.id} value={rubrica.id}>
-                          {rubrica.codigo} - {rubrica.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Seleção de Itens (múltipla) */}
-                  {novoVinculo.rubricaId && itensDisponiveis.length > 0 && (
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-gray-700">
-                        Itens da Rubrica <span className="text-red-500">*</span>
-                      </label>
-                      <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-lg p-2 bg-white">
-                        {itensDisponiveis.map((item) => (
-                          <label
-                            key={item.id}
-                            className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={novoVinculo.itemIds.includes(item.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setNovoVinculo({
-                                    ...novoVinculo,
-                                    itemIds: [...novoVinculo.itemIds, item.id],
-                                  });
-                                } else {
-                                  setNovoVinculo({
-                                    ...novoVinculo,
-                                    itemIds: novoVinculo.itemIds.filter((id) => id !== item.id),
-                                  });
-                                }
-                              }}
-                              className="rounded border-gray-300 text-[#004225] focus:ring-[#004225]"
-                            />
-                            <span className="text-xs text-gray-700 flex-1">
-                              {item.descricao}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {novoVinculo.rubricaId && itensDisponiveis.length === 0 && (
-                    <p className="text-xs text-gray-500">
-                      Esta rubrica não possui itens cadastrados.
-                    </p>
-                  )}
-
-                  {/* Botão para adicionar vínculo */}
-                  {novoVinculo.rubricaId && novoVinculo.itemIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={adicionarVinculo}
-                      className="w-full px-3 py-2 text-sm font-medium text-[#004225] bg-white border border-[#004225] rounded-lg hover:bg-emerald-50 transition-colors"
-                    >
-                      <Plus className="h-4 w-4 inline-block mr-1" />
-                      Adicionar Vínculo
-                    </button>
-                  )}
-                </div>
+                {zipCodeLookupError ? (
+                  <p className="text-xs text-red-600">{zipCodeLookupError}</p>
+                ) : null}
               </div>
-            </div>
-
-            {/* Observação */}
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">
-                Observações
-              </label>
-              <textarea
-                value={formData.observacao || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, observacao: e.target.value })
-                }
-                rows={3}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none"
-                placeholder="Observações adicionais..."
-              />
-            </div>
+            </Field>
+            <Field label="Endereco" required className="md:col-span-2">
+              <input type="text" value={formData.endereco || ""} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Rua, numero e bairro" />
+            </Field>
+            <Field label="Cidade" required>
+              <input type="text" value={formData.cidade || ""} onChange={(e) => setFormData({ ...formData, cidade: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
+            </Field>
+            <Field label="UF" required>
+              <input type="text" value={formData.uf || ""} onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase() })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="UF" maxLength={2} />
+            </Field>
+            <Field label="Tipo de Servico" className="md:col-span-2">
+              <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
+            </Field>
+            <Field label="Tipo de Empresa">
+              <select value={formData.tipoEmpresa || "INDEPENDENTE"} onChange={(e) => setFormData({ ...formData, tipoEmpresa: e.target.value as TipoEmpresa })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]">
+                <option value="INDEPENDENTE">Independente</option>
+                <option value="INCUBADA">Incubada</option>
+              </select>
+            </Field>
+            <Field label="Valor do Contrato (R$)">
+              <input type="text" inputMode="numeric" value={formatCurrencyInput(formData.valorContrato)} onChange={(e) => setFormData({ ...formData, valorContrato: parseCurrencyInput(e.target.value) })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="R$ 0,00" />
+            </Field>
+            <Field label="Data de Inicio">
+              <input type="date" value={formData.dataInicio || ""} onChange={(e) => setFormData({ ...formData, dataInicio: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" />
+            </Field>
+            <Field label="Data de Termino">
+              <input type="date" value={formData.dataFim || ""} onChange={(e) => setFormData({ ...formData, dataFim: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" />
+            </Field>
+            <Field label="Observacoes" className="md:col-span-2">
+              <textarea value={formData.observacao || ""} onChange={(e) => setFormData({ ...formData, observacao: e.target.value })} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none" placeholder="Observacoes adicionais" />
+            </Field>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div>
             {isEditingItem && onDelete && (
-              <button
-                onClick={() => {
-                  if (confirm("Deseja realmente excluir esta empresa?")) {
-                    onDelete();
-                    onClose();
-                  }
-                }}
-                className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4 inline-block mr-2" />
-                Excluir Empresa
+              <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); onClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
+                <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vinculo
               </button>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onSave}
-              disabled={
-                !formData.razaoSocial ||
-                !formData.cnpj ||
-                !formData.tipoEmpresa ||
-                !formData.vinculos ||
-                formData.vinculos.length === 0
-              }
-              className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
+            <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || digits(formData.cnpj).length !== 14} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alteracoes" : "Adicionar Empresa"}
             </button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LinkExistingCompanyModal({
+  companies,
+  selectedCompanyId,
+  setSelectedCompanyId,
+  isLinking,
+  onClose,
+  onConfirm,
+}: {
+  companies: CompanyResponseDTO[];
+  selectedCompanyId: number | "";
+  setSelectedCompanyId: React.Dispatch<React.SetStateAction<number | "">>;
+  isLinking: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
+          <h2 className="text-lg font-bold">Vincular Empresa Existente</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {companies.length === 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Nao ha empresas disponiveis para vincular.</div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Empresa</label>
+              <select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value ? Number(e.target.value) : "")} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]">
+                <option value="">Selecione...</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>{getCompanyLabel(company)} - CNPJ {company.cnpj}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
+          <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+          <button onClick={onConfirm} disabled={companies.length === 0 || !selectedCompanyId || isLinking} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLinking ? "Vinculando..." : "Vincular"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className || ""}`}>
+      <label className="block text-sm font-medium text-gray-700">
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </label>
+      {children}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 ﻿import { http } from '../http';
 import type {
   PageResponseDTO,
+  ProjectPeopleDetailedResponseDTO,
   ProjectPeopleRequestDTO,
   ProjectPeopleResponseDTO,
   ProjectPeopleUpdateDTO,
@@ -11,6 +12,7 @@ const BASE = '/project-people';
 export interface ListProjectPeopleParams {
   page?: number;
   size?: number;
+  projectId?: number;
 }
 
 export function listProjectPeople(params: ListProjectPeopleParams = {}) {
@@ -18,6 +20,17 @@ export function listProjectPeople(params: ListProjectPeopleParams = {}) {
     query: {
       page: params.page ?? 0,
       size: params.size ?? 20,
+      projectId: params.projectId,
+    },
+  });
+}
+
+export function listProjectPeopleDetailed(params: ListProjectPeopleParams = {}) {
+  return http.get<PageResponseDTO<ProjectPeopleDetailedResponseDTO>>(`${BASE}/detailed`, {
+    query: {
+      page: params.page ?? 0,
+      size: params.size ?? 20,
+      projectId: params.projectId,
     },
   });
 }

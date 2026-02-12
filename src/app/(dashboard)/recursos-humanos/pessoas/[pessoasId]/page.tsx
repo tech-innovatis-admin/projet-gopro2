@@ -25,7 +25,7 @@ import {
 } from "../types";
 
 // =============================================================================
-// PÃGINA DE DETALHES DA PESSOA
+// PÁGINA DE DETALHES DA PESSOA
 // =============================================================================
 
 export default function PessoaDetalhesPage() {
@@ -86,7 +86,7 @@ export default function PessoaDetalhesPage() {
     };
   }, [person]);
 
-  // FunÃ§Ã£o para obter iniciais do nome
+  // Função para obter iniciais do nome
   const getInitials = (name: string): string => {
     return name
       .split(" ")
@@ -117,7 +117,7 @@ export default function PessoaDetalhesPage() {
           <div className="flex flex-col items-center justify-center py-20">
             <User className="h-16 w-16 text-gray-300 mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Pessoa nÃ£o encontrada
+              Pessoa não encontrada
             </h2>
             <p className="text-gray-500 mb-6">
               {error || "A pessoa solicitada nao existe ou foi removida."}
@@ -226,7 +226,7 @@ export default function PessoaDetalhesPage() {
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
               <p className="text-xs text-blue-600 font-medium mb-1">
-                Carga HorÃ¡ria Ativa
+                Carga Horária Ativa
               </p>
               <p className="text-2xl font-bold text-blue-700">
                 {totals.activeHours}h
@@ -246,14 +246,14 @@ export default function PessoaDetalhesPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                VÃ­nculos com Projetos
+                Vínculos com Projetos
               </h2>
             </div>
 
             {sortedProjects.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>Nenhum vÃ­nculo com projeto</p>
+                <p>Nenhum vínculo com projeto</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -264,19 +264,19 @@ export default function PessoaDetalhesPage() {
                         Projeto
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        FunÃ§Ã£o
+                        Função
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        VÃ­nculo
+                        Vínculo
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                         Contrato
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Carga HorÃ¡ria
+                        Carga Horária
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        PerÃ­odo
+                        Período
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                         Valor
@@ -296,11 +296,11 @@ export default function PessoaDetalhesPage() {
             )}
           </div>
 
-          {/* ObservaÃ§Ãµes */}
+          {/* Observações */}
           {person.notes && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">
-                ObservaÃ§Ãµes
+                Observações
               </h2>
               <p className="text-sm text-gray-700">{person.notes}</p>
             </div>
@@ -368,4 +368,5 @@ function ProjectRow({ project }: { project: ProjectPerson }) {
     </tr>
   );
 }
+
 

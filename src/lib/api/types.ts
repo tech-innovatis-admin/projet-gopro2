@@ -253,6 +253,7 @@ export interface PeopleResponseDTO {
   cpf: string;
   email: string | null;
   phone: string | null;
+  avatarUrl: string | null;
   birthDate: string | null;
   address: string | null;
   zipCode: string | null;
@@ -271,6 +272,7 @@ export interface PeopleRequestDTO {
   cpf: string;
   email?: string;
   phone?: string;
+  avatarUrl?: string;
   birthDate?: string;
   address?: string;
   zipCode?: string;
@@ -349,6 +351,7 @@ export interface ProjectTotalsDTO {
 export interface ProjectDashboardFiltersDTO {
   projectStatus: ProjectStatusEnum | null;
   projectType: ProjectTypeEnum | null;
+  projectGovIf: ProjectGovIfEnum | null;
   month: number | null;
   year: number | null;
   location: string | null;
@@ -623,6 +626,19 @@ export interface ProjectPeopleResponseDTO {
   updatedBy: number | null;
 }
 
+export interface ProjectPeopleDetailedResponseDTO extends ProjectPeopleResponseDTO {
+  personFullName: string | null;
+  personCpf: string | null;
+  personEmail: string | null;
+  personPhone: string | null;
+  personAvatarUrl: string | null;
+  personBirthDate: string | null;
+  personAddress: string | null;
+  personZipCode: string | null;
+  personCity: string | null;
+  personState: string | null;
+}
+
 export interface ProjectPeopleRequestDTO {
   projectId: number;
   personId: number;
@@ -660,6 +676,17 @@ export interface ProjectCompanyResponseDTO {
   updatedAt: string | null;
   createdBy: number | null;
   updatedBy: number | null;
+}
+
+export interface ProjectCompanyDetailedResponseDTO extends ProjectCompanyResponseDTO {
+  companyName: string | null;
+  companyTradeName: string | null;
+  companyCnpj: string | null;
+  companyEmail: string | null;
+  companyPhone: string | null;
+  companyAddress: string | null;
+  companyCity: string | null;
+  companyState: string | null;
 }
 
 export interface ProjectCompanyRequestDTO {

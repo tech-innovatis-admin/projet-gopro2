@@ -5,7 +5,7 @@ import { BarChart3, CheckCircle2, Clock3, ListChecks, PauseCircle, PlayCircle, t
 import { NavBar } from "@/components/ui/NavBar";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { getProjectDashboard } from "@/src/lib/api/endpoints";
-import { HttpError, type ProjectDashboardResponseDTO, type ProjectStatusEnum } from "@/src/lib/api/types";
+import { HttpError, type ProjectDashboardResponseDTO, type ProjectGovIfEnum, type ProjectStatusEnum } from "@/src/lib/api/types";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
 import { ContractsLineChart } from "./_components/ContractsLineChart";
 import { ContractsMap } from "./_components/ContractsMap";
@@ -36,6 +36,11 @@ const statusLabels: Record<ProjectStatusEnum, string> = {
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
+const govIfFilterOptions: Array<{ label: string; value: ProjectGovIfEnum | null }> = [
+  { label: "Todos", value: null },
+  { label: "GOV", value: "GOV" },
+  { label: "IF", value: "IF" },
+];
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -114,6 +119,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedGovIf, setSelectedGovIf] = useState<ProjectGovIfEnum | null>(null);
   const [yearOptions, setYearOptions] = useState<number[]>([]);
 
   const loadDashboard = useCallback(async () => {
@@ -122,6 +128,7 @@ export default function HomePage() {
     try {
       const response = await getProjectDashboard({
         year: selectedYear ?? undefined,
+        projectGovIf: selectedGovIf ?? undefined,
       });
       setDashboard(response);
       const availableYears = (response.availableYears ?? [])
@@ -137,7 +144,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear]);
+  }, [selectedYear, selectedGovIf]);
 
   useEffect(() => {
     void loadDashboard();
@@ -349,7 +356,7 @@ export default function HomePage() {
             })}
           </div>
 
-          <div className="flex items-start justify-start">
+          <div className="flex flex-wrap items-end justify-start gap-4">
             <div className="w-full max-w-[220px]">
               <p className="mb-2 text-xs font-medium text-zinc-600">Periodo</p>
               <Dropdown
@@ -368,6 +375,29 @@ export default function HomePage() {
                 }}
                 className="w-full"
               />
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-zinc-600">Gov/IF</p>
+              <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-1 shadow-sm">
+                {govIfFilterOptions.map((option) => {
+                  const isActive = selectedGovIf === option.value;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedGovIf(option.value)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#1F4E79] text-white"
+                          : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

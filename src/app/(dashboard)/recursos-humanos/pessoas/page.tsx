@@ -28,11 +28,11 @@ import {
 import { cn } from "@/lib/utils";
 
 // =============================================================================
-// PÃGINA DE PESSOAS EM PROJETOS
+// PÁGINA DE PESSOAS EM PROJETOS
 // =============================================================================
 
 export default function PessoasPage() {
-  // Carrega pessoas com seus vÃ­nculos de projetos
+  // Carrega pessoas com seus vínculos de projetos
   const [people, setPeople] = useState<PersonWithProjects[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export default function PessoasPage() {
       : null;
   }, [people, selectedPersonId]);
 
-  // Calcula estatÃ­sticas gerais
+  // Calcula estatísticas gerais
   const generalStats = useMemo(() => {
     const totalPeople = people.length;
     const peopleWithoutLinks = people.filter((p) => p.totalProjectsCount === 0).length;
@@ -118,13 +118,13 @@ export default function PessoasPage() {
     setIsProjectsExpanded(false);
   }, []);
 
-  // Handler: fechar seleÃ§Ã£o
+  // Handler: fechar seleção
   const handleClose = useCallback(() => {
     setSelectedPersonId(undefined);
     setIsProjectsExpanded(false);
   }, []);
 
-  // FunÃ§Ã£o para obter iniciais do nome
+  // Função para obter iniciais do nome
   const getInitials = (name: string): string => {
     return name
       .split(" ")
@@ -153,11 +153,11 @@ export default function PessoasPage() {
           <span className="text-gray-900 font-medium">Pessoas em Projetos</span>
         </nav>
 
-        {/* Header da PÃ¡gina */}
+        {/* Header da Página */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Pessoas em Projetos</h1>
           <p className="text-sm text-gray-600">
-            Visualize as pessoas cadastradas e seus vÃ­nculos com projetos.
+            Visualize as pessoas cadastradas e seus vínculos com projetos.
           </p>
         </div>
 
@@ -167,7 +167,7 @@ export default function PessoasPage() {
           </div>
         )}
 
-        {/* Resumo RÃ¡pido - Sempre visÃ­vel */}
+        {/* Resumo Rápido - Sempre visível */}
         <div className="mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -187,7 +187,7 @@ export default function PessoasPage() {
                   <UserMinus className="h-6 w-6 text-gray-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Pessoas sem vÃ­nculos</p>
+                  <p className="text-sm text-gray-600 mb-1">Pessoas sem vínculos</p>
                   <p className="text-2xl font-bold text-gray-900">{generalStats.peopleWithoutLinks}</p>
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function PessoasPage() {
                   <CheckCircle2 className="h-6 w-6 text-[#004225]" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Pessoas em Projetos ConcluÃ­dos</p>
+                  <p className="text-sm text-gray-600 mb-1">Pessoas em Projetos Concluídos</p>
                   <p className="text-2xl font-bold text-gray-900">{generalStats.peopleInCompletedProjects}</p>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function PessoasPage() {
           </div>
         </div>
 
-        {/* Layout: Tabela e InformaÃ§Ãµes lado a lado */}
+        {/* Layout: Tabela e Informações lado a lado */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Tabela de Pessoas - Ocupa metade da tela */}
           <div className="lg:col-span-1">
@@ -229,7 +229,7 @@ export default function PessoasPage() {
             />
           </div>
 
-          {/* InformaÃ§Ãµes da Pessoa Selecionada - Ocupa metade da tela */}
+          {/* Informações da Pessoa Selecionada - Ocupa metade da tela */}
           <div className="lg:col-span-1">
             {selectedPerson ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-full animate-in slide-in-from-right-2 duration-300">
@@ -254,7 +254,7 @@ export default function PessoasPage() {
                           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#004225] hover:text-[#004225]/80 transition-colors"
                         >
                           <ExternalLink className="h-3 w-3" />
-                          Ver pÃ¡gina completa
+                          Ver página completa
                         </Link>
                       </div>
 
@@ -300,7 +300,7 @@ export default function PessoasPage() {
                       </div>
                     </div>
 
-                    {/* BotÃ£o fechar */}
+                    {/* Botão fechar */}
                     <button
                       onClick={handleClose}
                       className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
@@ -333,7 +333,7 @@ export default function PessoasPage() {
                   </div>
                 </div>
 
-                {/* SeÃ§Ã£o de Projetos (expansÃ­vel) */}
+                {/* Seção de Projetos (expansível) */}
                 {selectedPerson.totalProjectsCount > 0 && (
                   <div className="border-t border-gray-200 pt-4">
                     <button
@@ -341,7 +341,7 @@ export default function PessoasPage() {
                       className="flex items-center justify-between w-full text-left"
                     >
                       <h3 className="text-sm font-semibold text-gray-700">
-                        VÃ­nculos com Projetos ({selectedPerson.totalProjectsCount})
+                        Vínculos com Projetos ({selectedPerson.totalProjectsCount})
                       </h3>
                       {isProjectsExpanded ? (
                         <ChevronUp className="h-4 w-4 text-gray-500" />
@@ -408,7 +408,7 @@ export default function PessoasPage() {
                                 )}
                               </div>
 
-                              {/* PerÃ­odo e valor */}
+                              {/* Período e valor */}
                               <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
                                 <span className="text-gray-500">
                                   {formatDate(project.startDate)}
@@ -433,7 +433,7 @@ export default function PessoasPage() {
                 <div className="text-center">
                   <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-sm text-gray-500">
-                    Selecione uma pessoa na tabela para ver suas informaÃ§Ãµes
+                    Selecione uma pessoa na tabela para ver suas informações
                   </p>
                 </div>
               </div>
@@ -444,6 +444,7 @@ export default function PessoasPage() {
     </div>
   );
 }
+
 
 
 
