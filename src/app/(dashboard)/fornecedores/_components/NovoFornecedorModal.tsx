@@ -24,6 +24,58 @@ interface NovoFornecedorModalProps {
   onSubmit: (fornecedor: Omit<Fornecedor, "id" | "createdAt">) => void;
 }
 
+type ViaCepResponse = {
+  erro?: boolean;
+  logradouro?: string;
+  localidade?: string;
+  uf?: string;
+};
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function formatZipCode(value: string): string {
+  const digits = onlyDigits(value).slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function formatCnpj(value: string): string {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
+  const normalizedZipCode = onlyDigits(zipCode);
+  if (normalizedZipCode.length !== 8) {
+    throw new Error("CEP deve ter 8 digitos.");
+  }
+  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
+  if (!response.ok) {
+    throw new Error("Falha ao consultar CEP.");
+  }
+  const data = (await response.json()) as ViaCepResponse;
+  if (data.erro) {
+    throw new Error("CEP nao encontrado.");
+  }
+  return data;
+}
+
 export function NovoFornecedorModal({
   isOpen,
   onClose,
@@ -35,6 +87,7 @@ export function NovoFornecedorModal({
     cnpj: "",
     email: "",
     telefone: "",
+    cep: "",
     uf: "",
     municipio: "",
     endereco: "",
@@ -44,6 +97,8 @@ export function NovoFornecedorModal({
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
+  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
 
   // Municípios baseados no UF selecionado
   const municipiosDisponiveis = formData.uf
@@ -71,6 +126,44 @@ export function NovoFornecedorModal({
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleZipCodeChange = async (rawValue: string) => {
+    const formattedZipCode = formatZipCode(rawValue);
+    const normalizedZipCode = onlyDigits(formattedZipCode);
+
+    setFormData((prev) => ({ ...prev, cep: formattedZipCode }));
+
+    if (normalizedZipCode.length !== 8) {
+      setZipCodeLookupError(null);
+      setIsZipCodeLoading(false);
+      return;
+    }
+
+    setIsZipCodeLoading(true);
+    setZipCodeLookupError(null);
+
+    try {
+      const viaCepData = await fetchViaCep(normalizedZipCode);
+      setFormData((prev) => {
+        if (onlyDigits(prev.cep || "") !== normalizedZipCode) {
+          return prev;
+        }
+        return {
+          ...prev,
+          cep: formatZipCode(normalizedZipCode),
+          uf: viaCepData.uf?.trim().toUpperCase() || prev.uf,
+          municipio: viaCepData.localidade?.trim() || prev.municipio,
+          endereco: viaCepData.logradouro?.trim() || prev.endereco,
+        };
+      });
+    } catch (lookupError) {
+      setZipCodeLookupError(
+        lookupError instanceof Error ? lookupError.message : "Nao foi possivel consultar o CEP."
+      );
+    } finally {
+      setIsZipCodeLoading(false);
+    }
+  };
+
   // Submit
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +172,9 @@ export function NovoFornecedorModal({
 
     onSubmit({
       ...formData,
+      cnpj: onlyDigits(formData.cnpj) || undefined,
+      telefone: onlyDigits(formData.telefone) || undefined,
+      cep: onlyDigits(formData.cep) || undefined,
       status: "ATIVO",
     });
 
@@ -89,6 +185,7 @@ export function NovoFornecedorModal({
       cnpj: "",
       email: "",
       telefone: "",
+      cep: "",
       uf: "",
       municipio: "",
       endereco: "",
@@ -97,6 +194,7 @@ export function NovoFornecedorModal({
       observacoes: "",
     });
     setErrors({});
+    setZipCodeLookupError(null);
     onClose();
   };
 
@@ -188,8 +286,9 @@ export function NovoFornecedorModal({
                   type="text"
                   value={formData.cnpj}
                   onChange={(e) =>
-                    setFormData({ ...formData, cnpj: e.target.value })
+                    setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })
                   }
+                  maxLength={18}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
                   placeholder="00.000.000/0000-00"
                 />
@@ -218,10 +317,11 @@ export function NovoFornecedorModal({
                   type="text"
                   value={formData.telefone}
                   onChange={(e) =>
-                    setFormData({ ...formData, telefone: e.target.value })
+                    setFormData({ ...formData, telefone: formatPhone(e.target.value) })
                   }
+                  maxLength={15}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
-                  placeholder="(00) 0000-0000"
+                  placeholder="(00) 00000-0000"
                 />
               </div>
             </div>
@@ -233,7 +333,29 @@ export function NovoFornecedorModal({
               Localização
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={formData.cep}
+                  onChange={(e) => {
+                    void handleZipCodeChange(e.target.value);
+                  }}
+                  maxLength={9}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
+                  placeholder="00000-000"
+                />
+                {isZipCodeLoading ? (
+                  <p className="text-xs text-gray-500 mt-1">Consultando CEP...</p>
+                ) : null}
+                {zipCodeLookupError ? (
+                  <p className="text-xs text-red-500 mt-1">{zipCodeLookupError}</p>
+                ) : null}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   UF *
@@ -279,6 +401,10 @@ export function NovoFornecedorModal({
                   <option value="">
                     {formData.uf ? "Selecione..." : "Selecione UF primeiro"}
                   </option>
+                  {formData.municipio &&
+                    !municipiosDisponiveis.includes(formData.municipio) && (
+                      <option value={formData.municipio}>{formData.municipio}</option>
+                    )}
                   {municipiosDisponiveis.map((mun) => (
                     <option key={mun} value={mun}>
                       {mun}

@@ -37,12 +37,11 @@ function mapPerson(dto: PeopleResponseDTO): Person {
   return {
     id: String(dto.id),
     fullName: dto.fullName,
-    cpf: dto.cpf,
+    cpf: dto.cpf ?? undefined,
     email: dto.email ?? undefined,
     phone: dto.phone ?? undefined,
     birthDate: dto.birthDate ?? undefined,
     address: dto.address ?? undefined,
-    zipCode: dto.zipCode ?? undefined,
     city: dto.city ?? undefined,
     state: dto.state ?? undefined,
     notes: dto.notes ?? undefined,

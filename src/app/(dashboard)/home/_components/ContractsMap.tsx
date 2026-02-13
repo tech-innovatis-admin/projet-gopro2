@@ -65,17 +65,64 @@ function normalizeState(state?: string | null): string {
     .toUpperCase();
 }
 
+function normalizeText(value?: string | null): string {
+  return value?.trim() ?? "";
+}
+
+function parseLocation(location?: string | null): { city: string | null; state: string | null } {
+  const normalized = normalizeText(location);
+  if (!normalized) return { city: null, state: null };
+
+  const parts = normalized
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return { city: null, state: null };
+
+  const parsedState = parts[parts.length - 1];
+  const parsedCity = parts.slice(0, -1).join(" - ");
+  const state = normalizeState(parsedState);
+
+  return {
+    city: parsedCity || null,
+    state: state.length === 2 ? state : null,
+  };
+}
+
+function resolveState(item: ContractsMapItem): string | null {
+  const stateFromField = normalizeState(item.state);
+  if (stateFromField) return stateFromField;
+  return parseLocation(item.location).state;
+}
+
+function resolveCity(item: ContractsMapItem): string | null {
+  const cityFromField = normalizeText(item.city);
+  if (cityFromField) return cityFromField;
+  return parseLocation(item.location).city;
+}
+
+function resolveLocationLabel(item: ContractsMapItem, city: string | null, state: string | null): string {
+  const location = normalizeText(item.location);
+  if (location) return location;
+  if (city && state) return `${city} - ${state}`;
+  if (city) return city;
+  if (state) return state;
+  return "Nao informado";
+}
+
 function toMapLocations(data: ContractsMapItem[]): MapLocation[] {
   return data.map((item, index) => {
-    const stateKey = normalizeState(item.state);
+    const city = resolveCity(item);
+    const state = resolveState(item);
+    const stateKey = normalizeState(state);
     const base = stateCenters[stateKey] ?? [-14.235, -51.925];
     const jitter = (index % 6) * 0.08;
 
     return {
       id: index + 1,
-      location: item.location,
-      city: item.city ?? null,
-      state: item.state ?? null,
+      location: resolveLocationLabel(item, city, state),
+      city,
+      state,
       contracts: item.contracts,
       totalValue: item.totalValue,
       lat: base[0] + jitter,

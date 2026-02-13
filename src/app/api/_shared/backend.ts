@@ -14,6 +14,7 @@ import {
 
 let proxyConfig: ProxyConfig | null = null;
 const DEFAULT_DEV_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_API_TIMEOUT_MS = 30000;
 const DEFAULT_PAGE_SIZE = 20;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
@@ -41,6 +42,15 @@ function getConfiguredBaseUrl(): string | undefined {
   }
 
   return undefined;
+}
+
+function parseTimeoutMs(value: string | undefined, fallbackMs: number): number {
+  const normalized = value?.trim().replace(/^['"]|['"]$/g, '');
+  const parsed = Number.parseInt(normalized ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackMs;
+  }
+  return parsed;
 }
 
 function getProxyConfig(): ProxyConfig {
@@ -72,7 +82,7 @@ function getProxyConfig(): ProxyConfig {
 
   proxyConfig = {
     baseUrl: baseUrl.replace(/\/$/, ''),
-    defaultTimeout: parseInt(process.env.API_TIMEOUT_MS || '30000', 10), // 30s default
+    defaultTimeout: parseTimeoutMs(process.env.API_TIMEOUT_MS, DEFAULT_API_TIMEOUT_MS),
     isDevelopment,
     defaultHeaders: {
       Accept: 'application/json',

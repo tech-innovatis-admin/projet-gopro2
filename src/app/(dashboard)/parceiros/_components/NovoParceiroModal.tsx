@@ -23,6 +23,58 @@ interface NovoParceiroModalProps {
   ) => Promise<void> | void;
 }
 
+type ViaCepResponse = {
+  erro?: boolean;
+  logradouro?: string;
+  localidade?: string;
+  uf?: string;
+};
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function formatZipCode(value: string): string {
+  const digits = onlyDigits(value).slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function formatCnpj(value: string): string {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
+  const normalizedZipCode = onlyDigits(zipCode);
+  if (normalizedZipCode.length !== 8) {
+    throw new Error("CEP deve ter 8 digitos.");
+  }
+  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
+  if (!response.ok) {
+    throw new Error("Falha ao consultar CEP.");
+  }
+  const data = (await response.json()) as ViaCepResponse;
+  if (data.erro) {
+    throw new Error("CEP nao encontrado.");
+  }
+  return data;
+}
+
 type FormData = {
   nome: string;
   sigla: string;
@@ -31,6 +83,7 @@ type FormData = {
   email: string;
   telefone: string;
   site: string;
+  cep: string;
   uf: string;
   municipio: string;
   endereco: string;
@@ -46,6 +99,7 @@ const INITIAL_FORM: FormData = {
   email: "",
   telefone: "",
   site: "",
+  cep: "",
   uf: "",
   municipio: "",
   endereco: "",
@@ -62,6 +116,8 @@ export function NovoParceiroModal({
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
+  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +146,8 @@ export function NovoParceiroModal({
       setErrors({});
       setSubmitError(null);
       setIsSubmitting(false);
+      setIsZipCodeLoading(false);
+      setZipCodeLookupError(null);
     }
   }, [isOpen]);
 
@@ -99,6 +157,45 @@ export function NovoParceiroModal({
     // Limpa erro do campo ao editar
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const handleZipCodeChange = async (rawValue: string) => {
+    const formattedZipCode = formatZipCode(rawValue);
+    const normalizedZipCode = onlyDigits(formattedZipCode);
+
+    setForm((prev) => ({ ...prev, cep: formattedZipCode }));
+
+    if (normalizedZipCode.length !== 8) {
+      setZipCodeLookupError(null);
+      setIsZipCodeLoading(false);
+      return;
+    }
+
+    setIsZipCodeLoading(true);
+    setZipCodeLookupError(null);
+
+    try {
+      const viaCepData = await fetchViaCep(normalizedZipCode);
+      setForm((prev) => {
+        if (onlyDigits(prev.cep) !== normalizedZipCode) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          cep: formatZipCode(normalizedZipCode),
+          uf: viaCepData.uf?.trim().toUpperCase() || prev.uf,
+          municipio: viaCepData.localidade?.trim() || prev.municipio,
+          endereco: viaCepData.logradouro?.trim() || prev.endereco,
+        };
+      });
+    } catch (lookupFailure) {
+      setZipCodeLookupError(
+        lookupFailure instanceof Error ? lookupFailure.message : "Nao foi possivel consultar o CEP."
+      );
+    } finally {
+      setIsZipCodeLoading(false);
     }
   };
 
@@ -144,6 +241,7 @@ export function NovoParceiroModal({
         email: form.email.trim() || undefined,
         telefone: form.telefone.trim() || undefined,
         site: form.site.trim() || undefined,
+        cep: onlyDigits(form.cep) || undefined,
         uf: form.uf,
         municipio: form.municipio.trim(),
         endereco: form.endereco.trim() || undefined,
@@ -290,14 +388,36 @@ export function NovoParceiroModal({
                 <input
                   type="text"
                   value={form.cnpj}
-                  onChange={(e) => handleChange("cnpj", e.target.value)}
+                  onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
                   placeholder="00.000.000/0001-00"
+                  maxLength={18}
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
                 />
               </div>
 
               {/* LocalizaÃ§Ã£o */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    CEP
+                  </label>
+                  <input
+                    type="text"
+                    value={form.cep}
+                    onChange={(e) => {
+                      void handleZipCodeChange(e.target.value);
+                    }}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+                  />
+                  {isZipCodeLoading ? (
+                    <p className="text-xs text-gray-500">Consultando CEP...</p>
+                  ) : null}
+                  {zipCodeLookupError ? (
+                    <p className="text-xs text-red-600">{zipCodeLookupError}</p>
+                  ) : null}
+                </div>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <MapPin className="h-4 w-4 text-gray-400" />
@@ -305,7 +425,7 @@ export function NovoParceiroModal({
                   </label>
                   <select
                     value={form.uf}
-                    onChange={(e) => handleChange("uf", e.target.value)}
+                    onChange={(e) => handleChange("uf", e.target.value.toUpperCase())}
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors bg-white",
                       errors.uf ? "border-red-300" : "border-gray-200"
@@ -322,7 +442,7 @@ export function NovoParceiroModal({
                     <p className="text-xs text-red-600">{errors.uf}</p>
                   )}
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
                     MunicÃ­pio <span className="text-red-500">*</span>
                   </label>
@@ -340,20 +460,18 @@ export function NovoParceiroModal({
                     <p className="text-xs text-red-600">{errors.municipio}</p>
                   )}
                 </div>
-              </div>
-
-              {/* EndereÃ§o */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  EndereÃ§o Completo
-                </label>
-                <input
-                  type="text"
-                  value={form.endereco}
-                  onChange={(e) => handleChange("endereco", e.target.value)}
-                  placeholder="Ex.: Av. GetÃºlio Vargas, 04 - Monte Castelo"
-                  className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
-                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    EndereÃ§o Completo
+                  </label>
+                  <input
+                    type="text"
+                    value={form.endereco}
+                    onChange={(e) => handleChange("endereco", e.target.value)}
+                    placeholder="Ex.: Av. GetÃºlio Vargas, 04 - Monte Castelo"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+                  />
+                </div>
               </div>
 
               {/* Contatos */}
@@ -385,8 +503,9 @@ export function NovoParceiroModal({
                   <input
                     type="tel"
                     value={form.telefone}
-                    onChange={(e) => handleChange("telefone", e.target.value)}
-                    placeholder="(00) 0000-0000"
+                    onChange={(e) => handleChange("telefone", formatPhone(e.target.value))}
+                    placeholder="(00) 00000-0000"
+                    maxLength={15}
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
                   />
                 </div>

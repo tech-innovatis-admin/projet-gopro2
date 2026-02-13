@@ -12,7 +12,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  Target,
+  Crosshair,
   Milestone,
   Flag,
   Edit2,
@@ -1191,7 +1191,7 @@ export default function MetaEtapaFasePage() {
       {!isLoadingData && currentMetas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4">
-            <Target className="h-8 w-8 text-gray-400" />
+            <Crosshair className="h-8 w-8 text-gray-400" />
           </div>
           <h3 className="text-sm font-semibold text-gray-900 mb-1">
             Nenhuma meta cadastrada
@@ -1224,24 +1224,24 @@ export default function MetaEtapaFasePage() {
             return (
             <div
               key={meta.id}
-              className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm transition-all duration-200 hover:border-emerald-300 hover:shadow-md"
+              className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-200 hover:border-slate-400 hover:shadow-md"
             >
               {/* Header da Meta */}
-              <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-emerald-50 border-b border-emerald-100">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-slate-100 border-b border-slate-200">
                 <button
                   onClick={() => toggleMeta(meta.id)}
                   aria-expanded={expandedMetas.has(meta.id)}
                   aria-label={`Alternar meta ${meta.numero}`}
-                  className="rounded p-1 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  className="rounded p-1 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
                   {expandedMetas.has(meta.id) ? (
-                    <ChevronDown className="h-5 w-5 text-emerald-700" />
+                    <ChevronDown className="h-5 w-5 text-slate-700" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-emerald-700" />
+                    <ChevronRight className="h-5 w-5 text-slate-700" />
                   )}
                 </button>
-                <Target className="h-5 w-5 text-emerald-600" />
-                <span className="text-sm font-bold text-emerald-800">
+                <Crosshair className="h-5 w-5 text-slate-600" />
+                <span className="text-sm font-bold text-slate-800">
                   Meta {meta.numero}:
                 </span>
                 {isEditing && editingId === meta.id ? (
@@ -1250,7 +1250,7 @@ export default function MetaEtapaFasePage() {
                       type="text"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="flex-1 px-2 py-1 text-sm border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="flex-1 rounded border border-[#004225] bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") saveEditItem("meta", [meta.id]);
@@ -1278,7 +1278,7 @@ export default function MetaEtapaFasePage() {
                     {isEditing && (
                       <button
                         onClick={() => startEdit(meta.id, meta.titulo)}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-emerald-100 rounded transition-colors"
+                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-slate-200 rounded transition-colors"
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
@@ -1317,7 +1317,7 @@ export default function MetaEtapaFasePage() {
                           type="date"
                           value={editDateValue}
                           onChange={(e) => setEditDateValue(e.target.value)}
-                          className="px-2 py-1 text-xs border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="rounded border border-[#004225] bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") saveEditDate();
@@ -1340,7 +1340,7 @@ export default function MetaEtapaFasePage() {
                     ) : (
                       <button
                         onClick={() => startEditDate("meta", "dataInicio", [meta.id], meta.dataInicio)}
-                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-emerald-100 px-2 py-1 rounded"
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-slate-200 px-2 py-1 rounded"
                         title="Editar data de início"
                       >
                         {meta.dataInicio ? formatDate(meta.dataInicio) : "Sem data"}
@@ -1353,7 +1353,7 @@ export default function MetaEtapaFasePage() {
                           type="date"
                           value={editDateValue}
                           onChange={(e) => setEditDateValue(e.target.value)}
-                          className="px-2 py-1 text-xs border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="rounded border border-[#004225] bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") saveEditDate();
@@ -1376,7 +1376,7 @@ export default function MetaEtapaFasePage() {
                     ) : (
                       <button
                         onClick={() => startEditDate("meta", "dataFim", [meta.id], meta.dataFim)}
-                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-emerald-100 px-2 py-1 rounded"
+                        className="text-xs text-gray-500 hover:text-gray-700 hover:bg-slate-200 px-2 py-1 rounded"
                         title="Editar data de fim"
                       >
                         {meta.dataFim ? formatDate(meta.dataFim) : "Sem data"}
@@ -1402,7 +1402,7 @@ export default function MetaEtapaFasePage() {
                   </button>
                 )}
               </div>
-              <div className="border-b border-emerald-100 bg-white px-4 py-2">
+              <div className="border-b border-slate-200 bg-white px-4 py-2">
                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                   <span className="inline-flex items-center gap-1">
                     <CalendarClock className="h-3.5 w-3.5 text-slate-500" />
@@ -1424,12 +1424,12 @@ export default function MetaEtapaFasePage() {
               {expandedMetas.has(meta.id) && (
                 <div className="p-4 space-y-3">
                   {isEditing && (
-                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
                           Edicao rapida da meta
                         </p>
-                        <span className="text-[11px] text-emerald-700">
+                        <span className="text-[11px] text-slate-600">
                           Campos principais
                         </span>
                       </div>
@@ -1442,7 +1442,7 @@ export default function MetaEtapaFasePage() {
                             onChange={(event) =>
                               updateMetaQuickField(meta.id, "titulo", event.target.value)
                             }
-                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
                           />
                         </label>
 
@@ -1455,7 +1455,7 @@ export default function MetaEtapaFasePage() {
                               updateMetaQuickField(meta.id, "descricao", event.target.value)
                             }
                             placeholder="Descreva o objetivo da meta"
-                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
                           />
                         </label>
 
@@ -1467,7 +1467,7 @@ export default function MetaEtapaFasePage() {
                             onChange={(event) =>
                               updateMetaQuickField(meta.id, "dataInicio", event.target.value)
                             }
-                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
                           />
                         </label>
 
@@ -1479,7 +1479,7 @@ export default function MetaEtapaFasePage() {
                             onChange={(event) =>
                               updateMetaQuickField(meta.id, "dataFim", event.target.value)
                             }
-                            className="h-9 rounded-md border border-emerald-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
                           />
                         </label>
                       </div>
@@ -1505,7 +1505,7 @@ export default function MetaEtapaFasePage() {
                         return (
                         <div
                           key={etapa.id}
-                          className="ml-2 rounded-lg border border-blue-200 bg-blue-50/40 px-3 py-2"
+                          className="ml-2 rounded-lg border border-slate-300 bg-blue-50/40 px-3 py-2"
                         >
                           {/* Header da Etapa */}
                           <div className="flex flex-wrap items-center gap-2 py-2">
@@ -1531,7 +1531,7 @@ export default function MetaEtapaFasePage() {
                                   type="text"
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                  className="flex-1 px-2 py-1 text-sm border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                   autoFocus
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter")
@@ -1593,7 +1593,7 @@ export default function MetaEtapaFasePage() {
                                       type="date"
                                       value={editDateValue}
                                       onChange={(e) => setEditDateValue(e.target.value)}
-                                      className="px-2 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      className="px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                       autoFocus
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter") saveEditDate();
@@ -1629,7 +1629,7 @@ export default function MetaEtapaFasePage() {
                                       type="date"
                                       value={editDateValue}
                                       onChange={(e) => setEditDateValue(e.target.value)}
-                                      className="px-2 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      className="px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                       autoFocus
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter") saveEditDate();
@@ -1716,7 +1716,7 @@ export default function MetaEtapaFasePage() {
                                     return (
                                     <div
                                       key={fase.id}
-                                      className="flex flex-wrap items-center gap-2 py-1.5 px-3 bg-gray-50 rounded-lg border border-gray-100"
+                                      className="flex flex-wrap items-center gap-2 py-1.5 px-3 bg-gray-50 rounded-lg border border-slate-300"
                                     >
                                       <Flag className="h-3.5 w-3.5 text-gray-400" />
                                       <span className="text-xs font-medium text-gray-600">
@@ -1730,7 +1730,7 @@ export default function MetaEtapaFasePage() {
                                             onChange={(e) =>
                                               setEditValue(e.target.value)
                                             }
-                                            className="flex-1 px-2 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            className="flex-1 px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                             autoFocus
                                             onKeyDown={(e) => {
                                               if (e.key === "Enter")
@@ -1802,7 +1802,7 @@ export default function MetaEtapaFasePage() {
                                                 type="date"
                                                 value={editDateValue}
                                                 onChange={(e) => setEditDateValue(e.target.value)}
-                                                className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                                className="px-1.5 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                                 autoFocus
                                                 onKeyDown={(e) => {
                                                   if (e.key === "Enter") saveEditDate();
@@ -1838,7 +1838,7 @@ export default function MetaEtapaFasePage() {
                                                 type="date"
                                                 value={editDateValue}
                                                 onChange={(e) => setEditDateValue(e.target.value)}
-                                                className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                                className="px-1.5 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                                 autoFocus
                                                 onKeyDown={(e) => {
                                                   if (e.key === "Enter") saveEditDate();

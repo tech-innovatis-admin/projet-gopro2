@@ -45,6 +45,7 @@ import {
   unformatPhone,
   validatePhoneComplete,
 } from "./_components/PhoneValidator";
+import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 
 type Papel =
   | "COORDENADOR"
@@ -77,7 +78,6 @@ type MembroProjeto = {
   avatarUrl: string;
   birthDate?: string;
   endereco: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   vinculo: string;
@@ -98,7 +98,6 @@ type MembroFormData = {
   cpf: string;
   birthDate: string;
   endereco: string;
-  zipCode: string;
   city: string;
   state: string;
   vinculo: string;
@@ -127,12 +126,6 @@ function onlyDigits(value?: string) {
   return (value || "").replace(/\D/g, "");
 }
 
-function formatZipCode(value?: string) {
-  const digits = onlyDigits(value).slice(0, 8);
-  if (digits.length <= 5) return digits;
-  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-}
-
 function formatMoneyInput(value: number | "") {
   if (typeof value !== "number" || Number.isNaN(value)) return "";
   return new Intl.NumberFormat("pt-BR", {
@@ -158,27 +151,52 @@ function isUuid(value?: string | null) {
   );
 }
 
-type ViaCepResponse = {
-  cep?: string;
-  logradouro?: string;
-  bairro?: string;
-  localidade?: string;
-  uf?: string;
-  erro?: boolean;
+type IbgeStateResponse = {
+  id: number;
+  sigla: string;
+  nome: string;
 };
 
-async function fetchViaCep(zipCode: string) {
-  const normalizedZipCode = onlyDigits(zipCode);
-  if (normalizedZipCode.length !== 8) return null;
+type IbgeCityResponse = {
+  id: number;
+  nome: string;
+};
 
-  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
+async function fetchBrazilStates() {
+  const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
   if (!response.ok) {
-    throw new Error("Nao foi possivel consultar o CEP.");
+    throw new Error("Nao foi possivel carregar os estados.");
   }
 
-  const data = (await response.json()) as ViaCepResponse;
-  if (data.erro) return null;
-  return data;
+  const data = (await response.json()) as IbgeStateResponse[];
+  return data
+    .filter((item) => item.sigla?.trim())
+    .sort((a, b) => a.sigla.localeCompare(b.sigla))
+    .map((item) => ({
+      value: item.sigla.trim().toUpperCase(),
+      label: `${item.sigla.trim().toUpperCase()} - ${item.nome}`,
+    }));
+}
+
+async function fetchCitiesByState(uf: string) {
+  const normalizedUf = uf.trim().toUpperCase();
+  if (!normalizedUf) return [];
+
+  const response = await fetch(
+    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`,
+  );
+  if (!response.ok) {
+    throw new Error("Nao foi possivel carregar as cidades.");
+  }
+
+  const data = (await response.json()) as IbgeCityResponse[];
+  return data
+    .filter((item) => item.nome?.trim())
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map((item) => ({
+      value: item.nome.trim(),
+      label: item.nome.trim(),
+    }));
 }
 
 function roleToPapel(role: RoleProjectPeopleEnum | null): Papel {
@@ -205,9 +223,6 @@ function hasRequiredMemberFields(formData: MembroFormData) {
   return (
     !isBlank(formData.nome) &&
     !isBlank(formData.papel) &&
-    !isBlank(formData.cpf) &&
-    !isBlank(formData.birthDate) &&
-    !isBlank(formData.zipCode) &&
     !isBlank(formData.city) &&
     !isBlank(formData.state)
   );
@@ -260,7 +275,6 @@ function defaultFormData(): MembroFormData {
     cpf: "",
     birthDate: "",
     endereco: "",
-    zipCode: "",
     city: "",
     state: "",
     vinculo: "",
@@ -427,7 +441,6 @@ export default function EquipeTecnicaPage() {
           avatarUrl: avatarByPersonId[link.personId] || "",
           birthDate: link.personBirthDate || undefined,
           endereco: link.personAddress || "",
-          zipCode: link.personZipCode || undefined,
           city: link.personCity || undefined,
           state: link.personState || undefined,
           vinculo: link.institutionalLink || "",
@@ -481,7 +494,6 @@ export default function EquipeTecnicaPage() {
       cpf: membro.cpf ? formatCPF(membro.cpf) : "",
       birthDate: membro.birthDate || "",
       endereco: membro.endereco || "",
-      zipCode: formatZipCode(membro.zipCode || ""),
       city: membro.city || "",
       state: (membro.state || "").toUpperCase(),
       vinculo: membro.vinculo || "",
@@ -525,15 +537,17 @@ export default function EquipeTecnicaPage() {
     }
     if (!hasRequiredMemberFields(formData)) {
       setActionError(
-        "Preencha os campos obrigatorios: nome, papel, CPF, data de nascimento, CEP, cidade e estado.",
+        "Preencha os campos obrigatorios: nome, papel, cidade e estado.",
       );
       return;
     }
 
-    const cpfValidation = validateCPFComplete(formData.cpf || "");
-    if (!cpfValidation.isValid) {
-      setCpfError(cpfValidation.errorMessage);
-      return;
+    if (formData.cpf && formData.cpf.trim()) {
+      const cpfValidation = validateCPFComplete(formData.cpf || "");
+      if (!cpfValidation.isValid) {
+        setCpfError(cpfValidation.errorMessage);
+        return;
+      }
     }
 
     if (formData.telefone && formData.telefone.trim()) {
@@ -544,16 +558,10 @@ export default function EquipeTecnicaPage() {
       }
     }
 
-    const cpfUnformatted = unformatCPF(formData.cpf || "");
+    const cpfUnformatted = formData.cpf ? unformatCPF(formData.cpf) : undefined;
     const phoneUnformatted = formData.telefone
       ? unformatPhone(formData.telefone)
       : undefined;
-    const normalizedZipCode = onlyDigits(formData.zipCode);
-
-    if (normalizedZipCode.length !== 8) {
-      setActionError("Informe um CEP valido com 8 digitos.");
-      return;
-    }
 
     try {
       setIsSaving(true);
@@ -564,12 +572,11 @@ export default function EquipeTecnicaPage() {
       let avatarUploadWarning: string | null = null;
       const peoplePayloadBase = {
         fullName: formData.nome.trim(),
-        cpf: cpfUnformatted,
+        cpf: cpfUnformatted || undefined,
         email: toOptional(formData.email),
         phone: toOptional(phoneUnformatted),
         birthDate: toOptional(formData.birthDate),
         address: toOptional(formData.endereco),
-        zipCode: normalizedZipCode,
         city: formData.city.trim(),
         state: formData.state.trim().toUpperCase(),
         notes: toOptional(formData.notes),
@@ -903,13 +910,6 @@ export default function EquipeTecnicaPage() {
                   </div>
                 )}
 
-                {membro.zipCode && (
-                  <div className="text-gray-600">
-                    CEP:{" "}
-                    <strong className="text-gray-900">{formatZipCode(membro.zipCode)}</strong>
-                  </div>
-                )}
-
                 {membro.birthDate && (
                   <div className="text-gray-600">
                     Nascimento:{" "}
@@ -1080,42 +1080,65 @@ function MemberFormModal({
   const canSave =
     hasRequiredMemberFields(formData) &&
     !cpfError &&
-    !phoneError &&
-    validateCPFComplete(formData.cpf || "").isValid;
+    !phoneError;
 
-  const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
-  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
+  const [cityOptions, setCityOptions] = useState<DropdownOption[]>([]);
+  const [isUfLoading, setIsUfLoading] = useState(true);
+  const [isCityLoading, setIsCityLoading] = useState(Boolean(formData.state));
+  const [ufLookupError, setUfLookupError] = useState<string | null>(null);
+  const [cityLookupError, setCityLookupError] = useState<string | null>(null);
 
-  const handleLookupZipCode = async () => {
-    const normalizedZipCode = onlyDigits(formData.zipCode);
-    if (normalizedZipCode.length !== 8) {
-      setZipCodeLookupError("CEP deve conter 8 digitos.");
+  useEffect(() => {
+    let isMounted = true;
+
+    void fetchBrazilStates()
+      .then((options) => {
+        if (!isMounted) return;
+        setUfOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setUfOptions([]);
+        setUfLookupError("Nao foi possivel carregar os estados.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsUfLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const selectedUf = formData.state.trim().toUpperCase();
+    if (!selectedUf) {
       return;
     }
 
-    try {
-      setZipCodeLookupError(null);
-      setIsResolvingZipCode(true);
-      const viaCepData = await fetchViaCep(normalizedZipCode);
+    let isMounted = true;
 
-      if (!viaCepData) {
-        setZipCodeLookupError("CEP nao encontrado.");
-        return;
-      }
+    void fetchCitiesByState(selectedUf)
+      .then((options) => {
+        if (!isMounted) return;
+        setCityOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setCityOptions([]);
+        setCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsCityLoading(false);
+      });
 
-      setFormData((prev) => ({
-        ...prev,
-        zipCode: formatZipCode(normalizedZipCode),
-        endereco: viaCepData.logradouro || prev.endereco,
-        city: viaCepData.localidade || prev.city,
-        state: viaCepData.uf || prev.state,
-      }));
-    } catch {
-      setZipCodeLookupError("Nao foi possivel consultar o CEP.");
-    } finally {
-      setIsResolvingZipCode(false);
-    }
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.state]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -1213,14 +1236,16 @@ function MemberFormModal({
               </select>
             </Field>
 
-            <Field label="CPF" required>
+            <Field label="CPF (opcional)">
               <input
                 type="text"
                 value={formData.cpf}
                 onChange={(e) => {
                   const formatted = formatCPF(e.target.value);
                   setFormData((prev) => ({ ...prev, cpf: formatted }));
-                  if (formatted.length === 14) {
+                  if (!formatted || !formatted.trim()) {
+                    setCpfError("");
+                  } else if (formatted.length === 14) {
                     const validation = validateCPFComplete(formatted);
                     setCpfError(validation.errorMessage);
                   } else {
@@ -1228,6 +1253,10 @@ function MemberFormModal({
                   }
                 }}
                 onBlur={() => {
+                  if (!formData.cpf || !formData.cpf.trim()) {
+                    setCpfError("");
+                    return;
+                  }
                   const validation = validateCPFComplete(formData.cpf || "");
                   setCpfError(validation.errorMessage);
                 }}
@@ -1291,7 +1320,7 @@ function MemberFormModal({
               ) : null}
             </Field>
 
-            <Field label="Data de nascimento" required>
+            <Field label="Data de nascimento">
               <input
                 type="date"
                 value={formData.birthDate}
@@ -1302,68 +1331,51 @@ function MemberFormModal({
               />
             </Field>
 
-            <Field label="CEP" required>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={formData.zipCode}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        zipCode: formatZipCode(e.target.value),
-                      }))
-                    }
-                    onBlur={() => {
-                      if (onlyDigits(formData.zipCode).length === 8) {
-                        void handleLookupZipCode();
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                    placeholder="00000-000"
-                    maxLength={9}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleLookupZipCode();
-                    }}
-                    className="px-3 py-2 text-xs font-medium text-[#004225] border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={isResolvingZipCode}
-                  >
-                    {isResolvingZipCode ? "Buscando..." : "Buscar CEP"}
-                  </button>
-                </div>
-                {zipCodeLookupError ? (
-                  <p className="text-xs text-red-600">{zipCodeLookupError}</p>
-                ) : null}
-              </div>
+            <Field label="UF" required>
+              <Dropdown
+                options={ufOptions}
+                value={formData.state || undefined}
+                onChange={(value) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    state: (value || "").toUpperCase(),
+                    city: "",
+                  }));
+                  setCityLookupError(null);
+                  setCityOptions([]);
+                  setIsCityLoading(Boolean(value));
+                }}
+                placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                disabled={isUfLoading || ufOptions.length === 0}
+                searchable
+                className="w-full"
+              />
+              {ufLookupError ? (
+                <p className="text-xs text-amber-600">{ufLookupError}</p>
+              ) : null}
             </Field>
 
             <Field label="Cidade" required>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Cidade"
-              />
-            </Field>
-
-            <Field label="UF" required>
-              <input
-                type="text"
-                value={formData.state}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    state: e.target.value.toUpperCase().slice(0, 2),
-                  }))
+              <Dropdown
+                options={cityOptions}
+                value={formData.city || undefined}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, city: value || "" }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="UF"
-                maxLength={2}
+                placeholder={
+                  !formData.state
+                    ? "Selecione a UF primeiro"
+                    : isCityLoading
+                      ? "Carregando cidades..."
+                      : "Selecione a cidade"
+                }
+                disabled={!formData.state || isCityLoading || cityOptions.length === 0}
+                searchable
+                className="w-full"
               />
+              {cityLookupError ? (
+                <p className="text-xs text-amber-600">{cityLookupError}</p>
+              ) : null}
             </Field>
 
             <Field label="Vinculo institucional">
@@ -1582,7 +1594,8 @@ function LinkExistingMemberModal({
                   <option value="">Selecione...</option>
                   {people.map((person) => (
                     <option key={person.id} value={person.id}>
-                      {person.fullName} - CPF {formatCPF(person.cpf)}
+                      {person.fullName}
+                      {person.cpf ? ` - CPF ${formatCPF(person.cpf)}` : ""}
                     </option>
                   ))}
                 </select>

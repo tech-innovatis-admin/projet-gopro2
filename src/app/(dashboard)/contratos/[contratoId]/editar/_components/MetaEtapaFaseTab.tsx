@@ -6,7 +6,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  Target,
+  Crosshair,
   Milestone,
   Flag,
   GripVertical,
@@ -278,7 +278,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
       {/* Lista de Metas */}
       {metas.length === 0 ? (
         <EmptyState
-          icon={Target}
+          icon={Crosshair}
           title="Nenhuma meta cadastrada"
           description="Adicione metas para estruturar o contrato."
           buttonLabel="Adicionar Meta"
@@ -292,18 +292,18 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
               {/* Header da Meta */}
-              <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border-b border-emerald-100">
+              <div className="flex items-center gap-3 px-4 py-3 bg-slate-100 border-b border-slate-200">
                 <button
                   onClick={() => toggleMeta(meta.id)}
-                  className="p-1 hover:bg-emerald-100 rounded transition-colors"
+                  className="p-1 hover:bg-slate-200 rounded transition-colors"
                 >
                   {expandedMetas.has(meta.id) ? (
-                    <ChevronDown className="h-5 w-5 text-emerald-700" />
+                    <ChevronDown className="h-5 w-5 text-slate-700" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-emerald-700" />
+                    <ChevronRight className="h-5 w-5 text-slate-700" />
                   )}
                 </button>
-                <span className="text-sm font-bold text-emerald-800">
+                <span className="text-sm font-bold text-slate-800">
                   Meta {meta.numero}:
                 </span>
                 {editingId === meta.id ? (
@@ -312,7 +312,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                       type="text"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="flex-1 px-2 py-1 text-sm border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="flex-1 rounded border border-[#004225] bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") saveEdit("meta", [meta.id]);
@@ -339,7 +339,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                     </span>
                     <button
                       onClick={() => startEdit(meta.id, meta.titulo)}
-                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-emerald-100 rounded transition-colors"
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-slate-200 rounded transition-colors"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
@@ -372,7 +372,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                       {meta.etapas.map((etapa) => (
                         <div
                           key={etapa.id}
-                          className="ml-4 border-l-2 border-blue-200 pl-4"
+                          className="ml-4 border-l-2 border-slate-300 pl-4"
                         >
                           {/* Header da Etapa */}
                           <div className="flex items-center gap-3 py-2">
@@ -396,7 +396,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                                   type="text"
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className="flex-1 px-2 py-1 text-sm border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                   autoFocus
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter")
@@ -459,7 +459,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                                   {etapa.fases.map((fase) => (
                                     <div
                                       key={fase.id}
-                                      className="flex items-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg border border-gray-100"
+                                      className="flex items-center gap-3 py-1.5 px-3 bg-gray-50 rounded-lg border border-slate-300"
                                     >
                                       <Flag className="h-3.5 w-3.5 text-gray-400" />
                                       <span className="text-xs font-medium text-gray-600">
@@ -473,7 +473,7 @@ export function MetaEtapaFaseTab({ contratoId, onChange }: MetaEtapaFaseTabProps
                                             onChange={(e) =>
                                               setEditValue(e.target.value)
                                             }
-                                            className="flex-1 px-2 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            className="flex-1 px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                                             autoFocus
                                             onKeyDown={(e) => {
                                               if (e.key === "Enter")

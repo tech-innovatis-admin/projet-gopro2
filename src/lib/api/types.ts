@@ -250,13 +250,12 @@ export interface CompanyUpdateDTO extends Partial<CompanyRequestDTO> {
 export interface PeopleResponseDTO {
   id: number;
   fullName: string;
-  cpf: string;
+  cpf: string | null;
   email: string | null;
   phone: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
   address: string | null;
-  zipCode: string | null;
   city: string | null;
   state: string | null;
   notes: string | null;
@@ -269,13 +268,12 @@ export interface PeopleResponseDTO {
 
 export interface PeopleRequestDTO {
   fullName: string;
-  cpf: string;
+  cpf?: string;
   email?: string;
   phone?: string;
   avatarUrl?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;
@@ -393,6 +391,7 @@ export interface ProjectDashboardLocationMetricDTO {
 
 export interface ProjectDashboardPartnerMetricDTO {
   partnerId: number | null;
+  partnerAcronym?: string | null;
   partnerName: string;
   contracts: number;
   totalValue: number;
@@ -634,7 +633,6 @@ export interface ProjectPeopleDetailedResponseDTO extends ProjectPeopleResponseD
   personAvatarUrl: string | null;
   personBirthDate: string | null;
   personAddress: string | null;
-  personZipCode: string | null;
   personCity: string | null;
   personState: string | null;
 }

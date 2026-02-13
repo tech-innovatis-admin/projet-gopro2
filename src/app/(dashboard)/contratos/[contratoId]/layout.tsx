@@ -33,7 +33,6 @@ import {
 import {
   ChevronRight,
   Home,
-  Download,
   MoreHorizontal,
   Building2,
   User,
@@ -75,10 +74,6 @@ type EditRelations = {
   cordinatorId: number | null;
   projectGovIf: ProjectGovIfEnum | null;
 };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-}
 
 const NO_INFO_LABEL = "-";
 
@@ -475,7 +470,7 @@ export default function ContratoLayout({
     currentContrato.valorTotal > 0
       ? Math.round(((currentContrato.valorExecutado ?? 0) / currentContrato.valorTotal) * 100)
       : 0;
-  const saldoTotal = (currentContrato.valorTotal || 0) - (currentContrato.valorExecutado || 0);
+  // const saldoTotal = (currentContrato.valorTotal || 0) - (currentContrato.valorExecutado || 0);
   const canEditContrato = !isLoadingContrato && !loadContratoError && !!projectSnapshot;
   
   // Truncar descrição para preview
@@ -689,17 +684,51 @@ export default function ContratoLayout({
                       className="px-2 py-1 text-2xl font-bold text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225] flex-1 min-w-[200px]"
                       placeholder="Título do contrato"
                     />
+                    <select
+                      value={editRelations.projectGovIf ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          projectGovIf: (e.target.value || null) as ProjectGovIfEnum | null,
+                        })
+                      }
+                      className={`h-9 rounded-full border px-3 text-sm font-semibold focus:outline-none focus:ring-2 ${
+                        editRelations.projectGovIf === "GOV"
+                          ? "border-sky-200 bg-sky-50 text-sky-700 focus:ring-sky-200/70"
+                          : editRelations.projectGovIf === "IF"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 focus:ring-emerald-200/70"
+                          : "border-gray-300 bg-white text-gray-700 focus:ring-[#004225]/20 focus:border-[#004225]"
+                      }`}
+                    >
+                      <option value="">Gov/IF</option>
+                      <option value="GOV">GOV</option>
+                      <option value="IF">IF</option>
+                    </select>
                   </div>
                 ) : (
-                  <h1 className="text-2xl font-bold text-[#003319]">
-                    {contrato.codigo} – {contrato.titulo}
-                  </h1>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h1 className="text-2xl font-bold text-[#003319]">
+                      {contrato.codigo} – {contrato.titulo}
+                    </h1>
+                    {currentContrato.unidade && (
+                      <span
+                        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${
+                          String(currentContrato.unidade).toUpperCase() === "GOV"
+                            ? "border-sky-200 bg-sky-50 text-sky-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {String(currentContrato.unidade).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                 )}
+                {/* Temporarily hidden:
                 {!isEditing && (
                   <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="text-sm font-medium">Saldo: {formatCurrency(saldoTotal)}</span>
                   </div>
                 )}
+                */}
                 {isEditing && (
                   <div className="flex items-center gap-2">
                     <select
@@ -817,17 +846,6 @@ export default function ContratoLayout({
                             >
                               <Edit className="h-4 w-4" />
                               Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                // TODO: Implementar exportação
-                                console.log("Exportar clicado");
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer focus:bg-gray-50 outline-none"
-                            >
-                              <Download className="h-4 w-4" />
-                              Exportar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -987,31 +1005,6 @@ export default function ContratoLayout({
                     <p className="text-sm font-medium text-gray-900">
                       {contrato.tipo === "PROJETO" ? "Projeto" : "Produto"}
                     </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-start gap-3 group">
-                <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                    Gov/IF
-                  </p>
-                  {isEditing ? (
-                    <select
-                      value={editRelations.projectGovIf ?? ""}
-                      onChange={(e) =>
-                        handleRelationChange({
-                          projectGovIf: (e.target.value || null) as ProjectGovIfEnum | null,
-                        })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                    >
-                      <option value="">Nao informado</option>
-                      <option value="GOV">GOV</option>
-                      <option value="IF">IF</option>
-                    </select>
-                  ) : (
-                    <p className="text-sm font-medium text-gray-900">{contrato.unidade || NO_INFO_LABEL}</p>
                   )}
                 </div>
               </div>
@@ -1377,4 +1370,5 @@ function formatDate(iso: string) {
     return iso;
   }
 }
+
 

@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { ResizableTable } from "@/components/ui/resizable-table";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { MoneyInput } from "./_components/MoneyImput";
 import {
   createDisbursementSchedule,
@@ -34,6 +35,12 @@ type ParcelaPrevista = {
 
 const PAGE_SIZE = 20;
 const MAX_PAGE_REQUESTS = 1000;
+const DEFAULT_MAX_DISBURSEMENT_VALUE = 9999999999999.99;
+const configuredMaxDisbursementValue = Number(process.env.NEXT_PUBLIC_PROJECT_MAX_CONTRACT_VALUE);
+const MAX_DISBURSEMENT_VALUE =
+  Number.isFinite(configuredMaxDisbursementValue) && configuredMaxDisbursementValue > 0
+    ? configuredMaxDisbursementValue
+    : DEFAULT_MAX_DISBURSEMENT_VALUE;
 
 const statusOptions: { value: StatusDisbursementScheduleEnum; label: string; color: string }[] = [
   { value: "PREVISTO", label: "Previsto", color: "bg-gray-100 text-gray-800" },
@@ -201,6 +208,10 @@ export default function DesembolsoPage() {
   const excedente = Math.max(totalPrevisto - valorTotalContrato, 0);
   const percentualPrevisto =
     valorTotalContrato > 0 ? (totalPrevisto / valorTotalContrato) * 100 : 0;
+  const maxParcelValue = valorTotalContrato > 0
+    ? Math.min(valorTotalContrato, MAX_DISBURSEMENT_VALUE)
+    : MAX_DISBURSEMENT_VALUE;
+  const maxParcelValueCents = Math.round(maxParcelValue * 100);
 
   const canSave = useMemo(() => {
     if (!isEditing) return true;
@@ -430,27 +441,6 @@ export default function DesembolsoPage() {
         </div>
       </div>
 
-      {valorTotalContrato > 0 && (excedente > 0 || restante > 0) && (
-        <div
-          className={`rounded-lg border p-4 ${
-            excedente > 0 ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            <AlertCircle
-              className={`${excedente > 0 ? "text-red-600" : "text-blue-600"} w-5 h-5 mt-0.5`}
-            />
-            <div className="flex-1">
-              <p className={`text-sm font-medium ${excedente > 0 ? "text-red-900" : "text-blue-900"}`}>
-                {excedente > 0
-                  ? `O cronograma excede o valor total do projeto em ${formatCurrency(excedente)}.`
-                  : `Faltam ${formatCurrency(restante)} para completar o valor total do projeto.`}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {currentParcelas.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
           <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -472,7 +462,7 @@ export default function DesembolsoPage() {
               <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">% do total</th>
-              <th className="text-center py-3 px-4 font-medium text-gray-600">Observacao</th>
+              <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
               {isEditing && <th className="text-center py-3 px-4 font-medium text-gray-600">Acoes</th>}
             </tr>
           </thead>
@@ -487,13 +477,11 @@ export default function DesembolsoPage() {
                   <td className="py-3 px-4 font-medium text-gray-500 text-center">{parcela.numero}o</td>
                   <td className="py-3 px-4 text-center">
                     {isEditing ? (
-                      <input
-                        type="date"
+                      <DatePicker
                         value={parcela.dataPrevista || ""}
-                        onChange={(e) =>
-                          handleChangeParcela(parcela.id, { dataPrevista: e.target.value })
-                        }
-                        className="px-2 py-1 border border-gray-300 rounded text-sm"
+                        onChange={(value) => handleChangeParcela(parcela.id, { dataPrevista: value })}
+                        placeholder="Selecione a data"
+                        className="w-full"
                       />
                     ) : (
                       <span className="text-gray-700">{formatDate(parcela.dataPrevista)}</span>
@@ -506,6 +494,7 @@ export default function DesembolsoPage() {
                         onValueChange={(cents) =>
                           handleChangeParcela(parcela.id, { valorPrevisto: cents / 100 })
                         }
+                        maxCents={maxParcelValueCents}
                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-center"
                         placeholder="R$ 0,00"
                       />

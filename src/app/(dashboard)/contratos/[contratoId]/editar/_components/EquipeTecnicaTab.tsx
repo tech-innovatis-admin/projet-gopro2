@@ -143,7 +143,7 @@ export function EquipeTecnicaTab({ contratoId, onChange }: EquipeTecnicaTabProps
 
   // Salvar membro
   const saveMembro = () => {
-    if (!formData.nome || !formData.papel || !formData.cpf) return;
+    if (!formData.nome || !formData.papel) return;
 
     if (editingMembro) {
       // Editar existente
@@ -533,7 +533,7 @@ function MembroModal({
             {/* CPF */}
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">
-                CPF <span className="text-red-500">*</span>
+                CPF (opcional)
               </label>
               <input
                 type="text"
@@ -546,7 +546,7 @@ function MembroModal({
                 placeholder="000.000.000-00"
                 maxLength={11}
               />
-              <p className="text-xs text-gray-500">Apenas números (11 dígitos)</p>
+              <p className="text-xs text-gray-500">Apenas números (11 dígitos, se informado)</p>
             </div>
 
             {/* Vínculo */}
@@ -613,7 +613,7 @@ function MembroModal({
           </button>
           <button
             onClick={onSave}
-            disabled={!formData.nome || !formData.papel || !formData.cpf}
+            disabled={!formData.nome || !formData.papel}
             className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isEditing ? "Salvar Alterações" : "Adicionar Membro"}

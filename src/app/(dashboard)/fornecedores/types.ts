@@ -89,6 +89,7 @@ export interface Fornecedor {
   cnpj?: string;
   email?: string;
   telefone?: string;
+  cep?: string;
   uf: string;
   municipio: string;
   endereco?: string;

@@ -17,7 +17,6 @@ export interface People {
   avatarUrl?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;
@@ -39,7 +38,6 @@ export interface CreatePeople {
   avatarUrl?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;

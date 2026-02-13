@@ -135,7 +135,8 @@ type NovoContratoForm = {
   dataFim: string;
   dataInicioEfetivo: string;
   dataFimEfetivo: string;
-  localidade: string;
+  uf: string;
+  cidade: string;
   scope: string;
   contract_value: string;
   metas: Meta[];
@@ -149,6 +150,9 @@ type CoordinatorForm = {
   cpf: string;
   email: string;
   phone: string;
+  birthDate: string;
+  city: string;
+  state: string;
 };
 type PartnerCreateForm = {
   name: string;
@@ -185,6 +189,15 @@ type SecretaryCreateForm = {
   phone: string;
   address: string;
   contactPerson: string;
+};
+type IbgeStateResponse = {
+  id: number;
+  sigla: string;
+  nome: string;
+};
+type IbgeCityResponse = {
+  id: number;
+  nome: string;
 };
 type TipoDocumento = "contrato" | "tr" | "planoTrabalho" | "outro";
 type ProjetoDocumentos = Partial<Record<TipoDocumento, File>>;
@@ -275,7 +288,8 @@ const initialFormState: NovoContratoForm = {
   dataFim: "",
   dataInicioEfetivo: "",
   dataFimEfetivo: "",
-  localidade: "",
+  uf: "",
+  cidade: "",
   scope: "",
   contract_value: "",
   metas: [],
@@ -287,6 +301,9 @@ const initialCoordinatorFormState: CoordinatorForm = {
   cpf: "",
   email: "",
   phone: "",
+  birthDate: "",
+  city: "",
+  state: "",
 };
 
 const initialPartnerCreateFormState: PartnerCreateForm = {
@@ -349,12 +366,66 @@ const formatCnpjInput = (value: string) => {
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 };
 
+const formatPhoneInput = (value: string) => {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (!digits) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
+
+async function fetchBrazilStates() {
+  const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
+  if (!response.ok) {
+    throw new Error("Nao foi possivel carregar os estados.");
+  }
+
+  const data = (await response.json()) as IbgeStateResponse[];
+  return data
+    .filter((item) => item.sigla?.trim())
+    .sort((a, b) => a.sigla.localeCompare(b.sigla))
+    .map((item) => ({
+      value: item.sigla.trim().toUpperCase(),
+      label: `${item.sigla.trim().toUpperCase()} - ${item.nome}`,
+    }));
+}
+
+async function fetchCitiesByState(uf: string) {
+  const normalizedUf = uf.trim().toUpperCase();
+  if (!normalizedUf) return [];
+
+  const response = await fetch(
+    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`
+  );
+  if (!response.ok) {
+    throw new Error("Nao foi possivel carregar as cidades.");
+  }
+
+  const data = (await response.json()) as IbgeCityResponse[];
+  return data
+    .filter((item) => item.nome?.trim())
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map((item) => ({
+      value: item.nome.trim(),
+      label: item.nome.trim(),
+    }));
+}
+
 export default function NovoContratoPage() {
   const router = useRouter();
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
+  const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
+  const [cidadeOptions, setCidadeOptions] = useState<DropdownOption[]>([]);
+  const [isUfLoading, setIsUfLoading] = useState(false);
+  const [isCidadeLoading, setIsCidadeLoading] = useState(false);
+  const [ufLookupError, setUfLookupError] = useState<string | null>(null);
+  const [cidadeLookupError, setCidadeLookupError] = useState<string | null>(null);
   const [showMetasSection, setShowMetasSection] = useState(false);
   const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
@@ -378,6 +449,9 @@ export default function NovoContratoPage() {
     initialCoordinatorFormState
   );
   const [coordinatorFormError, setCoordinatorFormError] = useState<string | null>(null);
+  const [coordinatorCityOptions, setCoordinatorCityOptions] = useState<DropdownOption[]>([]);
+  const [isCoordinatorCityLoading, setIsCoordinatorCityLoading] = useState(false);
+  const [coordinatorCityLookupError, setCoordinatorCityLookupError] = useState<string | null>(null);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [partnerTargetField, setPartnerTargetField] =
     useState<PartnerTargetField>("parceiroId");
@@ -487,6 +561,14 @@ export default function NovoContratoPage() {
     { value: "GOV", label: "Gov" },
   ], []);
 
+  const ufDropdownOptions = useMemo(() => ufOptions, [ufOptions]);
+  const cidadeDropdownOptions = useMemo(() => cidadeOptions, [cidadeOptions]);
+  const coordinatorUfDropdownOptions = useMemo(() => ufOptions, [ufOptions]);
+  const coordinatorCityDropdownOptions = useMemo(
+    () => coordinatorCityOptions,
+    [coordinatorCityOptions]
+  );
+
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => 
     tipoOptions.map(opt => ({ value: opt.value, label: opt.label })),
     []
@@ -559,6 +641,97 @@ export default function NovoContratoPage() {
     void loadOrganizations();
   }, [loadOrganizations]);
 
+  useEffect(() => {
+    let isMounted = true;
+    setIsUfLoading(true);
+    setUfLookupError(null);
+
+    void fetchBrazilStates()
+      .then((options) => {
+        if (!isMounted) return;
+        setUfOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setUfOptions([]);
+        setUfLookupError("Nao foi possivel carregar os estados. Tente novamente.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsUfLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const selectedUf = form.uf.trim().toUpperCase();
+    if (!selectedUf) {
+      setCidadeOptions([]);
+      setCidadeLookupError(null);
+      setIsCidadeLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsCidadeLoading(true);
+    setCidadeLookupError(null);
+
+    void fetchCitiesByState(selectedUf)
+      .then((options) => {
+        if (!isMounted) return;
+        setCidadeOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setCidadeOptions([]);
+        setCidadeLookupError("Nao foi possivel carregar as cidades deste estado.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsCidadeLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.uf]);
+
+  useEffect(() => {
+    const selectedUf = coordinatorForm.state.trim().toUpperCase();
+    if (!selectedUf) {
+      setCoordinatorCityOptions([]);
+      setCoordinatorCityLookupError(null);
+      setIsCoordinatorCityLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsCoordinatorCityLoading(true);
+    setCoordinatorCityLookupError(null);
+
+    void fetchCitiesByState(selectedUf)
+      .then((options) => {
+        if (!isMounted) return;
+        setCoordinatorCityOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setCoordinatorCityOptions([]);
+        setCoordinatorCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsCoordinatorCityLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [coordinatorForm.state]);
+
   // Validation
   const validateField = (
     name: keyof NovoContratoForm,
@@ -617,8 +790,12 @@ export default function NovoContratoPage() {
           return "A data de fim efetivo deve ser posterior a data de inicio efetivo";
         }
         return "";
-      case "localidade":
-        if (typeof value !== "string" || !value.trim()) return "A localidade e obrigatoria";
+      case "uf":
+        if (typeof value !== "string" || !value.trim()) return "Selecione a UF";
+        if (value.trim().length !== 2) return "UF invalida";
+        return "";
+      case "cidade":
+        if (typeof value !== "string" || !value.trim()) return "Selecione a cidade";
         return "";
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato e obrigatorio";
@@ -782,6 +959,24 @@ export default function NovoContratoPage() {
       }));
 
       setTouched((prev) => new Set(prev).add(name).add("clienteSecundarioId"));
+    } else if (name === "uf") {
+      const normalizedUf = stringValue.trim().toUpperCase();
+      setForm((prev) => ({
+        ...prev,
+        uf: normalizedUf,
+        cidade: "",
+      }));
+      setCidadeOptions([]);
+      setCidadeLookupError(null);
+
+      const error = validateField(name, normalizedUf);
+      setErrors((prev) => ({
+        ...prev,
+        uf: error || undefined,
+        cidade: undefined,
+      }));
+
+      setTouched((prev) => new Set(prev).add("uf").add("cidade"));
     } else {
       setForm((prev) => ({ ...prev, [name]: stringValue }));
       
@@ -1055,11 +1250,17 @@ export default function NovoContratoPage() {
     setShowCoordinatorModal(false);
     setCoordinatorForm(initialCoordinatorFormState);
     setCoordinatorFormError(null);
+    setCoordinatorCityLookupError(null);
+    setIsCoordinatorCityLoading(false);
+    setCoordinatorCityOptions([]);
   };
 
   const openCoordinatorModal = () => {
     setCoordinatorForm(initialCoordinatorFormState);
     setCoordinatorFormError(null);
+    setCoordinatorCityLookupError(null);
+    setIsCoordinatorCityLoading(false);
+    setCoordinatorCityOptions([]);
     setShowCoordinatorModal(true);
   };
 
@@ -1071,14 +1272,27 @@ export default function NovoContratoPage() {
     const cpfDigits = onlyDigits(coordinatorForm.cpf);
     const email = coordinatorForm.email.trim();
     const phone = coordinatorForm.phone.trim();
+    const birthDate = coordinatorForm.birthDate;
+    const city = coordinatorForm.city.trim();
+    const state = coordinatorForm.state.trim().toUpperCase();
 
     if (!fullName) {
       setCoordinatorFormError("Informe o nome completo do coordenador.");
       return;
     }
 
-    if (cpfDigits.length !== 11) {
+    if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
       setCoordinatorFormError("Informe um CPF valido com 11 digitos.");
+      return;
+    }
+
+    if (!city) {
+      setCoordinatorFormError("Informe a cidade.");
+      return;
+    }
+
+    if (!state) {
+      setCoordinatorFormError("Informe o estado.");
       return;
     }
 
@@ -1086,9 +1300,12 @@ export default function NovoContratoPage() {
     try {
       const payload: PeopleRequestDTO = {
         fullName,
-        cpf: cpfDigits,
+        cpf: cpfDigits || undefined,
         email: email || undefined,
         phone: phone || undefined,
+        birthDate: birthDate || undefined,
+        city,
+        state,
       };
 
       const createdPerson = await createPeople(payload);
@@ -1108,10 +1325,11 @@ export default function NovoContratoPage() {
       handleChange("coordenador", String(createdPerson.id));
       closeCoordinatorModal();
     } catch (error) {
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel cadastrar o coordenador.";
+      const message = error instanceof HttpError
+        ? (error.fieldErrors?.length
+          ? error.fieldErrors.map((fieldError) => fieldError.message).join(" | ")
+          : error.message)
+        : "Nao foi possivel cadastrar o coordenador.";
       setCoordinatorFormError(message);
     } finally {
       setIsCreatingCoordinator(false);
@@ -1356,14 +1574,10 @@ export default function NovoContratoPage() {
   // Funcao auxiliar para transformar dados do formulario para formato do backend
   const transformFormToBackend = (formData: NovoContratoForm): ProjectRequestDTO => {
     const contractValue = parseCurrencyToCents(formData.contract_value) / 100;
-    const locationParts = formData.localidade
-      .split("-")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    const state =
-      locationParts.length >= 2 ? locationParts[locationParts.length - 1] : undefined;
-    const city =
-      locationParts.length >= 2 ? locationParts.slice(0, -1).join(" - ") : undefined;
+    const city = formData.cidade.trim() || undefined;
+    const state = formData.uf.trim().toUpperCase() || undefined;
+    const executionLocation =
+      city && state ? `${city} - ${state}` : city ?? state ?? undefined;
 
     return {
       name: formData.titulo.trim(),
@@ -1389,7 +1603,7 @@ export default function NovoContratoPage() {
       closingDate: formData.dataFimEfetivo || undefined,
       city,
       state,
-      executionLocation: formData.localidade.trim() || undefined,
+      executionLocation,
     };
   };
 
@@ -2004,25 +2218,59 @@ export default function NovoContratoPage() {
               </div>
 
               {/* Localidade */}
-              <FormField
-                label="Localidade"
-                required
-                error={errors.localidade}
-                icon={<MapPin className="h-4 w-4" />}
-              >
-                <input
-                  type="text"
-                  value={form.localidade}
-                  onChange={(e) => handleChange("localidade", e.target.value)}
-                  onBlur={() => handleBlur("localidade")}
-                  placeholder="Ex.: Campina Grande - PB"
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.localidade
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
-              </FormField>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  label="UF"
+                  required
+                  error={errors.uf}
+                  icon={<MapPin className="h-4 w-4" />}
+                >
+                  <Dropdown
+                    options={ufDropdownOptions}
+                    value={form.uf || undefined}
+                    onChange={(value) => handleChange("uf", value)}
+                    placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                    disabled={isUfLoading || ufDropdownOptions.length === 0}
+                    searchable
+                    className={
+                      errors.uf ? "border-red-300 focus:border-red-500 focus:ring-red-500/20" : ""
+                    }
+                  />
+                  {ufLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{ufLookupError}</p>
+                  ) : null}
+                </FormField>
+
+                <FormField
+                  label="Cidade"
+                  required
+                  error={errors.cidade}
+                  icon={<MapPin className="h-4 w-4" />}
+                >
+                  <Dropdown
+                    options={cidadeDropdownOptions}
+                    value={form.cidade || undefined}
+                    onChange={(value) => handleChange("cidade", value)}
+                    placeholder={
+                      !form.uf
+                        ? "Selecione a UF primeiro"
+                        : isCidadeLoading
+                          ? "Carregando cidades..."
+                          : "Selecione a cidade"
+                    }
+                    disabled={!form.uf || isCidadeLoading || cidadeDropdownOptions.length === 0}
+                    searchable
+                    className={
+                      errors.cidade
+                        ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }
+                  />
+                  {cidadeLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{cidadeLookupError}</p>
+                  ) : null}
+                </FormField>
+              </div>
 
               {/* Objeto do Contrato (Scope) */}
               <FormField
@@ -2866,6 +3114,7 @@ export default function NovoContratoPage() {
                       }))
                     }
                     placeholder="00.000.000/0000-00"
+                    maxLength={18}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -2880,9 +3129,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={partnerForm.phone}
                     onChange={(event) =>
-                      setPartnerForm((prev) => ({ ...prev, phone: event.target.value }))
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        phone: formatPhoneInput(event.target.value),
+                      }))
                     }
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -2940,9 +3193,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={partnerForm.state}
                     onChange={(event) =>
-                      setPartnerForm((prev) => ({ ...prev, state: event.target.value }))
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        state: event.target.value.toUpperCase().slice(0, 2),
+                      }))
                     }
                     placeholder="UF"
+                    maxLength={2}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3053,6 +3310,7 @@ export default function NovoContratoPage() {
                       }))
                     }
                     placeholder="00.000.000/0000-00"
+                    maxLength={18}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3128,9 +3386,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={clientForm.phone}
                     onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, phone: event.target.value }))
+                      setClientForm((prev) => ({
+                        ...prev,
+                        phone: formatPhoneInput(event.target.value),
+                      }))
                     }
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3156,9 +3418,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={clientForm.state}
                     onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, state: event.target.value }))
+                      setClientForm((prev) => ({
+                        ...prev,
+                        state: event.target.value.toUpperCase().slice(0, 2),
+                      }))
                     }
                     placeholder="UF"
+                    maxLength={2}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3286,6 +3552,7 @@ export default function NovoContratoPage() {
                       }))
                     }
                     placeholder="00.000.000/0000-00"
+                    maxLength={18}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3334,9 +3601,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={secretaryForm.phone}
                     onChange={(event) =>
-                      setSecretaryForm((prev) => ({ ...prev, phone: event.target.value }))
+                      setSecretaryForm((prev) => ({
+                        ...prev,
+                        phone: formatPhoneInput(event.target.value),
+                      }))
                     }
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3450,7 +3721,7 @@ export default function NovoContratoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    CPF <span className="text-red-500">*</span>
+                    CPF (opcional)
                   </label>
                   <input
                     type="text"
@@ -3472,9 +3743,13 @@ export default function NovoContratoPage() {
                     type="text"
                     value={coordinatorForm.phone}
                     onChange={(event) =>
-                      setCoordinatorForm((prev) => ({ ...prev, phone: event.target.value }))
+                      setCoordinatorForm((prev) => ({
+                        ...prev,
+                        phone: formatPhoneInput(event.target.value),
+                      }))
                     }
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3491,6 +3766,77 @@ export default function NovoContratoPage() {
                   placeholder="coordenador@exemplo.com"
                   className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Data de nascimento
+                </label>
+                <input
+                  type="date"
+                  value={coordinatorForm.birthDate}
+                  onChange={(event) =>
+                    setCoordinatorForm((prev) => ({ ...prev, birthDate: event.target.value }))
+                  }
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    UF <span className="text-red-500">*</span>
+                  </label>
+                  <Dropdown
+                    options={coordinatorUfDropdownOptions}
+                    value={coordinatorForm.state || undefined}
+                    onChange={(value) => {
+                      setCoordinatorForm((prev) => ({
+                        ...prev,
+                        state: (value || "").toUpperCase(),
+                        city: "",
+                      }));
+                      setCoordinatorCityLookupError(null);
+                    }}
+                    placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                    disabled={isUfLoading || coordinatorUfDropdownOptions.length === 0}
+                    searchable
+                    className="h-10"
+                  />
+                  {ufLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{ufLookupError}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Cidade <span className="text-red-500">*</span>
+                  </label>
+                  <Dropdown
+                    options={coordinatorCityDropdownOptions}
+                    value={coordinatorForm.city || undefined}
+                    onChange={(value) =>
+                      setCoordinatorForm((prev) => ({ ...prev, city: value || "" }))
+                    }
+                    placeholder={
+                      !coordinatorForm.state
+                        ? "Selecione a UF primeiro"
+                        : isCoordinatorCityLoading
+                          ? "Carregando cidades..."
+                          : "Selecione a cidade"
+                    }
+                    disabled={
+                      !coordinatorForm.state ||
+                      isCoordinatorCityLoading ||
+                      coordinatorCityDropdownOptions.length === 0
+                    }
+                    searchable
+                    className="h-10"
+                  />
+                  {coordinatorCityLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{coordinatorCityLookupError}</p>
+                  ) : null}
+                </div>
               </div>
 
               {coordinatorFormError && (

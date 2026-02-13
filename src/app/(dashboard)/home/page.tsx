@@ -38,8 +38,8 @@ const statusLabels: Record<ProjectStatusEnum, string> = {
 const CURRENT_YEAR = new Date().getFullYear();
 const govIfFilterOptions: Array<{ label: string; value: ProjectGovIfEnum | null }> = [
   { label: "Todos", value: null },
-  { label: "GOV", value: "GOV" },
   { label: "IF", value: "IF" },
+  { label: "Gov", value: "GOV" },
 ];
 
 const formatCurrency = (value: number) =>
@@ -180,7 +180,7 @@ export default function HomePage() {
       (dashboard?.byPartner ?? [])
         .slice(0, 7)
         .map((item) => ({
-          name: item.partnerName,
+          name: item.partnerAcronym?.trim() || item.partnerName,
           contratos: item.contracts,
           valor: item.totalValue,
         })),
@@ -378,7 +378,7 @@ export default function HomePage() {
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-600">Gov/IF</p>
-              <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-1 shadow-sm">
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
                 {govIfFilterOptions.map((option) => {
                   const isActive = selectedGovIf === option.value;
                   return (
@@ -387,10 +387,10 @@ export default function HomePage() {
                       type="button"
                       aria-pressed={isActive}
                       onClick={() => setSelectedGovIf(option.value)}
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                         isActive
-                          ? "bg-[#1F4E79] text-white"
-                          : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800"
+                          ? "bg-[#004225] text-white"
+                          : "text-gray-600 hover:bg-gray-200"
                       }`}
                     >
                       {option.label}

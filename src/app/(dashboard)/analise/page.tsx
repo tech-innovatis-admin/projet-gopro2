@@ -15,7 +15,7 @@ import {
   Wallet,
   Users,
   FileText,
-  Target,
+  Crosshair,
   ArrowUpRight,
   ArrowDownRight,
   Building2,
@@ -438,7 +438,7 @@ export default function AnalisePage() {
                   title="Acurácia Recebimento"
                   value={`${mockMetrics.acuraciaRecebimento}%`}
                   subtitle="previsto vs real"
-                  icon={<Target className="h-4 w-4" />}
+                  icon={<Crosshair className="h-4 w-4" />}
                   variant={getVariant(mockMetrics.acuraciaRecebimento, { warning: 85, danger: 70 })}
                 />
               </div>
@@ -621,7 +621,7 @@ export default function AnalisePage() {
                   title="Cumprimento SLA"
                   value={`${mockMetrics.cumprimentoSLA}%`}
                   subtitle="dentro do prazo"
-                  icon={<Target className="h-4 w-4" />}
+                  icon={<Crosshair className="h-4 w-4" />}
                   variant={getVariant(mockMetrics.cumprimentoSLA, { warning: 80, danger: 60 })}
                 />
                 <MetricCard

@@ -71,6 +71,7 @@ export interface Parceiro {
   email?: string;
   telefone?: string;
   site?: string;
+  cep?: string;
   uf: string;
   municipio: string;
   endereco?: string;

@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// =============================================================================
-// DROPDOWN - Componente de dropdown customizado (estilo NavBar)
-// =============================================================================
 
 export interface DropdownOption {
   value: string;
@@ -24,6 +21,18 @@ interface DropdownProps {
   searchable?: boolean;
 }
 
+interface MenuPosition {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+}
+
+const VIEWPORT_PADDING = 8;
+const MENU_GAP = 4;
+const MENU_MAX_HEIGHT = 240;
+const MENU_MIN_HEIGHT = 120;
+
 export function Dropdown({
   options,
   value,
@@ -35,80 +44,122 @@ export function Dropdown({
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Fecha dropdown ao clicar fora
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        // Limpa busca ao fechar apenas se não houver valor selecionado
-        if (searchable && !value) {
-          setSearchTerm("");
-        } else if (searchable && value) {
-          // Se há valor selecionado, limpa o termo de busca para mostrar o label
-          setSearchTerm("");
-        }
+      const target = event.target as Node;
+      const clickedTrigger = triggerRef.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+
+      if (clickedTrigger || clickedMenu) return;
+
+      setIsOpen(false);
+      if (searchable) {
+        setSearchTerm("");
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [isOpen, searchable, value]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, searchable]);
 
-  // Filtra opções baseado no termo de busca
-  const filteredOptions = searchable && searchTerm
-    ? options.filter(option =>
-        option.label.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : options;
+  useEffect(() => {
+    if (!isOpen) return;
 
-  // Encontra a opção selecionada
-  const selectedOption = options.find(option => option.value === value);
+    const updateMenuPosition = () => {
+      if (!triggerRef.current) return;
 
-  // Toggle dropdown
+      const triggerRect = triggerRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+
+      const spaceBelow = viewportHeight - triggerRect.bottom - VIEWPORT_PADDING;
+      const spaceAbove = triggerRect.top - VIEWPORT_PADDING;
+      const shouldOpenUpward = spaceBelow < MENU_MAX_HEIGHT && spaceAbove > spaceBelow;
+
+      const availableHeight = shouldOpenUpward ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(
+        MENU_MIN_HEIGHT,
+        Math.min(MENU_MAX_HEIGHT, availableHeight - MENU_GAP)
+      );
+
+      const width = Math.min(triggerRect.width, viewportWidth - VIEWPORT_PADDING * 2);
+      const left = Math.min(
+        Math.max(VIEWPORT_PADDING, triggerRect.left),
+        viewportWidth - width - VIEWPORT_PADDING
+      );
+      const top = shouldOpenUpward
+        ? triggerRect.top - maxHeight - MENU_GAP
+        : triggerRect.bottom + MENU_GAP;
+
+      setOpenUpward(shouldOpenUpward);
+      setMenuPosition({
+        top: Math.round(top),
+        left: Math.round(left),
+        width: Math.round(width),
+        maxHeight: Math.round(maxHeight),
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [isOpen]);
+
+  const filteredOptions =
+    searchable && searchTerm
+      ? options.filter((option) => option.label.toLowerCase().includes(searchTerm.toLowerCase()))
+      : options;
+
+  const selectedOption = options.find((option) => option.value === value);
+
   const toggleDropdown = () => {
-    if (!disabled) {
-      setIsOpen(!isOpen);
-      if (searchable && !isOpen && searchInputRef.current) {
-        // Foca no input quando abre o dropdown
-        setTimeout(() => searchInputRef.current?.focus(), 0);
-      }
+    if (disabled) return;
+
+    setIsOpen((prev) => !prev);
+
+    if (searchable && !isOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 0);
     }
   };
 
-  // Seleciona uma opção
   const selectOption = (optionValue: string | undefined) => {
     onChange(optionValue);
     setIsOpen(false);
     if (searchable) {
-      setSearchTerm(""); // Limpa busca ao selecionar
+      setSearchTerm("");
     }
   };
 
-  // Handler para quando o usuário digita no input pesquisável
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSearchTerm = e.target.value;
     setSearchTerm(newSearchTerm);
-    // Abre o dropdown automaticamente quando começa a digitar
     if (!isOpen && newSearchTerm.length > 0) {
       setIsOpen(true);
     }
   };
 
-  // Handler para quando o input pesquisável recebe foco
   const handleSearchFocus = () => {
     if (!disabled) {
       setIsOpen(true);
     }
   };
 
-  // Handler para quando clica no input pesquisável
   const handleSearchClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!disabled) {
@@ -116,10 +167,59 @@ export function Dropdown({
     }
   };
 
+  const dropdownMenu =
+    isOpen && menuPosition ? (
+      <div
+        ref={menuRef}
+        className={cn(
+          "fixed bg-white border border-zinc-200 rounded-lg shadow-lg z-[9999] overflow-hidden transition-all duration-150 ease-out",
+          openUpward ? "origin-bottom" : "origin-top"
+        )}
+        style={{
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
+        }}
+      >
+        <div style={{ maxHeight: menuPosition.maxHeight }} className="overflow-y-auto">
+          {(!searchable || !searchTerm) && (
+            <button
+              onClick={() => selectOption(undefined)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
+                !value ? "bg-zinc-50 font-medium" : ""
+              )}
+            >
+              <span>{placeholder}</span>
+            </button>
+          )}
+
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => selectOption(option.value)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
+                  value === option.value ? "bg-zinc-50 font-medium" : ""
+                )}
+              >
+                {option.icon}
+                <span>{option.label}</span>
+              </button>
+            ))
+          ) : searchable && searchTerm ? (
+            <div className="px-4 py-3 text-sm text-zinc-500 text-center">
+              Nenhum resultado encontrado
+            </div>
+          ) : null}
+        </div>
+      </div>
+    ) : null;
+
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={triggerRef} className="relative">
       {searchable ? (
-        // Input pesquisável no lugar do botão
         <div className="relative flex items-center">
           {selectedOption?.icon && !searchTerm && (
             <div className="absolute left-3 z-10 flex-shrink-0">{selectedOption.icon}</div>
@@ -136,7 +236,7 @@ export function Dropdown({
             className={cn(
               "w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 border border-gray-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]",
               selectedOption?.icon && !searchTerm ? "pl-9" : "pl-3",
-              "pr-10", // Espaço para o chevron
+              "pr-10",
               value && !searchTerm ? "text-gray-900" : "text-gray-500",
               disabled && "opacity-50 cursor-not-allowed",
               className
@@ -157,7 +257,6 @@ export function Dropdown({
           </button>
         </div>
       ) : (
-        // Botão normal quando não é pesquisável
         <button
           onClick={toggleDropdown}
           disabled={disabled}
@@ -170,9 +269,7 @@ export function Dropdown({
         >
           <div className="flex items-center gap-3 min-w-0">
             {selectedOption?.icon}
-            <span className="truncate">
-              {selectedOption?.label || placeholder}
-            </span>
+            <span className="truncate">{selectedOption?.label || placeholder}</span>
           </div>
           <ChevronDown
             className={cn(
@@ -183,45 +280,9 @@ export function Dropdown({
         </button>
       )}
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-hidden transition-all duration-300 ease-out">
-          <div className="max-h-60 overflow-y-auto">
-            {/* Opção "Nenhuma" - sempre disponível */}
-            {(!searchable || !searchTerm) && (
-              <button
-                onClick={() => selectOption(undefined)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
-                  !value ? "bg-zinc-50 font-medium" : ""
-                )}
-              >
-                <span>{placeholder}</span>
-              </button>
-            )}
-            
-            {/* Opções disponíveis (filtradas se pesquisável) */}
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => selectOption(option.value)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
-                    value === option.value ? "bg-zinc-50 font-medium" : ""
-                  )}
-                >
-                  {option.icon}
-                  <span>{option.label}</span>
-                </button>
-              ))
-            ) : searchable && searchTerm ? (
-              <div className="px-4 py-3 text-sm text-zinc-500 text-center">
-                Nenhum resultado encontrado
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
+      {typeof document !== "undefined" && dropdownMenu
+        ? createPortal(dropdownMenu, document.body)
+        : null}
     </div>
   );
 }

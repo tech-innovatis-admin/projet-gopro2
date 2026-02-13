@@ -11,10 +11,16 @@ export interface RequestOptions {
   body?: unknown;
 }
 
-const DEFAULT_TIMEOUT_MS = Number.parseInt(
-  process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? '15000',
-  10
-);
+function parseTimeoutMs(value: string | undefined, fallbackMs: number): number {
+  const normalized = value?.trim().replace(/^['"]|['"]$/g, '');
+  const parsed = Number.parseInt(normalized ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackMs;
+  }
+  return parsed;
+}
+
+const DEFAULT_TIMEOUT_MS = parseTimeoutMs(process.env.NEXT_PUBLIC_API_TIMEOUT_MS, 15000);
 const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api/backend').replace(/\/$/, '');
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {

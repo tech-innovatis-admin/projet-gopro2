@@ -56,12 +56,11 @@ export interface Organization {
 export interface People {
   id: number;
   fullName: string;
-  cpf: string;
+  cpf?: string;
   email?: string;
   phone?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;
@@ -226,12 +225,11 @@ export interface CreateOrganization {
 
 export interface CreatePeople {
   fullName: string;
-  cpf: string;
+  cpf?: string;
   email?: string;
   phone?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;

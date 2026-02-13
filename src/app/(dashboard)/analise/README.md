@@ -106,7 +106,7 @@ src/app/(dashboard)/analise/
     - `Users`: Pessoas
     - `FolderOpen`: Projetos
     - `Calendar`: Datas
-    - `Target`: Metas
+    - `Crosshair`: Metas
     - `BarChart3`: Gráficos de barras
     - `PieChart`: Gráficos de pizza
     - `Activity`: Atividade/Projetos ativos

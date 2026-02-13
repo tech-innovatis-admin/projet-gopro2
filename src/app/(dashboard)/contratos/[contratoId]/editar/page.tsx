@@ -10,7 +10,7 @@ import {
   Save,
   ArrowLeft,
   FileText,
-  Target,
+  Crosshair,
   Users,
   Building2,
   DollarSign,
@@ -41,7 +41,7 @@ type TabItem = {
 
 const tabs: TabItem[] = [
   { id: "informacoes", label: "Informações", icon: FileText, description: "Dados básicos do contrato" },
-  { id: "metas", label: "Meta, Etapa e Fase", icon: Target, description: "Estrutura de metas e entregas" },
+  { id: "metas", label: "Meta, Etapa e Fase", icon: Crosshair, description: "Estrutura de metas e entregas" },
   { id: "equipe", label: "Equipe Técnica", icon: Users, description: "Membros e papéis" },
   { id: "incubadas", label: "Incubadas", icon: Building2, description: "Empresas vinculadas" },
   { id: "rubricas", label: "Rubricas", icon: DollarSign, description: "Orçamento detalhado" },

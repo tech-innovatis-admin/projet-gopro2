@@ -41,7 +41,6 @@ export interface Person {
   avatarUrl?: string;
   birthDate?: string;
   address?: string;
-  zipCode?: string;
   city?: string;
   state?: string;
   notes?: string;

@@ -64,6 +64,28 @@ function formatZipCode(value?: string) {
   return `${onlyNumbers.slice(0, 5)}-${onlyNumbers.slice(5)}`;
 }
 
+function formatPhone(value?: string) {
+  const onlyNumbers = digits(value).slice(0, 11);
+  if (!onlyNumbers) return "";
+  if (onlyNumbers.length <= 2) return `(${onlyNumbers}`;
+  if (onlyNumbers.length <= 6) return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2)}`;
+  if (onlyNumbers.length <= 10) {
+    return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 6)}-${onlyNumbers.slice(6)}`;
+  }
+  return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 7)}-${onlyNumbers.slice(7)}`;
+}
+
+function formatCnpj(value?: string) {
+  const onlyNumbers = digits(value).slice(0, 14);
+  if (onlyNumbers.length <= 2) return onlyNumbers;
+  if (onlyNumbers.length <= 5) return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2)}`;
+  if (onlyNumbers.length <= 8) return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2, 5)}.${onlyNumbers.slice(5)}`;
+  if (onlyNumbers.length <= 12) {
+    return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2, 5)}.${onlyNumbers.slice(5, 8)}/${onlyNumbers.slice(8)}`;
+  }
+  return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2, 5)}.${onlyNumbers.slice(5, 8)}/${onlyNumbers.slice(8, 12)}-${onlyNumbers.slice(12)}`;
+}
+
 type ViaCepResponse = {
   cep?: string;
   logradouro?: string;
@@ -533,8 +555,8 @@ function CompanyFormModal({
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
 
-  const handleLookupZipCode = async () => {
-    const normalizedZipCode = digits(formData.cep);
+  const handleLookupZipCode = async (rawZipCode?: string) => {
+    const normalizedZipCode = digits(rawZipCode ?? formData.cep);
     if (normalizedZipCode.length !== 8) {
       setZipCodeLookupError("CEP deve conter 8 digitos.");
       return;
@@ -550,13 +572,19 @@ function CompanyFormModal({
         return;
       }
 
-      setFormData((prev) => ({
-        ...prev,
-        cep: formatZipCode(normalizedZipCode),
-        endereco: viaCepData.logradouro || prev.endereco,
-        cidade: viaCepData.localidade || prev.cidade,
-        uf: viaCepData.uf || prev.uf,
-      }));
+      setFormData((prev) => {
+        if (digits(prev.cep) !== normalizedZipCode) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          cep: formatZipCode(normalizedZipCode),
+          endereco: viaCepData.logradouro || prev.endereco,
+          cidade: viaCepData.localidade || prev.cidade,
+          uf: (viaCepData.uf || prev.uf || "").toUpperCase(),
+        };
+      });
     } catch {
       setZipCodeLookupError("Nao foi possivel consultar o CEP.");
     } finally {
@@ -584,13 +612,27 @@ function CompanyFormModal({
               <input type="text" value={formData.nomeFantasia || ""} onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia" />
             </Field>
             <Field label="CNPJ" required>
-              <input type="text" value={formData.cnpj || ""} onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="00.000.000/0000-00" />
+              <input
+                type="text"
+                value={formData.cnpj || ""}
+                onChange={(e) => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
+                maxLength={18}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="00.000.000/0000-00"
+              />
             </Field>
             <Field label="E-mail" required>
               <input type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="email@empresa.com.br" />
             </Field>
             <Field label="Telefone" required>
-              <input type="text" value={formData.telefone || ""} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="(00) 00000-0000" />
+              <input
+                type="text"
+                value={formData.telefone || ""}
+                onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+                maxLength={15}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="(00) 00000-0000"
+              />
             </Field>
             <Field label="CEP">
               <div className="space-y-2">
@@ -598,9 +640,15 @@ function CompanyFormModal({
                   <input
                     type="text"
                     value={formData.cep || ""}
-                    onChange={(e) =>
-                      setFormData({ ...formData, cep: formatZipCode(e.target.value) })
-                    }
+                    onChange={(e) => {
+                      const formattedZipCode = formatZipCode(e.target.value);
+                      setFormData({ ...formData, cep: formattedZipCode });
+                      if (digits(formattedZipCode).length === 8) {
+                        void handleLookupZipCode(formattedZipCode);
+                      } else {
+                        setZipCodeLookupError(null);
+                      }
+                    }}
                     onBlur={() => {
                       if (digits(formData.cep).length === 8) {
                         void handleLookupZipCode();
@@ -633,7 +681,14 @@ function CompanyFormModal({
               <input type="text" value={formData.cidade || ""} onChange={(e) => setFormData({ ...formData, cidade: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
             </Field>
             <Field label="UF" required>
-              <input type="text" value={formData.uf || ""} onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase() })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="UF" maxLength={2} />
+              <input
+                type="text"
+                value={formData.uf || ""}
+                onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase().slice(0, 2) })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="UF"
+                maxLength={2}
+              />
             </Field>
             <Field label="Tipo de Servico" className="md:col-span-2">
               <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
