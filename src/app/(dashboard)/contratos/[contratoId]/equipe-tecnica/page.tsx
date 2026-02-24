@@ -338,6 +338,43 @@ export default function EquipeTecnicaPage() {
     [membros],
   );
 
+  const resetMemberFormState = () => {
+    setEditingMembro(null);
+    setFormData(defaultFormData());
+    setAvatarFile(null);
+    setCpfError("");
+    setPhoneError("");
+  };
+
+  const closeMemberFormModal = () => {
+    setIsFormModalOpen(false);
+    resetMemberFormState();
+  };
+
+  const isRetriableProjectPeopleError = (error: unknown) =>
+    error instanceof HttpError &&
+    (error.status === 0 || error.status === 504 || error.status >= 500);
+
+  const createProjectPeopleWithRetry = async (
+    payload: Parameters<typeof createProjectPeople>[0],
+    retries = 1,
+  ) => {
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await createProjectPeople(payload);
+      } catch (error) {
+        if (!isRetriableProjectPeopleError(error) || attempt >= retries) {
+          throw error;
+        }
+
+        attempt += 1;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+  };
+
   const loadMembros = async () => {
     if (!projectId) {
       setLoadError("ID do contrato invalido.");
@@ -568,8 +605,8 @@ export default function EquipeTecnicaPage() {
       setActionError(null);
 
       let personId = editingMembro?.personId;
-      let projectPeopleId = editingMembro?.projectPeopleId;
       let avatarUploadWarning: string | null = null;
+      let linkWarning: string | null = null;
       const peoplePayloadBase = {
         fullName: formData.nome.trim(),
         cpf: cpfUnformatted || undefined,
@@ -608,7 +645,7 @@ export default function EquipeTecnicaPage() {
           avatarUrl: nextAvatarUrl,
         });
 
-        await updateProjectPeople(projectPeopleId!, {
+        await updateProjectPeople(editingMembro.projectPeopleId, {
           projectId,
           personId,
           role: papelToRole(formData.papel),
@@ -629,22 +666,31 @@ export default function EquipeTecnicaPage() {
         });
         personId = person.id;
 
-        const link = await createProjectPeople({
-          projectId,
-          personId,
-          role: papelToRole(formData.papel),
-          workloadHours: formData.cargaHoraria,
-          institutionalLink: toOptional(formData.vinculo),
-          contractType: formData.contractType || undefined,
-          startDate: toOptional(formData.startDate),
-          endDate: toOptional(formData.endDate),
-          status: formData.status || undefined,
-          baseAmount:
-            typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
-          notes: toOptional(formData.notes),
-          createdBy: 1,
-        });
-        projectPeopleId = link.id;
+        try {
+          await createProjectPeopleWithRetry(
+            {
+              projectId,
+              personId,
+              role: papelToRole(formData.papel),
+              workloadHours: formData.cargaHoraria,
+              institutionalLink: toOptional(formData.vinculo),
+              contractType: formData.contractType || undefined,
+              startDate: toOptional(formData.startDate),
+              endDate: toOptional(formData.endDate),
+              status: formData.status || undefined,
+              baseAmount:
+                typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
+              notes: toOptional(formData.notes),
+              createdBy: 1,
+            },
+            1,
+          );
+        } catch (error) {
+          linkWarning = getErrorMessage(
+            error,
+            "Pessoa cadastrada, mas nao foi possivel vincular ao projeto.",
+          );
+        }
 
         if (avatarFile && personId) {
           try {
@@ -669,17 +715,15 @@ export default function EquipeTecnicaPage() {
       }
 
       await loadMembros();
-      setIsFormModalOpen(false);
-      setEditingMembro(null);
-      setFormData(defaultFormData());
-      setAvatarFile(null);
-      setCpfError("");
-      setPhoneError("");
+      closeMemberFormModal();
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
 
-      if (avatarUploadWarning) {
-        setActionError(avatarUploadWarning);
+      const warnings = [avatarUploadWarning, linkWarning].filter(
+        (warning): warning is string => Boolean(warning),
+      );
+      if (warnings.length > 0) {
+        setActionError(warnings.join(" "));
       }
     } catch (error) {
       setActionError(getErrorMessage(error, "Nao foi possivel salvar o membro."));
@@ -702,15 +746,18 @@ export default function EquipeTecnicaPage() {
       setIsLinking(true);
       setActionError(null);
 
-      await createProjectPeople({
-        projectId,
-        personId: selectedPersonId,
-        role: papelToRole(linkPapel),
-        institutionalLink: toOptional(linkVinculo),
-        workloadHours:
-          typeof linkCargaHoraria === "number" ? linkCargaHoraria : undefined,
-        createdBy: 1,
-      });
+      await createProjectPeopleWithRetry(
+        {
+          projectId,
+          personId: selectedPersonId,
+          role: papelToRole(linkPapel),
+          institutionalLink: toOptional(linkVinculo),
+          workloadHours:
+            typeof linkCargaHoraria === "number" ? linkCargaHoraria : undefined,
+          createdBy: 1,
+        },
+        1,
+      );
 
       await loadMembros();
       setIsLinkModalOpen(false);
@@ -973,14 +1020,7 @@ export default function EquipeTecnicaPage() {
           currentAvatarUrl={editingMembro?.avatarUrl ?? ""}
           isSaving={isSaving}
           isEditingItem={!!editingMembro}
-          onClose={() => {
-            setIsFormModalOpen(false);
-            setEditingMembro(null);
-            setFormData(defaultFormData());
-            setAvatarFile(null);
-            setCpfError("");
-            setPhoneError("");
-          }}
+          onClose={closeMemberFormModal}
           onSave={() => {
             void saveMembro();
           }}
@@ -988,12 +1028,7 @@ export default function EquipeTecnicaPage() {
             editingMembro
               ? () => {
                   void removeMembro(editingMembro.id);
-                  setIsFormModalOpen(false);
-                  setEditingMembro(null);
-                  setFormData(defaultFormData());
-                  setAvatarFile(null);
-                  setCpfError("");
-                  setPhoneError("");
+                  closeMemberFormModal();
                 }
               : undefined
           }

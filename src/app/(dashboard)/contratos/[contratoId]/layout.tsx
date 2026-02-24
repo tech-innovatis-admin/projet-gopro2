@@ -51,6 +51,11 @@ import {
 } from "lucide-react";
 import { type Contrato } from "./types";
 
+type ContratoView = Contrato & {
+  parceiroSecundario?: string;
+  clienteSecundario?: string;
+};
+
 type TabItem = {
   label: string;
   href: string;
@@ -88,7 +93,7 @@ const PROJECT_STATUS_OPTIONS: Array<{
   { value: "SUSPENSO", label: "Suspenso" },
 ];
 
-const EMPTY_CONTRATO: Contrato = {
+const EMPTY_CONTRATO: ContratoView = {
   id: "",
   codigo: "",
   titulo: "",
@@ -96,7 +101,9 @@ const EMPTY_CONTRATO: Contrato = {
   status: "PRE_PROJETO",
   coordenador: NO_INFO_LABEL,
   parceiro: NO_INFO_LABEL,
+  parceiroSecundario: NO_INFO_LABEL,
   cliente: NO_INFO_LABEL,
+  clienteSecundario: NO_INFO_LABEL,
   orgaoFinanciador: NO_INFO_LABEL,
   segmentos: [],
   localidade: NO_INFO_LABEL,
@@ -140,7 +147,7 @@ function mapProjectToContrato(
     secondaryClient: string;
     coordinator: string;
   }
-): Contrato {
+): ContratoView {
   return {
     id: String(project.id),
     codigo: project.code || `PROJ-${project.id}`,
@@ -148,12 +155,11 @@ function mapProjectToContrato(
     tipo: project.projectType === "PRODUTO" ? "PRODUTO" : "PROJETO",
     status: project.projectStatus || "PRE_PROJETO",
     coordenador: names.coordinator,
-    parceiro:
-      names.secondaryPartner !== NO_INFO_LABEL
-        ? `${names.primaryPartner} / ${names.secondaryPartner}`
-        : names.primaryPartner,
+    parceiro: names.primaryPartner,
+    parceiroSecundario: names.secondaryPartner,
     cliente: names.primaryClient,
-    orgaoFinanciador: names.secondaryClient !== NO_INFO_LABEL ? names.secondaryClient : names.primaryClient,
+    clienteSecundario: names.secondaryClient,
+    orgaoFinanciador: names.secondaryClient,
     segmentos: normalizeSegments(project.areaSegmento),
     localidade: normalizeLocation(project.city, project.state, project.executionLocation),
     dataInicio: project.startDate ?? project.openingDate ?? "",
@@ -221,11 +227,11 @@ export default function ContratoLayout({
   const [isDescricaoExpanded, setIsDescricaoExpanded] = useState(false);
   const [isInfoComplementarExpanded, setIsInfoComplementarExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [contratoBase, setContratoBase] = useState<Contrato>({
+  const [contratoBase, setContratoBase] = useState<ContratoView>({
     ...EMPTY_CONTRATO,
     id: contratoId,
   });
-  const [editContrato, setEditContrato] = useState<Contrato>({
+  const [editContrato, setEditContrato] = useState<ContratoView>({
     ...EMPTY_CONTRATO,
     id: contratoId,
   });
@@ -260,97 +266,122 @@ export default function ContratoLayout({
       listSecretaries({ page: 0, size: 100 }).catch(() => null),
     ]);
 
-    if (partnersPage) {
-      setPartnerOptions(
-        partnersPage.content.map((partner) => ({
-          id: partner.id,
-          label: partner.name,
-        }))
-      );
-    }
+    const nextPartnerOptions: SelectOption[] = (partnersPage?.content ?? []).map((partner) => ({
+      id: partner.id,
+      label: partner.name,
+    }));
 
-    if (peoplePage) {
-      setPeopleOptions(
-        peoplePage.content.map((person) => ({
-          id: person.id,
-          label: person.fullName,
-        }))
-      );
-    }
+    const nextPeopleOptions: SelectOption[] = (peoplePage?.content ?? []).map((person) => ({
+      id: person.id,
+      label: person.fullName,
+    }));
 
-    if (publicAgenciesPage) {
-      setPublicAgencyOptions(
-        publicAgenciesPage.content.map((agency) => ({
-          id: agency.id,
-          label: agency.name,
-        }))
-      );
-    }
+    const nextPublicAgencyOptions: SelectOption[] = (publicAgenciesPage?.content ?? []).map(
+      (agency) => ({
+        id: agency.id,
+        label: agency.name,
+      })
+    );
 
-    if (secretariesPage) {
-      setSecretaryOptions(
-        secretariesPage.content.map((secretary) => ({
-          id: secretary.id,
-          label: secretary.name,
-          publicAgencyId: secretary.publicAgency?.id ?? null,
-        }))
-      );
-    }
+    const nextSecretaryOptions: SecretaryOption[] = (secretariesPage?.content ?? []).map(
+      (secretary) => ({
+        id: secretary.id,
+        label: secretary.name,
+        publicAgencyId: secretary.publicAgency?.id ?? null,
+      })
+    );
+
+    setPartnerOptions(nextPartnerOptions);
+    setPeopleOptions(nextPeopleOptions);
+    setPublicAgencyOptions(nextPublicAgencyOptions);
+    setSecretaryOptions(nextSecretaryOptions);
+
+    return {
+      nextPartnerOptions,
+      nextPeopleOptions,
+      nextPublicAgencyOptions,
+      nextSecretaryOptions,
+    };
   }, []);
-  
+
   const loadContrato = useCallback(async () => {
     setIsLoadingContrato(true);
     setLoadContratoError(null);
 
-    const safePartnerName = async (id: number | null) => {
-      if (!id) return NO_INFO_LABEL;
-      try {
-        const partner = await getPartnerById(id);
-        return partner.name || NO_INFO_LABEL;
-      } catch {
-        return `Parceiro #${id}`;
-      }
-    };
-
-    const safePrimaryClientName = async (id: number | null) => {
-      if (!id) return NO_INFO_LABEL;
-      try {
-        const agency = await getPublicAgencyById(id);
-        return agency.name || NO_INFO_LABEL;
-      } catch {
-        return `Cliente #${id}`;
-      }
-    };
-
-    const safeSecondaryClientName = async (id: number | null) => {
-      if (!id) return NO_INFO_LABEL;
-      try {
-        const secretary = await getSecretaryById(id);
-        return secretary.name || NO_INFO_LABEL;
-      } catch {
-        return `Secretaria #${id}`;
-      }
-    };
-
-    const safeCoordinatorName = async (id: number | null) => {
-      if (!id) return NO_INFO_LABEL;
-      try {
-        const person = await getPeopleById(id);
-        return person.fullName || NO_INFO_LABEL;
-      } catch {
-        return `Pessoa #${id}`;
-      }
-    };
-
     try {
-      const project = await getProjectById(contratoId);
+      const [project, selectOptions] = await Promise.all([
+        getProjectById(contratoId),
+        loadSelectOptions(),
+      ]);
+
+      const partnerLabelById = new Map(
+        selectOptions.nextPartnerOptions.map((option) => [option.id, option.label])
+      );
+      const peopleLabelById = new Map(
+        selectOptions.nextPeopleOptions.map((option) => [option.id, option.label])
+      );
+      const publicAgencyLabelById = new Map(
+        selectOptions.nextPublicAgencyOptions.map((option) => [option.id, option.label])
+      );
+      const secretaryLabelById = new Map(
+        selectOptions.nextSecretaryOptions.map((option) => [option.id, option.label])
+      );
+
+      const resolvePartnerName = async (id: number | null) => {
+        if (!id) return NO_INFO_LABEL;
+        const fromOptions = partnerLabelById.get(id);
+        if (fromOptions) return fromOptions;
+        try {
+          const partner = await getPartnerById(id);
+          return partner.name || NO_INFO_LABEL;
+        } catch {
+          return `Parceiro #${id}`;
+        }
+      };
+
+      const resolvePrimaryClientName = async (id: number | null) => {
+        if (!id) return NO_INFO_LABEL;
+        const fromOptions = publicAgencyLabelById.get(id);
+        if (fromOptions) return fromOptions;
+        try {
+          const agency = await getPublicAgencyById(id);
+          return agency.name || NO_INFO_LABEL;
+        } catch {
+          return `Cliente #${id}`;
+        }
+      };
+
+      const resolveSecondaryClientName = async (id: number | null) => {
+        if (!id) return NO_INFO_LABEL;
+        const fromOptions = secretaryLabelById.get(id);
+        if (fromOptions) return fromOptions;
+        try {
+          const secretary = await getSecretaryById(id);
+          return secretary.name || NO_INFO_LABEL;
+        } catch {
+          return `Secretaria #${id}`;
+        }
+      };
+
+      const resolveCoordinatorName = async (id: number | null) => {
+        if (!id) return NO_INFO_LABEL;
+        const fromOptions = peopleLabelById.get(id);
+        if (fromOptions) return fromOptions;
+        try {
+          const person = await getPeopleById(id);
+          return person.fullName || NO_INFO_LABEL;
+        } catch {
+          return `Pessoa #${id}`;
+        }
+      };
+
       const [primaryPartner, secondaryPartner, primaryClient, secondaryClient, coordinator] =
         await Promise.all([
-          safePartnerName(project.primaryPartnerId),
-          safePartnerName(project.secundaryPartnerId),
-          safePrimaryClientName(project.primaryClientId),
-          safeSecondaryClientName(project.secundaryClientId),
-          safeCoordinatorName(project.cordinatorId),
+          resolvePartnerName(project.primaryPartnerId),
+          resolvePartnerName(project.secundaryPartnerId),
+          resolvePrimaryClientName(project.primaryClientId),
+          resolveSecondaryClientName(project.secundaryClientId),
+          resolveCoordinatorName(project.cordinatorId),
         ]);
 
       const mapped = mapProjectToContrato(project, {
@@ -378,17 +409,13 @@ export default function ContratoLayout({
     } finally {
       setIsLoadingContrato(false);
     }
-  }, [contratoId]);
+  }, [contratoId, loadSelectOptions]);
 
   useEffect(() => {
     void loadContrato();
   }, [loadContrato]);
 
-  useEffect(() => {
-    void loadSelectOptions();
-  }, [loadSelectOptions]);
-
-  const contrato: Contrato = isEditing ? editContrato : contratoBase;
+  const contrato: ContratoView = isEditing ? editContrato : contratoBase;
   const filteredSecondaryClientOptions = useMemo(() => {
     if (!editRelations.primaryClientId) return [];
 
@@ -919,17 +946,19 @@ export default function ContratoLayout({
                       ))}
                     </select>
                   ) : (
-                    <p className="text-sm font-medium text-gray-900">{contrato.parceiro}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {contrato.parceiro || NO_INFO_LABEL}
+                    </p>
                   )}
                 </div>
               </div>
-              {isEditing && (
-                <div className="flex items-start gap-3 group">
-                  <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                  <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                      Parceiro Secundario
-                    </p>
+              <div className="flex items-start gap-3 group">
+                <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Parceiro Secundario
+                  </p>
+                  {isEditing ? (
                     <select
                       value={editRelations.secundaryPartnerId ?? ""}
                       onChange={(e) =>
@@ -946,9 +975,13 @@ export default function ContratoLayout({
                         </option>
                       ))}
                     </select>
-                  </div>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-900">
+                      {contrato.parceiroSecundario || NO_INFO_LABEL}
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Coluna 2 - Cliente Secundario/Tipo */}
@@ -982,7 +1015,9 @@ export default function ContratoLayout({
                       ))}
                     </select>
                   ) : (
-                    <p className="text-sm font-medium text-gray-900">{contrato.orgaoFinanciador}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {contrato.clienteSecundario || contrato.orgaoFinanciador || NO_INFO_LABEL}
+                    </p>
                   )}
                 </div>
               </div>
