@@ -324,7 +324,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
   }, [boundaries, data?.contracts]);
 
   const metrics: WindowMetric[] = useMemo(() => {
-    const keys: WindowKey[] = ["ONE_YEAR", "SIX_MONTHS", "THREE_MONTHS", "ONE_MONTH"];
+    const keys: WindowKey[] = ["SIX_MONTHS", "THREE_MONTHS", "ONE_MONTH"];
 
     return keys.map((key) => {
       const tone = getMetricTone(key);
@@ -379,9 +379,9 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
         </div>
 
         <div className="overflow-x-auto pb-1">
-          <div className="grid min-w-[920px] grid-cols-4 gap-4">
+          <div className="grid min-w-[720px] grid-cols-3 gap-4">
             {isLoading
-              ? Array.from({ length: 4 }).map((_, index) => renderLoadingCard(index))
+              ? Array.from({ length: 3 }).map((_, index) => renderLoadingCard(index))
               : metrics.map((metric) => (
                   <button
                     key={metric.key}
