@@ -9,6 +9,7 @@ import { HttpError, type ProjectDashboardResponseDTO, type ProjectGovIfEnum, typ
 import { CategoryPieChart } from "./_components/CategoryPieChart";
 import { ContractsLineChart } from "./_components/ContractsLineChart";
 import { ContractsMap } from "./_components/ContractsMap";
+import { ExpiringContractsCard } from "./_components/ExpiringContractsCard";
 import { PartnerBarChart } from "./_components/PartnerBarChart";
 
 type SummaryCard = {
@@ -20,11 +21,9 @@ type SummaryCard = {
 };
 
 type CardTone = {
-  accent: string;
   iconBg: string;
   iconColor: string;
   valueColor: string;
-  border: string;
 };
 
 const statusLabels: Record<ProjectStatusEnum, string> = {
@@ -53,55 +52,41 @@ const formatNumber = (value: number) =>
 
 const cardToneByStatus: Record<ProjectStatusEnum | "TOTAL", CardTone> = {
   PRE_PROJETO: {
-    accent: "bg-sky-500",
     iconBg: "bg-sky-100",
     iconColor: "text-sky-700",
     valueColor: "text-sky-800",
-    border: "border-sky-100 hover:border-sky-200",
   },
   PLANEJAMENTO: {
-    accent: "bg-amber-500",
     iconBg: "bg-amber-100",
     iconColor: "text-amber-700",
     valueColor: "text-amber-800",
-    border: "border-amber-100 hover:border-amber-200",
   },
   EXECUCAO: {
-    accent: "bg-orange-500",
     iconBg: "bg-orange-100",
     iconColor: "text-orange-700",
     valueColor: "text-orange-800",
-    border: "border-orange-100 hover:border-orange-200",
   },
   FINALIZADO: {
-    accent: "bg-emerald-500",
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-700",
     valueColor: "text-emerald-800",
-    border: "border-emerald-100 hover:border-emerald-200",
   },
   SUSPENSO: {
-    accent: "bg-rose-500",
     iconBg: "bg-rose-100",
     iconColor: "text-rose-700",
     valueColor: "text-rose-800",
-    border: "border-rose-100 hover:border-rose-200",
   },
   TOTAL: {
-    accent: "bg-zinc-500",
     iconBg: "bg-zinc-100",
     iconColor: "text-zinc-700",
     valueColor: "text-zinc-800",
-    border: "border-zinc-200 hover:border-zinc-300",
   },
 };
 
 const neutralTone: CardTone = {
-  accent: "bg-zinc-300",
   iconBg: "bg-zinc-100",
   iconColor: "text-zinc-500",
   valueColor: "text-zinc-600",
-  border: "border-zinc-200 hover:border-zinc-300",
 };
 
 function getErrorMessage(error: unknown): string {
@@ -116,7 +101,9 @@ function getErrorMessage(error: unknown): string {
 
 export default function HomePage() {
   const [dashboard, setDashboard] = useState<ProjectDashboardResponseDTO | null>(null);
+  const [expiringContracts, setExpiringContracts] = useState<ProjectDashboardResponseDTO["expiringContracts"] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expiringLoading, setExpiringLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedGovIf, setSelectedGovIf] = useState<ProjectGovIfEnum | null>(null);
@@ -146,9 +133,25 @@ export default function HomePage() {
     }
   }, [selectedYear, selectedGovIf]);
 
+  const loadExpiringContracts = useCallback(async () => {
+    setExpiringLoading(true);
+    try {
+      const response = await getProjectDashboard();
+      setExpiringContracts(response.expiringContracts ?? null);
+    } catch {
+      setExpiringContracts(null);
+    } finally {
+      setExpiringLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    void loadExpiringContracts();
+  }, [loadExpiringContracts]);
 
   const statusMetricMap = useMemo(() => {
     const byStatus = dashboard?.byStatus ?? [];
@@ -310,10 +313,8 @@ export default function HomePage() {
                 <article
                   key={card.title}
                   aria-labelledby={`summary-card-title-${card.key}`}
-                  className={`group relative h-full overflow-hidden rounded-xl border bg-white p-5 sm:p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${tone.border}`}
+                  className="h-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${tone.accent}`} />
-
                   <div className="flex h-full flex-col">
                     <header className="flex items-center gap-3">
                       <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone.iconBg}`}>
@@ -399,6 +400,13 @@ export default function HomePage() {
                 })}
               </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            <ExpiringContractsCard
+              data={expiringContracts}
+              isLoading={expiringLoading}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

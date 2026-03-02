@@ -30,9 +30,9 @@ export function CategoryPieChart({ data, isLoading = false }: CategoryPieChartPr
   const totalValue = data.reduce((acc, item) => acc + item.valor, 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 h-full">
+    <div className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#004225]">Contratos por Categoria</h3>
+        <h3 className="text-lg font-semibold text-zinc-900">Contratos por Categoria</h3>
         <span className="text-sm text-zinc-500">{total} contratos</span>
       </div>
 

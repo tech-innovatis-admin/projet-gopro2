@@ -136,8 +136,8 @@ export function ContractsMap({ data, isLoading = false }: ContractsMapProps) {
   const totalContracts = data.reduce((acc, item) => acc + item.contracts, 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 h-full">
-      <h3 className="text-lg font-semibold text-[#004225] mb-6">Mapa de Contratos</h3>
+    <div className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+      <h3 className="mb-6 text-lg font-semibold text-zinc-900">Mapa de Contratos</h3>
 
       {isLoading ? (
         <div className="h-80 bg-zinc-100 rounded-xl flex items-center justify-center text-sm text-zinc-500">

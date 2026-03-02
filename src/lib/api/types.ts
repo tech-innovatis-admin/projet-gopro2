@@ -397,6 +397,26 @@ export interface ProjectDashboardPartnerMetricDTO {
   totalValue: number;
 }
 
+export interface ProjectDashboardExpiringContractDTO {
+  projectId: number;
+  projectName: string;
+  projectCode: string | null;
+  primaryClientName: string | null;
+  endDate: string;
+  daysToExpiration: number;
+  projectStatus: ProjectStatusEnum;
+  contractValue: number | null;
+}
+
+export interface ProjectDashboardExpiringContractsDTO {
+  referenceDate: string;
+  upToOneMonth: number;
+  upToThreeMonths: number;
+  upToSixMonths: number;
+  upToOneYear: number;
+  contracts: ProjectDashboardExpiringContractDTO[];
+}
+
 export interface ProjectDashboardResponseDTO {
   filters: ProjectDashboardFiltersDTO;
   availableYears: number[];
@@ -406,6 +426,7 @@ export interface ProjectDashboardResponseDTO {
   byMonth: ProjectDashboardMonthMetricDTO[];
   byLocation: ProjectDashboardLocationMetricDTO[];
   byPartner: ProjectDashboardPartnerMetricDTO[];
+  expiringContracts: ProjectDashboardExpiringContractsDTO;
 }
 
 export interface ProjectCategoryMetricDTO {

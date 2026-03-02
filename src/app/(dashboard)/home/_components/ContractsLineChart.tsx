@@ -32,9 +32,9 @@ export function ContractsLineChart({
   isLoading = false,
 }: ContractsLineChartProps) {
   return (
-    <div className="h-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+    <div className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-[#004225]">Evolução de Contratos</h3>
+        <h3 className="text-lg font-semibold text-zinc-900">Evolucao de Contratos</h3>
       </div>
 
       {isLoading ? (
@@ -93,3 +93,4 @@ export function ContractsLineChart({
     </div>
   );
 }
+

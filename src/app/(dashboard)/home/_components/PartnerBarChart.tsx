@@ -40,9 +40,9 @@ export function PartnerBarChart({ data, isLoading = false }: PartnerBarChartProp
   const totalValor = data.reduce((acc, item) => acc + item.valor, 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 h-full">
+    <div className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#004225]">Ranking de Contratos por Parceiro</h3>
+        <h3 className="text-lg font-semibold text-zinc-900">Ranking de Contratos por Parceiro</h3>
         <span className="text-sm text-zinc-500">{totalContratos} contratos</span>
       </div>
 
