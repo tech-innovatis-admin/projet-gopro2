@@ -6,12 +6,28 @@ export async function POST() {
     { status: 200 }
   );
 
-  // Remove o cookie de autenticação
+  response.cookies.set('access_token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  });
+
+  response.cookies.set('refresh_token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  });
+
+  // cookie legado
   response.cookies.set('token', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 0, // Expira imediatamente
+    maxAge: 0,
     path: '/',
   });
 

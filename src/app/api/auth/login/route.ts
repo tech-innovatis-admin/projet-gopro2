@@ -1,81 +1,111 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Mock user for development
-const MOCK_USER = {
-  username: 'admin',
-  email: 'admin@gopro.local',
-  password: '123',
-  name: 'Administrador',
-  id: '1',
-  role: 'admin',
+type BackendLoginResponse = {
+  accessToken: string;
+  tokenType: string;
+  expiresInSeconds: number;
+  user: {
+    id: number;
+    email: string;
+    username: string | null;
+    fullName: string;
+    role: string;
+  };
 };
 
-// Simple token generation for dev
-function generateToken(userId: string): string {
-  const payload = { userId, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 }; // 7 days
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
+function resolveBackendBaseUrl(): string {
+  const candidates = [
+    process.env.API_BASE_URL,
+    process.env.BACKEND_API_BASE_URL,
+  ];
+
+  for (const candidate of candidates) {
+    const value = candidate?.trim()?.replace(/^['"]|['"]$/g, '');
+    if (value && /^https?:\/\//i.test(value)) {
+      return value.replace(/\/$/, '');
+    }
+  }
+
+  return 'http://localhost:8080';
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { identifier, password } = body;
+    const login = (body?.login ?? body?.identifier ?? '').toString().trim();
+    const password = (body?.password ?? '').toString();
 
-    console.log('🔐 [Login] Tentativa com identifier:', identifier);
-
-    // Validação básica
-    if (!identifier || !password) {
-      console.log('❌ [Login] Faltam credenciais');
+    if (!login || !password) {
       return NextResponse.json(
-        { error: 'Email ou usuário e senha são obrigatórios' },
+        { error: 'Email ou usuario e senha sao obrigatorios' },
         { status: 400 }
       );
     }
 
-    // Mock authentication - accepts username or email
-    const isValidUser =
-      (identifier === MOCK_USER.username || identifier === MOCK_USER.email) &&
-      password === MOCK_USER.password;
+    const backendBaseUrl = resolveBackendBaseUrl();
+    const backendResponse = await fetch(`${backendBaseUrl}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ login, password }),
+    });
 
-    if (!isValidUser) {
-      console.log('❌ [Login] Credenciais inválidas');
-      return NextResponse.json(
-        { error: 'Credenciais inválidas' },
-        { status: 401 }
-      );
+    let payload: unknown;
+    try {
+      payload = await backendResponse.json();
+    } catch {
+      payload = null;
     }
 
-    console.log('✅ [Login] Usuário autenticado:', MOCK_USER.email);
+    if (!backendResponse.ok) {
+      const message =
+        typeof payload === 'object' &&
+        payload !== null &&
+        'message' in payload &&
+        typeof (payload as { message?: unknown }).message === 'string'
+          ? ((payload as { message: string }).message || 'Credenciais invalidas')
+          : 'Credenciais invalidas';
 
-    // Gera token
-    const token = generateToken(MOCK_USER.id);
+      return NextResponse.json({ error: message }, { status: backendResponse.status });
+    }
 
-    // Cria resposta com cookie
+    const loginResponse = payload as BackendLoginResponse;
+
     const response = NextResponse.json(
       {
         success: true,
         user: {
-          id: MOCK_USER.id,
-          name: MOCK_USER.name,
-          email: MOCK_USER.email,
-          role: MOCK_USER.role,
+          id: String(loginResponse.user.id),
+          name: loginResponse.user.fullName,
+          email: loginResponse.user.email,
+          role: loginResponse.user.role.toLowerCase(),
         },
       },
       { status: 200 }
     );
 
-    // Define cookie httpOnly para segurança
-    response.cookies.set('token', token, {
+    response.cookies.set('access_token', loginResponse.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 dias em segundos
+      maxAge: loginResponse.expiresInSeconds,
+      path: '/',
+    });
+
+    // cookie legado removido para evitar conflito com fluxo antigo
+    response.cookies.set('token', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0,
       path: '/',
     });
 
     return response;
   } catch (error) {
-    console.error('⚠️ [Login] Erro interno:', error);
+    console.error('[Auth/Login] Erro interno:', error);
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

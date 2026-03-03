@@ -1,18 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Command, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -26,19 +24,16 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      console.log("🔐 Enviando login...");
-      
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Importante: garante que cookies sejam enviados/recebidos
+        credentials: "include",
         body: JSON.stringify({ identifier, password, rememberMe }),
       });
 
       const data = await response.json();
-      console.log("📡 Resposta:", response.status, data);
 
       if (!response.ok) {
         setError(data.error || "Erro ao fazer login");
@@ -46,20 +41,18 @@ export default function LoginPage() {
         return;
       }
 
-      console.log("✅ Login OK! Redirecionando...");
-      
-      // Login bem-sucedido - usa window.location para garantir reload completo com cookies
-      window.location.href = "/";
-    } catch (err) {
-      console.error("❌ Erro:", err);
-      setError("Erro de conexão. Tente novamente.");
+      const nextPath = new URLSearchParams(window.location.search).get("next");
+      const redirectTo = nextPath && nextPath.startsWith("/") ? nextPath : "/";
+      window.location.href = redirectTo;
+    } catch {
+      setError("Erro de conexao. Tente novamente.");
       setIsLoading(false);
     }
   }
 
   return (
     <div className="flex h-full">
-      {/* Painel Esquerdo - Área com Imagem de Fundo */}
+      {/* Painel Esquerdo - Ãrea com Imagem de Fundo */}
       <div
         // Classes para layout, posicionamento e controle da imagem
         className="hidden lg:flex lg:w-1/2 relative bg-cover"
@@ -72,7 +65,7 @@ export default function LoginPage() {
         {/* 1. Overlay Escuro Semitransparente (para garantir a legibilidade do texto branco) */}
         <div className="absolute inset-0 bg-black/60"></div>
 
-        {/* 2. Conteúdo Original (posicionado acima da imagem/overlay) */}
+        {/* 2. ConteÃºdo Original (posicionado acima da imagem/overlay) */}
         <div className="relative z-10 flex flex-col justify-between text-white p-12 w-full h-full">
           <div className="flex items-center gap-2">
             <img src="/Logos/logo_innovatis.svg" alt="Logo Innovatis" className="h-6 w-6" />
@@ -82,7 +75,7 @@ export default function LoginPage() {
           <div className="space-y-8">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-sm backdrop-blur-sm">
-                <span className="text-zinc-300">Plataforma de gestão</span>
+                <span className="text-zinc-300">Plataforma de gestao</span>
               </div>
               <h2 className="text-4xl font-bold leading-tight">
                 Gerenciar projetos
@@ -95,7 +88,7 @@ export default function LoginPage() {
 
             <blockquote className="border-l-2 border-[#1F4E79] pl-6 space-y-3">
               <p className="text-lg text-zinc-300 leading-relaxed">
-                &ldquo;Você não precisa saber tudo, mas precisa saber fazer o que fazer com o que sabe.&rdquo;
+                &ldquo;Voce nao precisa saber tudo, mas precisa saber fazer o que fazer com o que sabe.&rdquo;
               </p>
               <footer className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold">
@@ -110,18 +103,18 @@ export default function LoginPage() {
           </div>
 
           <div className="flex items-center gap-6 text-sm text-zinc-500">
-            <span>© 2025 GoPro</span>
-            <Link href="/privacy" className="hover:text-zinc-300 transition-colors">
+            <span>(c) 2025 GoPro</span>
+            <Link href="/privacidade" className="hover:text-zinc-300 transition-colors">
               Privacidade
             </Link>
-            <Link href="/terms" className="hover:text-zinc-300 transition-colors">
+            <Link href="/termos" className="hover:text-zinc-300 transition-colors">
               Termos
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Painel Direito - Formulário de login */}
+      {/* Painel Direito - FormulÃ¡rio de login */}
       <div className="flex w-full lg:w-1/2 flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-zinc-100 p-8">
         <div className="w-full max-w-md space-y-8">
           {/* Card de Login */}
@@ -131,7 +124,7 @@ export default function LoginPage() {
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
                 }}>
             <CardContent className="p-8 space-y-6">
-              {/* Cabeçalho */}
+              {/* CabeÃ§alho */}
               <div className="text-center space-y-2">
                 {/* Logo Innovatis com cor controlada por CSS */}
                 <div className="text-sky-300 flex justify-center"> {/* Esta classe controla a cor do SVG */}
@@ -160,12 +153,12 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Formulário de Email e Password */}
+              {/* FormulÃ¡rio de Email e Password */}
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Campo Email */}
                 <div className="space-y-2">
                   <Label htmlFor="identifier" className="text-zinc-700 font-medium text-sm">
-                    Email ou Nome de Usuário
+                    Email ou Nome de Usuario
                   </Label>
                   <div className="relative group">
                     <Input
@@ -191,7 +184,7 @@ export default function LoginPage() {
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
+                      placeholder="********"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={isLoading}
@@ -240,7 +233,7 @@ export default function LoginPage() {
                   </Link>
                 </div>
 
-                {/* Botão Sign In */}
+                {/* BotÃ£o Sign In */}
                 <Button
                   type="submit"
                   disabled={isLoading}
@@ -263,15 +256,15 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          {/* Termos e Política */}
+          {/* Termos e PolÃ­tica */}
           <p className="text-center text-xs text-zinc-400 leading-relaxed">
-            Ao continuar, você concorda com nossos{" "}
+            Ao continuar, voce concorda com nossos{" "}
             <Link href="/termos" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
-              Termos de Serviço
+              Termos de Servico
             </Link>{" "}
             e{" "}
             <Link href="/privacidade" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
-              Política de Privacidade
+              Politica de Privacidade
             </Link>
           </p>
         </div>
@@ -279,3 +272,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

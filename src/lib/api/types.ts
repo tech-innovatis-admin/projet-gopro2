@@ -93,6 +93,110 @@ export type DocumentOwnerTypeEnum =
   | 'ORGANIZATION'
   | 'COMPANY';
 export type DocumentStatusEnum = 'UPLOADING' | 'AVAILABLE' | 'DELETED';
+export type UserRoleEnum = 'SUPERADMIN' | 'ADMIN' | 'ANALISTA' | 'ESTAGIARIO';
+export type UserStatusEnum = 'ACTIVE' | 'DISABLED' | 'PENDING';
+export type AllowedRegistrationStatusEnum = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED';
+export type AuditScopeEnum = 'SYSTEM' | 'CONTRACTS' | 'PEOPLE_COMPANIES';
+
+export interface AuthUserResponseDTO {
+  id: number;
+  email: string;
+  username: string | null;
+  fullName: string;
+  role: UserRoleEnum;
+  status: UserStatusEnum;
+}
+
+export interface AuthLoginRequestDTO {
+  login: string;
+  password: string;
+}
+
+export interface AuthLoginResponseDTO {
+  accessToken: string;
+  tokenType: string;
+  expiresInSeconds: number;
+  user: AuthUserResponseDTO;
+}
+
+export interface AllowedRegistrationCreateRequestDTO {
+  email: string;
+  role: UserRoleEnum;
+  expiresAt?: string;
+}
+
+export interface AllowedRegistrationReissueRequestDTO {
+  expiresAt?: string;
+}
+
+export interface AllowedRegistrationResponseDTO {
+  id: number;
+  email: string;
+  role: UserRoleEnum;
+  status: AllowedRegistrationStatusEnum;
+  invitedByUserId: number | null;
+  invitedAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+  inviteLink: string | null;
+}
+
+export interface AllowedRegistrationValidationResponseDTO {
+  email: string;
+  role: UserRoleEnum;
+  expiresAt: string;
+}
+
+export interface RegisterCompleteRequestDTO {
+  token: string;
+  fullName: string;
+  username?: string;
+  password: string;
+}
+
+export interface RegisterCompleteResponseDTO {
+  message: string;
+  auth: AuthLoginResponseDTO | null;
+}
+
+export interface AdminUserUpdateRequestDTO {
+  role?: UserRoleEnum;
+  status?: UserStatusEnum;
+}
+
+export interface AdminUserResponseDTO {
+  id: number;
+  username: string | null;
+  email: string;
+  fullName: string;
+  role: UserRoleEnum;
+  status: UserStatusEnum;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface UserLookupResponseDTO {
+  id: number;
+  fullName: string;
+  email: string;
+  username: string | null;
+}
+
+export interface AuditLogResponseDTO {
+  id: number;
+  actorUserId: number | null;
+  actorEmail: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  beforeJson: string | null;
+  afterJson: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
 
 export interface PartnerResponseDTO {
   id: number;

@@ -1,51 +1,57 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-type LegacyAuthToken = {
-  userId?: string;
-  exp?: number;
-};
+function resolveBackendBaseUrl(): string {
+  const candidates = [
+    process.env.API_BASE_URL,
+    process.env.BACKEND_API_BASE_URL,
+  ];
 
-function parseLegacyToken(token: string): LegacyAuthToken | null {
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    const payload = JSON.parse(decoded) as LegacyAuthToken;
-
-    if (typeof payload !== 'object' || payload === null) {
-      return null;
+  for (const candidate of candidates) {
+    const value = candidate?.trim()?.replace(/^['"]|['"]$/g, '');
+    if (value && /^https?:\/\//i.test(value)) {
+      return value.replace(/\/$/, '');
     }
-
-    return payload;
-  } catch {
-    return null;
   }
+
+  return 'http://localhost:8080';
 }
 
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
+    const accessToken = cookieStore.get('access_token')?.value;
 
-    if (!token) {
+    if (!accessToken) {
       return NextResponse.json({ isAuthenticated: false }, { status: 200 });
     }
 
-    const payload = parseLegacyToken(token);
-    if (!payload || typeof payload.exp !== 'number' || payload.exp < Date.now()) {
+    const backendBaseUrl = resolveBackendBaseUrl();
+    const backendResponse = await fetch(`${backendBaseUrl}/auth/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!backendResponse.ok) {
       return NextResponse.json({ isAuthenticated: false }, { status: 200 });
     }
 
+    const user = await backendResponse.json();
     return NextResponse.json({
       isAuthenticated: true,
       user: {
-        id: payload.userId ?? '1',
-        name: 'Administrador',
-        email: 'admin@gopro.local',
-        role: 'admin',
+        id: String(user.id),
+        name: user.fullName,
+        email: user.email,
+        role: String(user.role ?? '').toLowerCase(),
       },
     });
   } catch (error) {
-    console.error('[AuthMe] Erro ao verificar autenticacao:', error);
+    console.error('[Auth/Me] Erro ao verificar autenticacao:', error);
     return NextResponse.json(
       { isAuthenticated: false, error: 'Erro ao verificar autenticacao' },
       { status: 500 }

@@ -16,3 +16,4 @@ export * from './stages';
 export * from './incomes';
 export * from './expenses';
 export * from './documents';
+export * from './auth';

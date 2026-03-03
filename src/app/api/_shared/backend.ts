@@ -151,6 +151,16 @@ async function buildHeaders(
     headers['X-Real-IP'] = realIp;
   }
 
+  const authorizationHeader = req.headers.get('authorization');
+  if (authorizationHeader) {
+    headers.Authorization = authorizationHeader;
+  } else {
+    const accessToken = req.cookies.get('access_token')?.value;
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+  }
+
   if (options.headers) {
     Object.assign(headers, options.headers);
   }
