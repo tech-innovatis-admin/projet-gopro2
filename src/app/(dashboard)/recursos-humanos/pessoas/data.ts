@@ -1,9 +1,10 @@
-﻿import {
+import {
   getPeopleById,
   listPeople,
   listProjectPeople,
   listProjects,
 } from "@/src/lib/api/endpoints";
+import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
 import type {
   ContractTypeEnum,
   PeopleResponseDTO,
@@ -17,6 +18,8 @@ import {
   type ProjectPerson,
   type ProjectPersonStatus,
 } from "./types";
+
+type UserNameMap = Record<number, string>;
 
 function mapStatus(status: StatusProjectPeopleEnum | null): ProjectPersonStatus {
   if (status === "ATIVO") return 1;
@@ -33,7 +36,17 @@ function mapContractType(
   return undefined;
 }
 
-function mapPerson(dto: PeopleResponseDTO): Person {
+function mapAuditUser(
+  userId: number | null | undefined,
+  userNamesById: UserNameMap
+): string | undefined {
+  if (!userId) {
+    return undefined;
+  }
+  return userNamesById[userId] ?? `ID ${userId}`;
+}
+
+function mapPerson(dto: PeopleResponseDTO, userNamesById: UserNameMap): Person {
   return {
     id: String(dto.id),
     fullName: dto.fullName,
@@ -47,14 +60,15 @@ function mapPerson(dto: PeopleResponseDTO): Person {
     notes: dto.notes ?? undefined,
     createdAt: dto.createdAt ?? new Date().toISOString(),
     updatedAt: dto.updatedAt ?? undefined,
-    createdBy: dto.createdBy ? String(dto.createdBy) : undefined,
-    updatedBy: dto.updatedBy ? String(dto.updatedBy) : undefined,
+    createdBy: mapAuditUser(dto.createdBy, userNamesById),
+    updatedBy: mapAuditUser(dto.updatedBy, userNamesById),
   };
 }
 
 function mapProjectPeople(
   dto: ProjectPeopleResponseDTO,
-  projectsById: Map<number, ProjectResponseDTO>
+  projectsById: Map<number, ProjectResponseDTO>,
+  userNamesById: UserNameMap
 ): ProjectPerson {
   const project = projectsById.get(dto.projectId);
 
@@ -75,15 +89,16 @@ function mapProjectPeople(
     notes: dto.notes ?? undefined,
     createdAt: dto.createdAt ?? new Date().toISOString(),
     updatedAt: dto.updatedAt ?? undefined,
-    createdBy: dto.createdBy ? String(dto.createdBy) : undefined,
-    updatedBy: dto.updatedBy ? String(dto.updatedBy) : undefined,
+    createdBy: mapAuditUser(dto.createdBy, userNamesById),
+    updatedBy: mapAuditUser(dto.updatedBy, userNamesById),
   };
 }
 
 function buildPeopleWithProjects(
   peopleDtos: PeopleResponseDTO[],
   projectPeopleDtos: ProjectPeopleResponseDTO[],
-  projectsDtos: ProjectResponseDTO[]
+  projectsDtos: ProjectResponseDTO[],
+  userNamesById: UserNameMap
 ): PersonWithProjects[] {
   const projectsById = new Map(projectsDtos.map((project) => [project.id, project]));
 
@@ -96,12 +111,12 @@ function buildPeopleWithProjects(
 
     const personId = String(projectPeople.personId);
     const currentLinks = projectLinksByPersonId.get(personId) ?? [];
-    currentLinks.push(mapProjectPeople(projectPeople, projectsById));
+    currentLinks.push(mapProjectPeople(projectPeople, projectsById, userNamesById));
     projectLinksByPersonId.set(personId, currentLinks);
   }
 
   return peopleDtos.map((dto) => {
-    const person = mapPerson(dto);
+    const person = mapPerson(dto, userNamesById);
     const projects = projectLinksByPersonId.get(person.id) ?? [];
     const activeProjectsCount = projects.filter((project) => project.status === 1).length;
 
@@ -121,10 +136,18 @@ export async function fetchPeopleWithProjects(): Promise<PersonWithProjects[]> {
     listProjects({ page: 0, size: 20 }),
   ]);
 
+  const userNamesById = await resolveUserNamesById([
+    ...peopleResponse.content.map((person) => person.createdBy),
+    ...peopleResponse.content.map((person) => person.updatedBy),
+    ...projectPeopleResponse.content.map((item) => item.createdBy),
+    ...projectPeopleResponse.content.map((item) => item.updatedBy),
+  ]);
+
   return buildPeopleWithProjects(
     peopleResponse.content,
     projectPeopleResponse.content,
-    projectsResponse.content
+    projectsResponse.content,
+    userNamesById
   );
 }
 
@@ -140,10 +163,18 @@ export async function fetchPersonById(personId: string): Promise<PersonWithProje
     listProjects({ page: 0, size: 20 }),
   ]);
 
+  const userNamesById = await resolveUserNamesById([
+    peopleDto.createdBy,
+    peopleDto.updatedBy,
+    ...projectPeopleResponse.content.map((item) => item.createdBy),
+    ...projectPeopleResponse.content.map((item) => item.updatedBy),
+  ]);
+
   const peopleWithProjects = buildPeopleWithProjects(
     [peopleDto],
     projectPeopleResponse.content,
-    projectsResponse.content
+    projectsResponse.content,
+    userNamesById
   );
 
   return peopleWithProjects[0] ?? null;

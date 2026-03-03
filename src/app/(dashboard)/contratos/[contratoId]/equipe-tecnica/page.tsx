@@ -28,6 +28,7 @@ import {
   updateProjectPeople,
   uploadDocument,
 } from "@/src/lib/api/endpoints";
+import { requireCurrentUserId } from "@/src/lib/auth/session";
 import {
   type ContractTypeEnum,
   HttpError,
@@ -603,6 +604,7 @@ export default function EquipeTecnicaPage() {
     try {
       setIsSaving(true);
       setActionError(null);
+      const actorUserId = await requireCurrentUserId();
 
       let personId = editingMembro?.personId;
       let avatarUploadWarning: string | null = null;
@@ -658,7 +660,7 @@ export default function EquipeTecnicaPage() {
           baseAmount:
             typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
           notes: toOptional(formData.notes),
-          updatedBy: 1,
+          updatedBy: actorUserId,
         });
       } else {
         const person = await createPeople({
@@ -681,7 +683,7 @@ export default function EquipeTecnicaPage() {
               baseAmount:
                 typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
               notes: toOptional(formData.notes),
-              createdBy: 1,
+              createdBy: actorUserId,
             },
             1,
           );
@@ -745,6 +747,7 @@ export default function EquipeTecnicaPage() {
     try {
       setIsLinking(true);
       setActionError(null);
+      const actorUserId = await requireCurrentUserId();
 
       await createProjectPeopleWithRetry(
         {
@@ -754,7 +757,7 @@ export default function EquipeTecnicaPage() {
           institutionalLink: toOptional(linkVinculo),
           workloadHours:
             typeof linkCargaHoraria === "number" ? linkCargaHoraria : undefined,
-          createdBy: 1,
+          createdBy: actorUserId,
         },
         1,
       );

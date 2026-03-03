@@ -476,6 +476,11 @@ export default function ContratoLayout({
       description: "Empresas vinculadas",
     },
     {
+      label: "Auditoria",
+      href: `/contratos/${contratoId}/auditoria`,
+      description: "Trilha de alteracoes do contrato",
+    },
+    {
       label: "Arquivos",
       href: `/contratos/${contratoId}/arquivos`,
       description: "Documentos anexados",

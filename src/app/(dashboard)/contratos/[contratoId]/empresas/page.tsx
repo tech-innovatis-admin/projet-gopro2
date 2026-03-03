@@ -12,6 +12,7 @@ import {
   updateCompany,
   updateProjectCompany,
 } from "@/src/lib/api/endpoints";
+import { requireCurrentUserId } from "@/src/lib/auth/session";
 import { HttpError, type CompanyResponseDTO } from "@/src/lib/api/types";
 
 const BriefcaseBusinessIcon = () => (
@@ -333,6 +334,7 @@ export default function EmpresasPage() {
     try {
       setIsSaving(true);
       setActionError(null);
+      const actorUserId = await requireCurrentUserId();
 
       const companyPayload = {
         name: formData.razaoSocial!.trim(),
@@ -354,10 +356,10 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
-          updatedBy: 1,
+          updatedBy: actorUserId,
         });
       } else {
-        const company = await createCompany({ ...companyPayload, createdBy: 1 });
+        const company = await createCompany({ ...companyPayload, createdBy: actorUserId });
         await createProjectCompany({
           projectId,
           companyId: company.id,
@@ -367,7 +369,7 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
-          createdBy: 1,
+          createdBy: actorUserId,
         });
       }
 
@@ -410,7 +412,13 @@ export default function EmpresasPage() {
     try {
       setIsLinking(true);
       setActionError(null);
-      await createProjectCompany({ projectId, companyId: selectedCompanyId, isIncubated: false, createdBy: 1 });
+      const actorUserId = await requireCurrentUserId();
+      await createProjectCompany({
+        projectId,
+        companyId: selectedCompanyId,
+        isIncubated: false,
+        createdBy: actorUserId,
+      });
       await loadProjectCompanies();
       setIsLinkModalOpen(false);
       setSelectedCompanyId("");

@@ -28,6 +28,8 @@ import {
   listGoals,
   updateBudgetItem,
 } from '@/src/lib/api/endpoints';
+import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
+import { requireCurrentUserId } from '@/src/lib/auth/session';
 import {
   HttpError,
   type BudgetTransferRequestDTO,
@@ -268,8 +270,12 @@ export default function RubricasPage() {
         }));
       });
 
-      const transfers = allTransfers
-        .filter((transfer) => transfer.projectId === projectId)
+      const projectTransfers = allTransfers.filter((transfer) => transfer.projectId === projectId);
+      const transferCreatorNames = await resolveUserNamesById(
+        projectTransfers.map((transfer) => transfer.createdBy)
+      );
+
+      const transfers = projectTransfers
         .map<Remanejamento>((transfer) => ({
           id: String(transfer.id),
           contratoId: String(transfer.projectId),
@@ -278,7 +284,9 @@ export default function RubricasPage() {
           valor: toSafeNumber(transfer.amount),
           data: transfer.transferDate || '',
           motivo: transfer.reason || '',
-          createdBy: transfer.createdBy ? String(transfer.createdBy) : '-',
+          createdBy: transfer.createdBy
+            ? (transferCreatorNames[transfer.createdBy] ?? `ID ${transfer.createdBy}`)
+            : '-',
           createdAt: transfer.createdAt || '',
           status: normalizeTransferStatus(transfer.status),
         }))
@@ -349,6 +357,7 @@ export default function RubricasPage() {
     setSavedMessage(null);
 
     try {
+      const actorUserId = await requireCurrentUserId();
       await createBudgetItem({
         categoryId: toPersistedId(rubricaId),
         description: newItem.descricao.trim(),
@@ -358,6 +367,7 @@ export default function RubricasPage() {
         plannedAmount: valorTotal,
         executedAmount: 0,
         goalId,
+        createdBy: actorUserId,
       });
 
       await loadData();
@@ -401,6 +411,7 @@ export default function RubricasPage() {
     setSavedMessage(null);
 
     try {
+      const actorUserId = await requireCurrentUserId();
       await updateBudgetItem(toPersistedId(editingItem), {
         categoryId: toPersistedId(rubricaId),
         description: editForm.descricao.trim(),
@@ -409,6 +420,7 @@ export default function RubricasPage() {
         unitCost: valorUnitario,
         plannedAmount: valorTotal,
         goalId,
+        updatedBy: actorUserId,
       });
 
       await loadData();
@@ -463,10 +475,12 @@ export default function RubricasPage() {
     setSavedMessage(null);
 
     try {
+      const actorUserId = await requireCurrentUserId();
       await createBudgetCategory({
         projectId,
         code: generatedCode,
         name: newRubrica.nome.trim(),
+        createdBy: actorUserId,
       });
 
       await loadData();
@@ -548,6 +562,7 @@ export default function RubricasPage() {
     setSavedMessage(null);
 
     try {
+      const actorUserId = await requireCurrentUserId();
       const payload: BudgetTransferRequestDTO = {
         projectId,
         fromItemId: toPersistedId(form.itemOrigemId),
@@ -556,6 +571,7 @@ export default function RubricasPage() {
         transferDate: form.data,
         status: 'APROVADO',
         reason: form.motivo.trim(),
+        createdBy: actorUserId,
       };
 
       await createBudgetTransfer(payload);
