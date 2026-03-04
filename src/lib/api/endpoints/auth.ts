@@ -14,17 +14,19 @@ import type {
   PageResponseDTO,
   RegisterCompleteRequestDTO,
   RegisterCompleteResponseDTO,
+  AuditScopeEnum,
   UserLookupResponseDTO,
   UserRoleEnum,
   UserStatusEnum,
 } from '../types';
 
 export interface ListAuditParams {
-  scope?: 'SYSTEM' | 'CONTRACTS' | 'PEOPLE_COMPANIES';
+  scope?: AuditScopeEnum;
   action?: string;
   entityType?: string;
   actorUserId?: number;
   actorName?: string;
+  search?: string;
   contractId?: number;
   from?: string;
   to?: string;
@@ -95,11 +97,12 @@ export function listAuditLogs(params: ListAuditParams = {}) {
       entityType: params.entityType,
       actorUserId: params.actorUserId,
       actorName: params.actorName,
+      search: params.search,
       contractId: params.contractId,
       from: params.from,
       to: params.to,
       page: params.page ?? 0,
-      size: params.size ?? 20,
+      size: params.size ?? 10,
     },
   });
 }

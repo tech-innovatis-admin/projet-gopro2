@@ -197,7 +197,9 @@ export default function RubricasPage() {
       const [allCategories, allItems, allGoals, allTransfers] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
-        fetchAllPages((query) => listGoals({ ...query, projectId })),
+        fetchAllPages((query) => listGoals({ ...query, projectId })).catch(
+          () => [] as GoalResponseDTO[]
+        ),
         fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
       ]);
 
@@ -350,7 +352,7 @@ export default function RubricasPage() {
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const goalId =
-      newItem.metaId && isPersistedId(newItem.metaId) ? toPersistedId(newItem.metaId) : undefined;
+      newItem.metaId && isPersistedId(newItem.metaId) ? toPersistedId(newItem.metaId) : null;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -404,7 +406,7 @@ export default function RubricasPage() {
     const valorUnitario = toMoneyValue(editForm.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const goalId =
-      editForm.metaId && isPersistedId(editForm.metaId) ? toPersistedId(editForm.metaId) : undefined;
+      editForm.metaId && isPersistedId(editForm.metaId) ? toPersistedId(editForm.metaId) : null;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -874,7 +876,7 @@ export default function RubricasPage() {
                                   }
                                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                                 >
-                                  <option value="">Selecione uma meta</option>
+                                  <option value="">Sem meta vinculada</option>
                                   {metas.map((meta) => (
                                     <option key={meta.id} value={meta.id}>
                                       {meta.numero} - {meta.titulo}
@@ -1064,7 +1066,7 @@ export default function RubricasPage() {
                               }
                               className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
                             >
-                              <option value="">Selecione uma meta</option>
+                              <option value="">Sem meta vinculada</option>
                               {metas.map((meta) => (
                                 <option key={meta.id} value={meta.id}>
                                   {meta.numero} - {meta.titulo}

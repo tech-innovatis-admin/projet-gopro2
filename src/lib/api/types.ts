@@ -96,7 +96,7 @@ export type DocumentStatusEnum = 'UPLOADING' | 'AVAILABLE' | 'DELETED';
 export type UserRoleEnum = 'SUPERADMIN' | 'ADMIN' | 'ANALISTA' | 'ESTAGIARIO';
 export type UserStatusEnum = 'ACTIVE' | 'DISABLED' | 'PENDING';
 export type AllowedRegistrationStatusEnum = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED';
-export type AuditScopeEnum = 'SYSTEM' | 'CONTRACTS' | 'PEOPLE_COMPANIES';
+export type AuditScopeEnum = 'SYSTEM' | 'CONTRACTS' | 'USERS' | 'PEOPLE_COMPANIES';
 
 export interface AuthUserResponseDTO {
   id: number;
@@ -150,7 +150,7 @@ export interface AllowedRegistrationValidationResponseDTO {
 export interface RegisterCompleteRequestDTO {
   token: string;
   fullName: string;
-  username?: string;
+  username: string;
   password: string;
 }
 
@@ -186,6 +186,24 @@ export interface UserLookupResponseDTO {
 
 export interface AuditLogResponseDTO {
   id: number;
+  auditId?: string | null;
+  dataHora?: string | null;
+  tipoAuditoria?: AuditScopeEnum | null;
+  modulo?: string | null;
+  feature?: string | null;
+  entidadePrincipal?: string | null;
+  aba?: string | null;
+  subsecao?: string | null;
+  resumo?: string | null;
+  descricao?: string | null;
+  resultado?: string | null;
+  correlacaoId?: string | null;
+  usuarioResponsavelId?: number | null;
+  usuarioResponsavelNome?: string | null;
+  usuarioResponsavelEmail?: string | null;
+  usuarioResponsavelRole?: string | null;
+  alteracoesJson?: string | null;
+  detalhesTecnicosJson?: string | null;
   actorUserId: number | null;
   actorEmail: string | null;
   action: string;
@@ -980,7 +998,7 @@ export interface BudgetItemRequestDTO {
   unitCost?: number;
   plannedAmount: number;
   executedAmount?: number;
-  goalId?: number;
+  goalId?: number | null;
   notes?: string;
   createdBy?: number;
 }

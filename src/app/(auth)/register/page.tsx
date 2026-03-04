@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,18 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const trimmedUsername = username.trim();
+
+  const passwordRules = [
+    { id: "length", label: "Pelo menos 8 caracteres", isValid: password.length >= 8 },
+    { id: "upper", label: "Uma letra maiuscula", isValid: /[A-Z]/.test(password) },
+    { id: "lower", label: "Uma letra minuscula", isValid: /[a-z]/.test(password) },
+    { id: "digit", label: "Um numero", isValid: /[0-9]/.test(password) },
+    { id: "special", label: "Um caractere especial", isValid: /[^\p{L}\p{N}]/u.test(password) },
+  ];
+  const isPasswordPolicyValid = passwordRules.every((rule) => rule.isValid);
+  const didConfirmPassword = confirmPassword.length > 0;
+  const doesPasswordMatch = didConfirmPassword && password === confirmPassword;
 
   useEffect(() => {
     const inviteToken = (new URLSearchParams(window.location.search).get("token") || "").trim();
@@ -110,8 +123,18 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!trimmedUsername) {
+      setError("Usuario e obrigatorio.");
+      return;
+    }
+
+    if (!isPasswordPolicyValid) {
+      setError("A senha não atende aos critérios obrigatórios.");
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setError("As senhas nao conferem.");
+      setError("As senhas não conferem.");
       return;
     }
 
@@ -123,7 +146,7 @@ export default function RegisterPage() {
       await completeRegistration({
         token,
         fullName,
-        username: username.trim() || undefined,
+        username: trimmedUsername,
         password,
       });
 
@@ -214,11 +237,12 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="username">Usuario (opcional)</Label>
+                  <Label htmlFor="username">Usuario</Label>
                   <Input
                     id="username"
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
+                    required
                     disabled={submitting}
                   />
                 </div>
@@ -234,6 +258,30 @@ export default function RegisterPage() {
                     minLength={8}
                     disabled={submitting}
                   />
+                  <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                    <p className="mb-2 text-xs font-medium text-zinc-700">A senha deve conter:</p>
+                    <ul className="space-y-1">
+                      {passwordRules.map((rule) => (
+                        <li
+                          key={rule.id}
+                          className={`flex items-center gap-2 text-xs ${
+                            rule.isValid ? "text-emerald-700" : "text-zinc-600"
+                          }`}
+                        >
+                          <span
+                            className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
+                              rule.isValid
+                                ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+                                : "border-zinc-300 bg-white text-zinc-400"
+                            }`}
+                          >
+                            {rule.isValid ? <Check className="h-3 w-3" /> : "-"}
+                          </span>
+                          {rule.label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -247,6 +295,26 @@ export default function RegisterPage() {
                     minLength={8}
                     disabled={submitting}
                   />
+                  {didConfirmPassword && (
+                    <p
+                      className={`flex items-center gap-2 text-xs ${
+                        doesPasswordMatch ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      <span
+                        className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
+                          doesPasswordMatch
+                            ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+                            : "border-red-300 bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {doesPasswordMatch ? <Check className="h-3 w-3" /> : "!"}
+                      </span>
+                      {doesPasswordMatch
+                        ? "Senha confirmada: as senhas estão iguais."
+                        : "As senhas não estão iguais."}
+                    </p>
+                  )}
                 </div>
 
                 <Button type="submit" className="w-full" disabled={submitting}>

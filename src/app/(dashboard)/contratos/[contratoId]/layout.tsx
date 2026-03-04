@@ -455,16 +455,16 @@ export default function ContratoLayout({
       href: `/contratos/${contratoId}/desembolso`,
       description: "Cronograma de desembolsos",
     },
-    // {
-    //   label: "Rubricas",
-    //   href: `/contratos/${contratoId}/rubricas`,
-    //   description: "Orcamento e execucao financeira",
-    // },
-    // {
-    //   label: "Pagamentos",
-    //   href: `/contratos/${contratoId}/pagamentos`,
-    //   description: "Historico de pagamentos",
-    // },
+    {
+      label: "Rubricas",
+      href: `/contratos/${contratoId}/rubricas`,
+      description: "Orcamento e execucao financeira",
+    },
+    {
+      label: "Pagamentos",
+      href: `/contratos/${contratoId}/pagamentos`,
+      description: "Historico de pagamentos",
+    },
     {
       label: "Pessoas",
       href: `/contratos/${contratoId}/equipe-tecnica`,

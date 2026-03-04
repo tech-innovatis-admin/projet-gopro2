@@ -220,7 +220,9 @@ export default function PagamentosPlanilhaPage() {
         fetchAllPages<BudgetItemResponseDTO>((query) =>
           listBudgetItems({ ...query, projectId })
         ),
-        fetchAllPages<GoalResponseDTO>((query) => listGoals({ ...query, projectId })),
+        fetchAllPages<GoalResponseDTO>((query) => listGoals({ ...query, projectId })).catch(
+          () => [] as GoalResponseDTO[]
+        ),
         fetchAllPages<IncomeResponseDTO>((query) => listIncomes({ ...query, projectId })),
         fetchAllPages<ExpenseResponseDTO>((query) => listExpenses({ ...query, projectId })),
       ]);

@@ -59,16 +59,9 @@ function formatDate(value: string | null): string {
   }).format(date);
 }
 
-function toIsoDateTimeOrUndefined(value: string): string | undefined {
+function toLocalDateTimeOrUndefined(value: string): string | undefined {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-  return parsed.toISOString();
+  return trimmed || undefined;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -174,7 +167,7 @@ export default function AdminConvitesPage() {
       const created = await createAllowedRegistration({
         email,
         role,
-        expiresAt: toIsoDateTimeOrUndefined(expiresAt),
+        expiresAt: toLocalDateTimeOrUndefined(expiresAt),
       });
 
       setFeedback(`Convite criado para ${created.email}.`);
