@@ -5,6 +5,7 @@ import { NavBar } from "@/components/ui/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { getBudgetItemById } from "@/src/lib/api/endpoints/budget-items";
 import { listAuditLogs } from "@/src/lib/api/endpoints/auth";
 import { AuditLogResponseDTO, AuditScopeEnum } from "@/src/lib/api/types";
 import {
@@ -59,6 +60,170 @@ function buildScopeLabel(scope: AuditScopeEnum): string {
   return resolveScopeLabel(scope);
 }
 
+type TransferDirection = {
+  fromItemId: number | null;
+  toItemId: number | null;
+  amount: number | null;
+};
+
+const FROM_ITEM_KEYS = ["fromItemId", "fromItem", "itemOrigemId"] as const;
+const TO_ITEM_KEYS = ["toItemId", "toItem", "itemDestinoId"] as const;
+const AMOUNT_KEYS = ["amount", "valor", "transferAmount", "valorRemanejado"] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) {
+      return null;
+    }
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct)) {
+      return direct;
+    }
+
+    const sanitized = raw.replace(/[^\d,.-]/g, "");
+    if (!sanitized) {
+      return null;
+    }
+
+    const lastComma = sanitized.lastIndexOf(",");
+    const lastDot = sanitized.lastIndexOf(".");
+    let normalized = sanitized;
+    if (lastComma > lastDot) {
+      normalized = sanitized.replace(/\./g, "").replace(",", ".");
+    } else if (lastComma >= 0 && lastDot < 0) {
+      normalized = sanitized.replace(",", ".");
+    } else if (lastComma >= 0) {
+      normalized = sanitized.replace(/,/g, "");
+    }
+
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function pickItemId(source: Record<string, unknown> | null, keys: readonly string[]): number | null {
+  if (!source) {
+    return null;
+  }
+  for (const key of keys) {
+    const parsed = toNumber(source[key]);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function normalizeChangePath(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function pickNumberFromChanges(
+  changes: ReturnType<typeof parseChanges>,
+  tokens: readonly string[]
+): number | null {
+  for (const change of changes) {
+    const normalizedPath = normalizeChangePath(change.caminho || "");
+    const matched = tokens.some((token) => normalizedPath.includes(token));
+    if (!matched) {
+      continue;
+    }
+    const parsed = toNumber(change.para) ?? toNumber(change.de);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function isTransferAudit(log: AuditLogResponseDTO): boolean {
+  const entityType = (log.entityType || "").toLowerCase();
+  if (entityType.includes("budget-transfer")) {
+    return true;
+  }
+
+  const searchable = [log.feature, log.subsecao, log.resumo, log.descricao]
+    .map((value) => (value || "").toLowerCase())
+    .join(" ");
+
+  return searchable.includes("remanej");
+}
+
+function resolveTransferDirection(log: AuditLogResponseDTO): TransferDirection | null {
+  if (!isTransferAudit(log)) {
+    return null;
+  }
+
+  const before = asRecord(parseBeforeAfter(log.beforeJson));
+  const after = asRecord(parseBeforeAfter(log.afterJson));
+  const technical = asRecord(parseTechnical(log.detalhesTecnicosJson));
+  const changes = parseChanges(log.alteracoesJson);
+
+  const fromItemId =
+    pickItemId(after, FROM_ITEM_KEYS) ??
+    pickItemId(before, FROM_ITEM_KEYS) ??
+    pickItemId(technical, FROM_ITEM_KEYS) ??
+    pickNumberFromChanges(changes, ["fromitemid", "fromitem", "itemorigemid", "origem"]);
+
+  const toItemId =
+    pickItemId(after, TO_ITEM_KEYS) ??
+    pickItemId(before, TO_ITEM_KEYS) ??
+    pickItemId(technical, TO_ITEM_KEYS) ??
+    pickNumberFromChanges(changes, ["toitemid", "toitem", "itemdestinoid", "destino"]);
+
+  const amount =
+    pickItemId(after, AMOUNT_KEYS) ??
+    pickItemId(before, AMOUNT_KEYS) ??
+    pickItemId(technical, AMOUNT_KEYS) ??
+    pickNumberFromChanges(changes, ["amount", "valor", "transferamount", "valorremanejado"]);
+
+  if (fromItemId === null && toItemId === null && amount === null) {
+    return null;
+  }
+
+  return { fromItemId, toItemId, amount };
+}
+
+function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number, string>): string {
+  if (itemId === null) {
+    return "Nao informado";
+  }
+  const description = labelsById[itemId];
+  if (!description) {
+    return `Item #${itemId}`;
+  }
+  return `${description} (ID ${itemId})`;
+}
+
+function formatCurrencyBRL(value: number | null): string {
+  if (value === null) {
+    return "Nao informado";
+  }
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
 export default function AdminAuditoriaPage() {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [canView, setCanView] = useState(false);
@@ -66,6 +231,7 @@ export default function AdminAuditoriaPage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logs, setLogs] = useState<AuditLogResponseDTO[]>([]);
   const [actorNamesById, setActorNamesById] = useState<Record<number, string>>({});
+  const [budgetItemLabelsById, setBudgetItemLabelsById] = useState<Record<number, string>>({});
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -156,6 +322,60 @@ export default function AdminAuditoriaPage() {
     }
     void loadLogs();
   }, [canView, loadLogs]);
+
+  useEffect(() => {
+    const ids = new Set<number>();
+
+    for (const log of logs) {
+      const transferDirection = resolveTransferDirection(log);
+      if (!transferDirection) {
+        continue;
+      }
+      if (transferDirection.fromItemId !== null) {
+        ids.add(transferDirection.fromItemId);
+      }
+      if (transferDirection.toItemId !== null) {
+        ids.add(transferDirection.toItemId);
+      }
+    }
+
+    const missingIds = Array.from(ids).filter((id) => !budgetItemLabelsById[id]);
+    if (missingIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadBudgetItemLabels() {
+      const resolvedItems = await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const item = await getBudgetItemById(id);
+            return [id, item.description?.trim() || `Item #${id}`] as const;
+          } catch {
+            return [id, `Item #${id}`] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setBudgetItemLabelsById((prev) => {
+        const next = { ...prev };
+        for (const [id, label] of resolvedItems) {
+          next[id] = label;
+        }
+        return next;
+      });
+    }
+
+    void loadBudgetItemLabels();
+    return () => {
+      cancelled = true;
+    };
+  }, [logs, budgetItemLabelsById]);
 
   function handleApplyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -333,6 +553,7 @@ export default function AdminAuditoriaPage() {
                     const before = parseBeforeAfter(log.beforeJson);
                     const after = parseBeforeAfter(log.afterJson);
                     const technical = parseTechnical(log.detalhesTecnicosJson);
+                    const transferDirection = resolveTransferDirection(log);
 
                     return (
                       <article
@@ -356,6 +577,28 @@ export default function AdminAuditoriaPage() {
                             </div>
                             <h2 className="text-base font-semibold text-zinc-900">{resolveSummary(log)}</h2>
                             {log.descricao && <p className="text-sm text-zinc-700">{log.descricao}</p>}
+                            {transferDirection && (
+                              <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
+                                <p>
+                                  <span className="font-semibold text-zinc-900">Origem:</span>{" "}
+                                  {resolveBudgetItemLabel(
+                                    transferDirection.fromItemId,
+                                    budgetItemLabelsById
+                                  )}
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-zinc-900">Destino:</span>{" "}
+                                  {resolveBudgetItemLabel(
+                                    transferDirection.toItemId,
+                                    budgetItemLabelsById
+                                  )}
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-zinc-900">Valor remanejado:</span>{" "}
+                                  {formatCurrencyBRL(transferDirection.amount)}
+                                </p>
+                              </div>
+                            )}
                           </div>
                           <p className="text-xs text-zinc-500">{formatDateTime(resolveEventDate(log))}</p>
                         </header>
@@ -485,4 +728,3 @@ export default function AdminAuditoriaPage() {
     </div>
   );
 }
-

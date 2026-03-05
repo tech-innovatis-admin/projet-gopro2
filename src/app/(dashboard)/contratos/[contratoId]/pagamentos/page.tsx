@@ -22,6 +22,7 @@ import {
   deleteIncome,
   listBudgetCategories,
   listBudgetItems,
+  listBudgetTransfers,
   listExpenses,
   listGoals,
   listIncomes,
@@ -31,6 +32,7 @@ import {
 import type {
   BudgetCategoryResponseDTO,
   BudgetItemResponseDTO,
+  BudgetTransferResponseDTO,
   ExpenseRequestDTO,
   ExpenseResponseDTO,
   ExpenseUpdateDTO,
@@ -67,6 +69,9 @@ type ItemRubrica = {
   meta?: string;
   goalId?: number;
   subitens?: Subitem[];
+  valorBaseOrcado: number;
+  remanejamentoDebito: number;
+  remanejamentoCredito: number;
 };
 
 type Rubrica = {
@@ -213,7 +218,7 @@ export default function PagamentosPlanilhaPage() {
     }
 
     try {
-      const [categories, items, goals, incomes, expenses] = await Promise.all([
+      const [categories, items, goals, incomes, expenses, transfers] = await Promise.all([
         fetchAllPages<BudgetCategoryResponseDTO>((query) =>
           listBudgetCategories({ ...query, projectId })
         ),
@@ -225,10 +230,28 @@ export default function PagamentosPlanilhaPage() {
         ),
         fetchAllPages<IncomeResponseDTO>((query) => listIncomes({ ...query, projectId })),
         fetchAllPages<ExpenseResponseDTO>((query) => listExpenses({ ...query, projectId })),
+        fetchAllPages<BudgetTransferResponseDTO>((query) =>
+          listBudgetTransfers({ ...query, projectId })
+        ),
       ]);
 
       const projectCategories = categories.filter((category) => category.projectId === projectId);
       const categoryIds = new Set(projectCategories.map((category) => category.id));
+      const transferBalanceByItem = new Map<number, { debito: number; credito: number }>();
+
+      for (const transfer of transfers) {
+        if (transfer.projectId !== projectId) continue;
+
+        const amount = toMoneyValue(transfer.amount);
+
+        const fromItem = transferBalanceByItem.get(transfer.fromItemId) ?? { debito: 0, credito: 0 };
+        fromItem.debito = Number((fromItem.debito + amount).toFixed(2));
+        transferBalanceByItem.set(transfer.fromItemId, fromItem);
+
+        const toItem = transferBalanceByItem.get(transfer.toItemId) ?? { debito: 0, credito: 0 };
+        toItem.credito = Number((toItem.credito + amount).toFixed(2));
+        transferBalanceByItem.set(transfer.toItemId, toItem);
+      }
 
       const goalsMap = new Map<number, string>();
       for (const goal of goals) {
@@ -259,6 +282,10 @@ export default function PagamentosPlanilhaPage() {
         const valorUnitario = toMoneyValue(
           item.unitCost ?? (item.plannedAmount != null ? item.plannedAmount / fator : 0)
         );
+        const valorBaseOrcado = toMoneyValue(
+          item.plannedAmount ?? quantidade * meses * valorUnitario
+        );
+        const transferBalance = transferBalanceByItem.get(item.id) ?? { debito: 0, credito: 0 };
 
         const mappedItem: ItemRubrica = {
           id: String(item.id),
@@ -271,6 +298,9 @@ export default function PagamentosPlanilhaPage() {
           meta: item.goalId ? goalsMap.get(item.goalId) : undefined,
           goalId: item.goalId ?? undefined,
           subitens: [],
+          valorBaseOrcado,
+          remanejamentoDebito: transferBalance.debito,
+          remanejamentoCredito: transferBalance.credito,
         };
 
         if (!itemsByCategory.has(item.categoryId)) {
@@ -372,8 +402,19 @@ export default function PagamentosPlanilhaPage() {
   }, [loadData]);
 
   // Helpers de cálculo
-  const calcularTotalOrcadoItem = (item: ItemRubrica) =>
-    safeNumber(item.quantidade) * safeNumber(item.meses) * safeNumber(item.valorUnitario);
+  const calcularTotalOrcadoItem = (item: ItemRubrica) => {
+    const valorBase =
+      safeNumber(item.valorBaseOrcado) ||
+      safeNumber(item.quantidade) * safeNumber(item.meses) * safeNumber(item.valorUnitario);
+
+    return Number(
+      (
+        valorBase -
+        safeNumber(item.remanejamentoDebito) +
+        safeNumber(item.remanejamentoCredito)
+      ).toFixed(2)
+    );
+  };
 
   const calcularTotalPagoSubitem = (sub: Subitem) =>
     parcelas.reduce((acc, p) => acc + safeNumber(getLancamento(sub, p.id).valor), 0);

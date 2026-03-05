@@ -75,10 +75,12 @@ const USER_ROLE_LABELS: Record<string, string> = {
 type TransferDirection = {
   fromItemId: number | null;
   toItemId: number | null;
+  amount: number | null;
 };
 
 const FROM_ITEM_KEYS = ["fromItemId", "fromItem", "itemOrigemId"] as const;
 const TO_ITEM_KEYS = ["toItemId", "toItem", "itemDestinoId"] as const;
+const AMOUNT_KEYS = ["amount", "valor", "transferAmount", "valorRemanejado"] as const;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -92,7 +94,33 @@ function toNumber(value: unknown): number | null {
     return value;
   }
   if (typeof value === "string") {
-    const parsed = Number(value.trim());
+    const raw = value.trim();
+    if (!raw) {
+      return null;
+    }
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct)) {
+      return direct;
+    }
+
+    const sanitized = raw.replace(/[^\d,.-]/g, "");
+    if (!sanitized) {
+      return null;
+    }
+
+    const lastComma = sanitized.lastIndexOf(",");
+    const lastDot = sanitized.lastIndexOf(".");
+    let normalized = sanitized;
+    if (lastComma > lastDot) {
+      normalized = sanitized.replace(/\./g, "").replace(",", ".");
+    } else if (lastComma >= 0 && lastDot < 0) {
+      normalized = sanitized.replace(",", ".");
+    } else if (lastComma >= 0) {
+      normalized = sanitized.replace(/,/g, "");
+    }
+
+    const parsed = Number(normalized);
     if (Number.isFinite(parsed)) {
       return parsed;
     }
@@ -116,12 +144,22 @@ function pickItemId(
   return null;
 }
 
-function pickItemIdFromChanges(
+function normalizeChangePath(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function pickNumberFromChanges(
   changes: ReturnType<typeof parseChanges>,
-  regex: RegExp
+  tokens: readonly string[]
 ): number | null {
   for (const change of changes) {
-    if (!regex.test((change.caminho || "").toLowerCase())) {
+    const normalizedPath = normalizeChangePath(change.caminho || "");
+    const matched = tokens.some((token) => normalizedPath.includes(token));
+    if (!matched) {
       continue;
     }
     const parsed = toNumber(change.para) ?? toNumber(change.de);
@@ -159,19 +197,25 @@ function resolveTransferDirection(log: AuditLogResponseDTO): TransferDirection |
     pickItemId(after, FROM_ITEM_KEYS) ??
     pickItemId(before, FROM_ITEM_KEYS) ??
     pickItemId(technical, FROM_ITEM_KEYS) ??
-    pickItemIdFromChanges(changes, /fromitemid|fromitem|itemorigemid|origem/);
+    pickNumberFromChanges(changes, ["fromitemid", "fromitem", "itemorigemid", "origem"]);
 
   const toItemId =
     pickItemId(after, TO_ITEM_KEYS) ??
     pickItemId(before, TO_ITEM_KEYS) ??
     pickItemId(technical, TO_ITEM_KEYS) ??
-    pickItemIdFromChanges(changes, /toitemid|toitem|itemdestinoid|destino/);
+    pickNumberFromChanges(changes, ["toitemid", "toitem", "itemdestinoid", "destino"]);
 
-  if (fromItemId === null && toItemId === null) {
+  const amount =
+    pickItemId(after, AMOUNT_KEYS) ??
+    pickItemId(before, AMOUNT_KEYS) ??
+    pickItemId(technical, AMOUNT_KEYS) ??
+    pickNumberFromChanges(changes, ["amount", "valor", "transferamount", "valorremanejado"]);
+
+  if (fromItemId === null && toItemId === null && amount === null) {
     return null;
   }
 
-  return { fromItemId, toItemId };
+  return { fromItemId, toItemId, amount };
 }
 
 function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number, string>): string {
@@ -183,6 +227,16 @@ function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number
     return `Item #${itemId}`;
   }
   return `${description} (ID ${itemId})`;
+}
+
+function formatCurrencyBRL(value: number | null): string {
+  if (value === null) {
+    return "Nao informado";
+  }
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 function resolveActorRoleLabel(log: AuditLogResponseDTO): string | null {
@@ -604,6 +658,10 @@ export default function ContractAuditPage() {
                                       transferDirection.toItemId,
                                       budgetItemLabelsById
                                     )}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-zinc-900">Valor remanejado:</span>{" "}
+                                    {formatCurrencyBRL(transferDirection.amount)}
                                   </p>
                                 </div>
                               )}
