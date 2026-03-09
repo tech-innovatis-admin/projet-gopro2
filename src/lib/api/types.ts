@@ -91,7 +91,8 @@ export type DocumentOwnerTypeEnum =
   | 'SECRETARY'
   | 'PEOPLE'
   | 'ORGANIZATION'
-  | 'COMPANY';
+  | 'COMPANY'
+  | 'USER';
 export type DocumentStatusEnum = 'UPLOADING' | 'AVAILABLE' | 'DELETED';
 export type UserRoleEnum = 'SUPERADMIN' | 'ADMIN' | 'ANALISTA' | 'ESTAGIARIO';
 export type UserStatusEnum = 'ACTIVE' | 'DISABLED' | 'PENDING';
@@ -105,6 +106,22 @@ export interface AuthUserResponseDTO {
   fullName: string;
   role: UserRoleEnum;
   status: UserStatusEnum;
+  avatarUrl: string | null;
+  lastLoginAt: string | null;
+}
+
+export type AuthNotificationCategory = "CREATED" | "STATUS_CHANGE" | "EXPIRING";
+export type AuthNotificationSeverity = "INFO" | "DANGER";
+
+export interface AuthNotificationResponseDTO {
+  id: string;
+  category: AuthNotificationCategory;
+  severity: AuthNotificationSeverity;
+  title: string;
+  message: string;
+  href: string;
+  contractId: number | null;
+  occurredAt: string | null;
 }
 
 export interface AuthLoginRequestDTO {

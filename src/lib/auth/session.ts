@@ -5,6 +5,8 @@ export interface SessionUser {
   name: string;
   email: string;
   role: SessionRole;
+  avatarUrl?: string | null;
+  avatarImageUrl?: string | null;
 }
 
 interface AuthMeResponse {

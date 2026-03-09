@@ -118,7 +118,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${poppins.variable} font-sans antialiased flex flex-col min-h-screen`}>
+      <body
+        suppressHydrationWarning
+        className={`${poppins.variable} font-sans antialiased flex flex-col min-h-screen`}
+      >
         <Providers>
           <div className="flex-1">
             {children}

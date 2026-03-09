@@ -8,6 +8,7 @@ import type {
   AllowedRegistrationStatusEnum,
   AllowedRegistrationValidationResponseDTO,
   AuditLogResponseDTO,
+  AuthNotificationResponseDTO,
   AuthLoginRequestDTO,
   AuthLoginResponseDTO,
   AuthUserResponseDTO,
@@ -34,6 +35,15 @@ export interface ListAuditParams {
   size?: number;
 }
 
+export interface ListMyAuditParams {
+  page?: number;
+  size?: number;
+}
+
+export interface ListMyNotificationsParams {
+  size?: number;
+}
+
 export interface ListUsersParams {
   role?: UserRoleEnum;
   status?: UserStatusEnum;
@@ -53,6 +63,15 @@ export function login(payload: AuthLoginRequestDTO) {
 
 export function me() {
   return http.get<AuthUserResponseDTO>('/auth/me');
+}
+
+export function uploadMyAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return http.post<AuthUserResponseDTO>('/auth/me/avatar', {
+    body: formData,
+  });
 }
 
 export function createAllowedRegistration(payload: AllowedRegistrationCreateRequestDTO) {
@@ -103,6 +122,23 @@ export function listAuditLogs(params: ListAuditParams = {}) {
       to: params.to,
       page: params.page ?? 0,
       size: params.size ?? 10,
+    },
+  });
+}
+
+export function listMyAuditLogs(params: ListMyAuditParams = {}) {
+  return http.get<PageResponseDTO<AuditLogResponseDTO>>('/auth/me/audit', {
+    query: {
+      page: params.page ?? 0,
+      size: params.size ?? 4,
+    },
+  });
+}
+
+export function listMyNotifications(params: ListMyNotificationsParams = {}) {
+  return http.get<AuthNotificationResponseDTO[]>('/auth/me/notifications', {
+    query: {
+      size: params.size ?? 20,
     },
   });
 }

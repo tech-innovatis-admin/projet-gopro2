@@ -1,271 +1,321 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Bell, Check, CheckCheck, Settings, Filter, ArrowRight, ExternalLink } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Activity, AlertTriangle, ArrowRight, Bell, Check, CheckCheck, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavBar } from "@/components/ui/NavBar";
-import { Notification, mockNotifications } from "./data";
+import { listMyNotifications } from "@/src/lib/api/endpoints";
+import { type AuthNotificationResponseDTO } from "@/src/lib/api/types";
+import {
+  loadReadNotificationIds,
+  saveReadNotificationIds,
+  subscribeReadNotificationIds,
+} from "@/src/lib/notifications/readState";
 
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
+type FilterType = "all" | "unread" | "read";
+type NotificationCategory = "created" | "status_change" | "expiring";
+type NotificationType = "info" | "success" | "danger";
 
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+type NotificationItem = {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  href: string;
+  category: NotificationCategory;
+  type: NotificationType;
+};
+
+const NOTIFICATION_PAGE_SIZE = 80;
+
+function parseDateToTimestamp(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function formatRelativeTime(value: string): string {
+  const timestamp = parseDateToTimestamp(value);
+  if (timestamp <= 0) {
+    return "agora";
+  }
+
+  const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffMinutes < 1) return "Agora";
-  if (diffMinutes < 60) return `${diffMinutes} minutos atrás`;
-  if (diffHours < 24) return `${diffHours} horas atrás`;
-  if (diffDays < 7) return `${diffDays} dias atrás`;
-  
-  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-}
-
-function getTypeIndicatorColor(type: Notification["type"]): string {
-  switch (type) {
-    case "success":
-      return "bg-[#1E7F4B]";
-    case "warning":
-      return "bg-amber-500";
-    case "error":
-      return "bg-red-500";
-    case "info":
-    default:
-      return "bg-[#1F4E79]";
+  if (diffMinutes < 1) {
+    return "agora";
   }
-}
-
-function getTypeLabel(type: Notification["type"]): string {
-  switch (type) {
-    case "success":
-      return "Sucesso";
-    case "warning":
-      return "Atenção";
-    case "error":
-      return "Erro";
-    case "info":
-    default:
-      return "Informação";
+  if (diffMinutes < 60) {
+    return `ha ${diffMinutes} min`;
   }
+  if (diffHours < 24) {
+    return `ha ${diffHours} h`;
+  }
+  if (diffDays < 7) {
+    return `ha ${diffDays} dia${diffDays > 1 ? "s" : ""}`;
+  }
+  return formatDate(value);
 }
 
-// ============================================================================
-// NOTIFICATION CARD COMPONENT
-// ============================================================================
-
-interface NotificationCardProps {
-  notification: Notification;
-  onMarkAsRead?: (id: string) => void;
-  onClick?: (notification: Notification) => void;
+function normalizeCategory(category: AuthNotificationResponseDTO["category"]): NotificationCategory {
+  if (category === "EXPIRING") {
+    return "expiring";
+  }
+  if (category === "STATUS_CHANGE") {
+    return "status_change";
+  }
+  return "created";
 }
 
-function NotificationCard({ notification, onMarkAsRead, onClick }: NotificationCardProps) {
+function normalizeType(
+  category: AuthNotificationResponseDTO["category"],
+  severity: AuthNotificationResponseDTO["severity"]
+): NotificationType {
+  if (severity === "DANGER" || category === "EXPIRING") {
+    return "danger";
+  }
+  if (category === "STATUS_CHANGE") {
+    return "success";
+  }
+  return "info";
+}
+
+function toNotificationItem(item: AuthNotificationResponseDTO): NotificationItem {
+  const timestamp = item.occurredAt ?? new Date().toISOString();
+  return {
+    id: item.id,
+    title: item.title,
+    message: item.message,
+    timestamp,
+    href: item.href?.trim() ? item.href : "/contratos",
+    category: normalizeCategory(item.category),
+    type: normalizeType(item.category, item.severity),
+  };
+}
+
+function sortNotifications(items: NotificationItem[]): NotificationItem[] {
+  const priority: Record<NotificationCategory, number> = {
+    expiring: 0,
+    status_change: 1,
+    created: 2,
+  };
+
+  return [...items].sort((first, second) => {
+    const firstPriority = priority[first.category];
+    const secondPriority = priority[second.category];
+    if (firstPriority !== secondPriority) {
+      return firstPriority - secondPriority;
+    }
+
+    if (first.category === "expiring" && second.category === "expiring") {
+      return parseDateToTimestamp(first.timestamp) - parseDateToTimestamp(second.timestamp);
+    }
+
+    return parseDateToTimestamp(second.timestamp) - parseDateToTimestamp(first.timestamp);
+  });
+}
+
+function getTypeLabel(type: NotificationType): string {
+  if (type === "danger") {
+    return "Danger";
+  }
+  if (type === "success") {
+    return "Mudanca";
+  }
+  return "Criacao";
+}
+
+function getCategoryLabel(category: NotificationCategory): string {
+  if (category === "expiring") {
+    return "Vencimento";
+  }
+  if (category === "status_change") {
+    return "Mudanca de status";
+  }
+  return "Criacao";
+}
+
+function getIndicatorColor(type: NotificationType): string {
+  if (type === "danger") {
+    return "bg-red-500";
+  }
+  if (type === "success") {
+    return "bg-emerald-500";
+  }
+  return "bg-blue-500";
+}
+
+function EmptyState({ filter }: { filter: FilterType }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick?.(notification)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick?.(notification);
-        }
-      }}
-      className={cn(
-        "group relative flex gap-4 p-4 cursor-pointer transition-all duration-200 rounded-lg border",
-        "hover:shadow-lg hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30",
-        notification.actionUrl && "hover:border-[#1F4E79]/40",
-        "bg-white border-[#1F4E79]/20 shadow-sm"
-      )}
-    >
-      {/* Indicador de tipo */}
-      <div className="flex-shrink-0 pt-1">
-        <div className={cn("w-3 h-3 rounded-full", getTypeIndicatorColor(notification.type))} />
+    <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+      <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-zinc-100">
+        <Bell className="h-10 w-10 text-zinc-400" />
       </div>
-
-      {/* Conteúdo */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-4 mb-1">
-          <h4
-            className={cn(
-              "text-base leading-snug",
-              notification.read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"
-            )}
-          >
-            {notification.title}
-          </h4>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {!notification.read && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-[#00C48B]/15 text-[#1E7F4B] rounded-full">
-                Nova
-              </span>
-            )}
-            <span className="text-xs text-zinc-400 whitespace-nowrap">
-              {formatRelativeTime(notification.timestamp)}
-            </span>
-          </div>
-        </div>
-        <p className="text-sm text-zinc-600 mb-2">{notification.message}</p>
-        <div className="flex items-center gap-3">
-          <span className={cn(
-            "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full",
-            notification.type === "success" && "bg-green-100 text-green-700",
-            notification.type === "warning" && "bg-amber-100 text-amber-700",
-            notification.type === "error" && "bg-red-100 text-red-700",
-            notification.type === "info" && "bg-blue-100 text-blue-700"
-          )}>
-            {getTypeLabel(notification.type)}
-          </span>
-          {notification.actionUrl && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-[#1F4E79]/5 text-[#1F4E79] rounded-md group-hover:bg-[#1F4E79]/10 group-hover:text-[#153653] transition-all duration-200">
-              <span className="text-xs font-medium">
-                {notification.type === "warning" || notification.type === "error" ? "Ação necessária" : "Ver detalhes"}
-              </span>
-              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform duration-200" />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Indicador de clicável para cards com ação */}
-      {notification.actionUrl && (
-        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-60 transition-opacity duration-200">
-          <ExternalLink className="w-4 h-4 text-zinc-400" />
-        </div>
-      )}
-      
-      {/* Botão marcar como lida */}
-      {!notification.read && onMarkAsRead && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onMarkAsRead(notification.id);
-          }}
-          className={cn(
-            "absolute p-2 rounded-lg hover:bg-zinc-100 transition-all duration-200",
-            notification.actionUrl ? "right-4 top-10 opacity-0 group-hover:opacity-100" : "right-4 top-4 opacity-0 group-hover:opacity-100"
-          )}
-          aria-label="Marcar como lida"
-          title="Marcar como lida"
-        >
-          <Check className="w-4 h-4 text-zinc-500" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// EMPTY STATE COMPONENT
-// ============================================================================
-
-function EmptyState({ filter }: { filter: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-      <div className="w-20 h-20 rounded-full bg-zinc-100 flex items-center justify-center mb-4">
-        <Bell className="w-10 h-10 text-zinc-400" />
-      </div>
-      <h3 className="text-lg font-medium text-zinc-700 mb-2">
-        {filter === "all" ? "Nenhuma notificação" : "Nenhuma notificação encontrada"}
+      <h3 className="mb-2 text-lg font-medium text-zinc-700">
+        {filter === "all" ? "Nenhuma notificacao" : "Nenhuma notificacao encontrada"}
       </h3>
-      <p className="text-sm text-zinc-500 max-w-[300px]">
-        {filter === "all" 
-          ? "Você está em dia! Quando houver novidades, elas aparecerão aqui."
-          : "Não há notificações que correspondam ao filtro selecionado."
-        }
+      <p className="max-w-[320px] text-sm text-zinc-500">
+        {filter === "all"
+          ? "Quando houver novos eventos de contratos, eles serao exibidos aqui."
+          : "Nao ha notificacoes que correspondam ao filtro selecionado."}
       </p>
     </div>
   );
 }
 
-// ============================================================================
-// NOTIFICATIONS PAGE COMPONENT
-// ============================================================================
-
-type FilterType = "all" | "unread" | "read";
-
 export default function NotificacoesPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState<FilterType>("all");
-  
-  // Lista de notificações (futuramente virá da API)
-  const notifications = mockNotifications;
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  
-  // Filtrar notificações
-  const filteredNotifications = notifications.filter((n) => {
-    if (filter === "unread") return !n.read;
-    if (filter === "read") return n.read;
-    return true;
-  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set<string>());
 
-  // Handler para marcar como lida
-  const handleMarkAsRead = useCallback((id: string) => {
-    // TODO: Integrar com API
-    console.log("Marcar como lida:", id);
+  useEffect(() => {
+    const syncReadIds = () => {
+      setReadNotificationIds(loadReadNotificationIds());
+    };
+
+    syncReadIds();
+    return subscribeReadNotificationIds(syncReadIds);
   }, []);
 
-  // Handler para marcar todas como lidas
-  const handleMarkAllAsRead = useCallback(() => {
-    // TODO: Integrar com API
-    console.log("Marcar todas como lidas");
-  }, []);
+  const loadNotifications = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-  // Handler para click na notificação
-  const handleNotificationClick = useCallback((notification: Notification) => {
-    // TODO: Navegar para actionUrl se existir
-    if (notification.actionUrl) {
-      console.log("Navegar para:", notification.actionUrl);
+    try {
+      const response = await listMyNotifications({ size: NOTIFICATION_PAGE_SIZE });
+      const allNotifications = sortNotifications(response.map(toNotificationItem));
+
+      setNotifications(allNotifications);
+    } catch (requestError) {
+      setNotifications([]);
+      if (requestError instanceof Error) {
+        setError(requestError.message || "Falha ao carregar notificacoes.");
+      } else {
+        setError("Falha ao carregar notificacoes.");
+      }
+    } finally {
+      setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !readNotificationIds.has(notification.id)).length,
+    [notifications, readNotificationIds]
+  );
+
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((notification) => {
+      if (filter === "unread") {
+        return !readNotificationIds.has(notification.id);
+      }
+      if (filter === "read") {
+        return readNotificationIds.has(notification.id);
+      }
+      return true;
+    });
+  }, [filter, notifications, readNotificationIds]);
+
+  const handleMarkAsRead = useCallback((id: string) => {
+    if (!id) {
+      return;
+    }
+
+    setReadNotificationIds((current) => {
+      if (current.has(id)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(id);
+      saveReadNotificationIds(next);
+      return next;
+    });
+  }, []);
+
+  const handleMarkAllAsRead = useCallback(() => {
+    if (notifications.length === 0) {
+      return;
+    }
+
+    setReadNotificationIds((current) => {
+      const next = new Set(current);
+      notifications.forEach((notification) => next.add(notification.id));
+      saveReadNotificationIds(next);
+      return next;
+    });
+  }, [notifications]);
 
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
-      
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900 flex items-center gap-3">
-              <Bell className="w-7 h-7 text-[#1F4E79]" />
-              Notificações
+            <h1 className="flex items-center gap-3 text-2xl font-bold text-zinc-900">
+              <Bell className="h-7 w-7 text-[#1F4E79]" />
+              Notificacoes
             </h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              {unreadCount > 0 
-                ? `Você tem ${unreadCount} ${unreadCount === 1 ? "notificação não lida" : "notificações não lidas"}`
-                : "Todas as notificações foram lidas"
-              }
+            <p className="mt-1 text-sm text-zinc-500">
+              {unreadCount > 0
+                ? `Voce tem ${unreadCount} notificacao${unreadCount > 1 ? "oes" : ""} nao lida${unreadCount > 1 ? "s" : ""}.`
+                : "Todas as notificacoes estao lidas."}
             </p>
           </div>
-          
-          {/* Actions */}
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void loadNotifications()}
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              <ArrowRight className="h-4 w-4 rotate-180" />
+              Atualizar
+            </button>
+
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="group flex items-center gap-2.5 px-5 py-2.5 text-sm font-semibold text-[#1F4E79] bg-white border border-[#1F4E79]/20 rounded-lg shadow-sm hover:bg-[#00C48B] hover:text-white hover:border-[#00C48B] hover:shadow-md active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#00C48B]/50 focus:ring-offset-2"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#1F4E79]/20 bg-white px-3 py-2 text-sm font-semibold text-[#1F4E79] hover:bg-[#00C48B] hover:text-white hover:border-[#00C48B]"
               >
-                <CheckCheck className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
-                <span>Marcar todas como lidas</span>
+                <CheckCheck className="h-4 w-4" />
+                Marcar todas como lidas
               </button>
             )}
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-2 mb-6 pb-4 border-b border-zinc-200">
-          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg">
+        <div className="mb-6 flex items-center gap-2 border-b border-zinc-200 pb-4">
+          <div className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1">
             <button
               onClick={() => setFilter("all")}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200",
-                filter === "all" 
-                  ? "bg-white text-zinc-900 shadow-sm" 
-                  : "text-zinc-600 hover:text-zinc-900"
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                filter === "all" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
               )}
             >
               Todas ({notifications.length})
@@ -273,21 +323,17 @@ export default function NotificacoesPage() {
             <button
               onClick={() => setFilter("unread")}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200",
-                filter === "unread" 
-                  ? "bg-white text-zinc-900 shadow-sm" 
-                  : "text-zinc-600 hover:text-zinc-900"
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                filter === "unread" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
               )}
             >
-              Não lidas ({unreadCount})
+              Nao lidas ({unreadCount})
             </button>
             <button
               onClick={() => setFilter("read")}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200",
-                filter === "read" 
-                  ? "bg-white text-zinc-900 shadow-sm" 
-                  : "text-zinc-600 hover:text-zinc-900"
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                filter === "read" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
               )}
             >
               Lidas ({notifications.length - unreadCount})
@@ -295,19 +341,132 @@ export default function NotificacoesPage() {
           </div>
         </div>
 
-        {/* Notifications List */}
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="space-y-3">
-          {filteredNotifications.length === 0 ? (
+          {loading ? (
+            <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center text-sm text-zinc-500">
+              Carregando notificacoes...
+            </div>
+          ) : filteredNotifications.length === 0 ? (
             <EmptyState filter={filter} />
           ) : (
-            filteredNotifications.map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-                onMarkAsRead={handleMarkAsRead}
-                onClick={handleNotificationClick}
-              />
-            ))
+            filteredNotifications.map((notification) => {
+              const isRead = readNotificationIds.has(notification.id);
+
+              return (
+                <div
+                  key={notification.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    handleMarkAsRead(notification.id);
+                    router.push(notification.href);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleMarkAsRead(notification.id);
+                      router.push(notification.href);
+                    }
+                  }}
+                  className={cn(
+                    "group relative cursor-pointer rounded-lg border bg-white p-4 shadow-sm transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1F4E79]/30",
+                    isRead ? "border-zinc-200" : "border-[#1F4E79]/30"
+                  )}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="pt-1">
+                      <div className={cn("h-3 w-3 rounded-full", getIndicatorColor(notification.type))} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-start justify-between gap-3">
+                        <h4
+                          className={cn(
+                            "text-base leading-snug",
+                            isRead ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"
+                          )}
+                        >
+                          {notification.title}
+                        </h4>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!isRead && (
+                            <span className="inline-flex rounded-full bg-[#00C48B]/15 px-2 py-0.5 text-xs font-medium text-[#1E7F4B]">
+                              Nova
+                            </span>
+                          )}
+                          <span className="whitespace-nowrap text-xs text-zinc-400">
+                            {formatRelativeTime(notification.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="mb-2 text-sm text-zinc-600">{notification.message}</p>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                            notification.type === "danger" && "bg-red-100 text-red-700",
+                            notification.type === "success" && "bg-emerald-100 text-emerald-700",
+                            notification.type === "info" && "bg-blue-100 text-blue-700"
+                          )}
+                        >
+                          {getTypeLabel(notification.type)}
+                        </span>
+
+                        <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">
+                          {getCategoryLabel(notification.category)}
+                        </span>
+
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#1F4E79]/5 px-2 py-1 text-xs font-medium text-[#1F4E79]">
+                          Ver detalhes
+                          <ArrowRight className="h-3 w-3" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isRead && (
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleMarkAsRead(notification.id);
+                      }}
+                      className="absolute right-3 top-3 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100"
+                      aria-label="Marcar como lida"
+                      title="Marcar como lida"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute bottom-3 right-3 inline-flex h-7 w-7 items-center justify-center rounded-md",
+                      notification.category === "expiring"
+                        ? "bg-red-50 text-red-600"
+                        : notification.category === "status_change"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-blue-50 text-blue-600"
+                    )}
+                  >
+                    {notification.category === "expiring" ? (
+                      <AlertTriangle className="h-4 w-4" />
+                    ) : notification.category === "status_change" ? (
+                      <Activity className="h-4 w-4" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                  </span>
+                </div>
+              );
+            })
           )}
         </div>
       </main>
