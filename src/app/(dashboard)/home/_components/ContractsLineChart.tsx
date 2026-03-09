@@ -34,12 +34,12 @@ export function ContractsLineChart({
   return (
     <div className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-zinc-900">Evolucao de Contratos</h3>
+        <h3 className="text-lg font-semibold text-zinc-900">Evolução de Contratos</h3>
       </div>
 
       {isLoading ? (
         <div className="flex h-72 items-center justify-center text-sm text-zinc-500">
-          Carregando evolucao...
+          Carregando evolução...
         </div>
       ) : (
         <div className="h-72 min-w-0 w-full">

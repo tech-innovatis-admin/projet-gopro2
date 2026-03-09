@@ -362,7 +362,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
               <AlertTriangle className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-lg font-semibold text-zinc-900">Contratos proximos do vencimento</h3>
+              <h3 className="text-lg font-semibold text-zinc-900">Contratos próximos do vencimento</h3>
               <p className="text-sm text-zinc-600">Selecione o card para abrir os contratos do intervalo.</p>
             </div>
           </div>
@@ -370,7 +370,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
           <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
             <CalendarClock className="h-4 w-4" />
             <span>
-              Referencia:{" "}
+              Referência:{" "}
               <strong className="font-semibold text-zinc-800">
                 {data?.referenceDate ? formatDate(data.referenceDate) : "-"}
               </strong>
@@ -449,7 +449,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
             <div className="max-h-[70vh] overflow-y-auto p-6">
               {selectedContracts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-8 text-center text-sm text-zinc-500">
-                  Nenhum contrato encontrado para este periodo.
+                  Nenhum contrato encontrado para este período.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -465,7 +465,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
                             {contract.projectName}
                           </p>
                           <p className="mt-1 truncate text-xs text-zinc-500">
-                            Codigo: {contract.projectCode || "Nao informado"} | Cliente:{" "}
+                            Código: {contract.projectCode || "Nao informado"} | Cliente:{" "}
                             {contract.primaryClientName || "Nao informado"}
                           </p>
                         </div>

@@ -1108,7 +1108,7 @@ export default function MetaEtapaFasePage() {
             Meta, Etapa e Fase
           </h2>
           <p className="text-sm text-slate-500">
-            Estrutura estrategica e operacional do contrato {contratoId}!
+            Estrutura estratégica e operacional do contrato {contratoId}!
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

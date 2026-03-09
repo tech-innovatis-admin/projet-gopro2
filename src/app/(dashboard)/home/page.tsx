@@ -274,7 +274,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-zinc-900 mb-2">Bem-vindo a GoPro2</h1>
-                <p className="text-zinc-600">Gerenciar com eficiencia e inteligencia</p>
+                <p className="text-zinc-600">Gerenciar com eficiência e inteligência</p>
               </div>
               {/* Temporarily disabled (no auth for now):
               <div className="hidden md:flex items-center gap-4">
@@ -359,7 +359,7 @@ export default function HomePage() {
 
           <div className="flex flex-wrap items-end justify-start gap-4">
             <div className="w-full max-w-[220px]">
-              <p className="mb-2 text-xs font-medium text-zinc-600">Periodo</p>
+              <p className="mb-2 text-xs font-medium text-zinc-600">Período</p>
               <Dropdown
                 options={yearDropdownOptions}
                 value={selectedYear == null ? undefined : String(selectedYear)}

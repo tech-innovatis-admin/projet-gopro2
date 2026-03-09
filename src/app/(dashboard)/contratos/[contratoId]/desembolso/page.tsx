@@ -414,7 +414,7 @@ export default function DesembolsoPage() {
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
           <p className="text-sm text-gray-500">Total Previsto</p>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPrevisto)}</p>
-          <p className="text-xs text-gray-400 mt-1">Somatorio do cronograma</p>
+          <p className="text-xs text-gray-400 mt-1">Somatório do cronograma</p>
         </div>
 
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
@@ -463,7 +463,7 @@ export default function DesembolsoPage() {
               <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">% do total</th>
               <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
-              {isEditing && <th className="text-center py-3 px-4 font-medium text-gray-600">Acoes</th>}
+              {isEditing && <th className="text-center py-3 px-4 font-medium text-gray-600">Ações</th>}
             </tr>
           </thead>
           <tbody>
@@ -595,7 +595,7 @@ export default function DesembolsoPage() {
           <AlertCircle className="w-5 h-5 text-amber-700 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-amber-900">
-              Existem desembolsos com informacoes invalidas.
+              Existem desembolsos com informações inválidas.
             </p>
             <p className="text-xs text-amber-800 mt-1">
               Verifique: data prevista e valor previsto maior que zero.
