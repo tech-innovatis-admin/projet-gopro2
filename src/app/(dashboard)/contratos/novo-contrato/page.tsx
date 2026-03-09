@@ -40,8 +40,8 @@ import {
   createStage,
   listPartners,
   listPeople,
-  listPublicAgencies,
-  listSecretaries,
+  listAllPublicAgencies,
+  listAllSecretaries,
   uploadDocument,
 } from "@/src/lib/api/endpoints";
 import {
@@ -263,7 +263,7 @@ const statusDesembolsoOptions: { value: StatusDesembolso; label: string; color: 
 ];
 
 const partnerTypeOptions: { value: PartnersTypeEnum; label: string }[] = [
-  { value: "FUNDACAO", label: "Fundacao" },
+  { value: "FUNDACAO", label: "Fundação" },
   { value: "IF", label: "IF" },
 ];
 
@@ -491,10 +491,10 @@ export default function NovoContratoPage() {
     setLoadError(null);
 
     try {
-      const [partnersPage, publicAgenciesPage, secretariesPage, peoplePage] = await Promise.all([
+      const [partnersPage, publicAgencies, secretaries, peoplePage] = await Promise.all([
         listPartners({ page: 0, size: 20 }),
-        listPublicAgencies({ page: 0, size: 20 }),
-        listSecretaries({ page: 0, size: 20 }),
+        listAllPublicAgencies(100),
+        listAllSecretaries(100),
         listPeople({ page: 0, size: 20 }),
       ]);
 
@@ -507,7 +507,7 @@ export default function NovoContratoPage() {
       );
 
       setOrganizacoesFinanciadoras(
-        publicAgenciesPage.content
+        publicAgencies
           .filter((agency) => agency.isClient)
           .map((agency) => ({
             id: String(agency.id),
@@ -517,7 +517,7 @@ export default function NovoContratoPage() {
       );
 
       setSecretariasCliente(
-        secretariesPage.content
+        secretaries
           .filter(
             (secretary) =>
               secretary.isClient &&
@@ -1847,7 +1847,7 @@ export default function NovoContratoPage() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">Novo Contrato</h1>
-              <p className="text-sm text-gray-500">Preencha as informacoes do contrato</p>
+              <p className="text-sm text-gray-500">Preencha as informações do contrato</p>
             </div>
           </div>
         </div>
@@ -1877,9 +1877,9 @@ export default function NovoContratoPage() {
         <form onSubmit={handleSubmit}>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 space-y-5">
-              {/* Titulo do Projeto */}
+              {/* Título do Projeto */}
               <FormField
-                label="Titulo do Projeto"
+                label="Título do Projeto"
                 required
                 error={errors.titulo}
                 icon={<FileText className="h-4 w-4" />}
@@ -1890,7 +1890,7 @@ export default function NovoContratoPage() {
                   value={form.titulo}
                   onChange={(e) => handleChange("titulo", e.target.value)}
                   onBlur={() => handleBlur("titulo")}
-                  placeholder="Ex.: Plataforma de Gestao de Projetos da Innovatis"
+                  placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
                   className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
                     errors.titulo
                       ? "border-red-300 focus:border-red-500"
@@ -1977,7 +1977,7 @@ export default function NovoContratoPage() {
                     <p className="text-xs text-gray-500">
                       {coordenadorDropdownOptions.length === 0
                         ? "Cadastre um coordenador para continuar."
-                        : "Nao encontrou a pessoa? Cadastre um novo coordenador."}
+                        : "Não encontrou a pessoa? Cadastre um novo coordenador."}
                     </p>
                     <button
                       type="button"
@@ -1993,7 +1993,7 @@ export default function NovoContratoPage() {
 
               {/* Parceiro Primario */}
               <FormField
-                label="Parceiro Primario"
+                label="Parceiro Primário"
                 required
                 error={errors.parceiroId}
                 icon={<Building2 className="h-4 w-4" />}
@@ -2002,7 +2002,7 @@ export default function NovoContratoPage() {
                   <Dropdown
                     options={parceiroDropdownOptions}
                     value={form.parceiroId || undefined}
-                    placeholder="Selecione um parceiro primario..."
+                    placeholder="Selecione um parceiro primário..."
                     searchable={true}
                     onChange={(value) => handleChange("parceiroId", value ?? "")}
                     className={errors.parceiroId ? "border-red-300 focus:border-red-500" : ""}
@@ -2022,7 +2022,7 @@ export default function NovoContratoPage() {
 
               {/* Parceiro Secundario */}
               <FormField
-                label="Parceiro Secundario"
+                label="Parceiro Secundário"
                 error={errors.parceiroSecundarioId}
                 icon={<Building2 className="h-4 w-4" />}
               >
@@ -2030,7 +2030,7 @@ export default function NovoContratoPage() {
                   <Dropdown
                     options={parceiroDropdownOptions}
                     value={form.parceiroSecundarioId || undefined}
-                    placeholder="Selecione um parceiro secundario (opcional)..."
+                    placeholder="Selecione um parceiro secundário (opcional)..."
                     searchable={true}
                     onChange={(value) => handleChange("parceiroSecundarioId", value ?? "")}
                     className={errors.parceiroSecundarioId ? "border-red-300 focus:border-red-500" : ""}
@@ -2050,7 +2050,7 @@ export default function NovoContratoPage() {
 
               {/* Cliente Primario */}
               <FormField
-                label="Cliente Primario"
+                label="Cliente Primário"
                 required
                 error={errors.clientePrimarioId}
                 icon={<Building2 className="h-4 w-4" />}
@@ -2059,7 +2059,7 @@ export default function NovoContratoPage() {
                   <Dropdown
                     options={clientePrimarioDropdownOptions}
                     value={form.clientePrimarioId || undefined}
-                    placeholder="Selecione um cliente primario..."
+                    placeholder="Selecione um cliente primário..."
                     searchable={true}
                     onChange={(value) => handleChange("clientePrimarioId", value ?? "")}
                     className={errors.clientePrimarioId ? "border-red-300 focus:border-red-500" : ""}
@@ -2079,7 +2079,7 @@ export default function NovoContratoPage() {
 
               {/* Cliente Secundario */}
               <FormField
-                label="Secretaria (Cliente Secundario)"
+                label="Secretaria (Cliente Secundário)"
                 error={errors.clienteSecundarioId}
                 icon={<Building2 className="h-4 w-4" />}
               >
@@ -2089,7 +2089,7 @@ export default function NovoContratoPage() {
                     value={form.clienteSecundarioId || undefined}
                     placeholder={
                       !form.clientePrimarioId
-                        ? "Selecione primeiro um cliente primario..."
+                        ? "Selecione primeiro um cliente primário..."
                         : clienteSecundarioDropdownOptions.length === 0
                           ? "Nenhuma secretaria encontrada para o cliente selecionado"
                           : "Selecione uma secretaria (opcional)..."
@@ -2150,7 +2150,7 @@ export default function NovoContratoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Data de Inicio */}
                 <FormField
-                  label="Inicio do Contrato"
+                  label="Início do Contrato"
                   required
                   error={errors.dataInicio}
                   icon={<Calendar className="h-4 w-4" />}
@@ -2186,7 +2186,7 @@ export default function NovoContratoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Data de Inicio Efetivo */}
                 <FormField
-                  label="Inicio Efetivo"
+                  label="Início Efetivo"
                   error={errors.dataInicioEfetivo}
                   icon={<Calendar className="h-4 w-4" />}
                 >
@@ -2316,7 +2316,7 @@ export default function NovoContratoPage() {
                   />
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  Maximo permitido: {formatCurrencyDisplay(MAX_CONTRACT_VALUE)}
+                  Máximo permitido: {formatCurrencyDisplay(MAX_CONTRACT_VALUE)}
                 </p>
               </FormField>
 
@@ -2328,8 +2328,8 @@ export default function NovoContratoPage() {
                   <span className="text-xs text-gray-500">(opcional)</span>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Os arquivos serao enviados automaticamente apos o cadastro do projeto.
-                  Formatos aceitos: PDF, PNG, JPG e JPEG. Maximo: 20MB por arquivo.
+                  Os arquivos serão enviados automaticamente apos o cadastro do projeto.
+                  Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: 20MB por arquivo.
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2571,8 +2571,8 @@ export default function NovoContratoPage() {
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Data prevista</th>
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Valor previsto</th>
                               <th className="text-center py-3 px-4 font-medium text-gray-600">Status</th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">Observacao</th>
-                              <th className="text-center py-3 px-4 font-medium text-gray-600">Acoes</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Observação</th>
+                              <th className="text-center py-3 px-4 font-medium text-gray-600">Ações</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2739,7 +2739,7 @@ export default function NovoContratoPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   <div>
                                     <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                      Data Inicio
+                                      Data Início
                                     </label>
                                     <DatePicker
                                       value={meta.dataInicio || ""}
@@ -2760,12 +2760,12 @@ export default function NovoContratoPage() {
                                 </div>
                                 <div>
                                   <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                    Descricao (opcional)
+                                    Descrição (opcional)
                                   </label>
                                   <textarea
                                     value={meta.descricao || ""}
                                     onChange={(e) => updateMeta(meta.id, "descricao", e.target.value)}
-                                    placeholder="Descricao da meta..."
+                                    placeholder="Descrição da meta..."
                                     rows={2}
                                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 resize-none"
                                   />

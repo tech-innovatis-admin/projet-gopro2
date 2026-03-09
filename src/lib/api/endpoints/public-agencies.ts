@@ -22,6 +22,18 @@ export function listPublicAgencies(params: ListPublicAgenciesParams = {}) {
   });
 }
 
+export async function listAllPublicAgencies(pageSize = 100) {
+  const firstPage = await listPublicAgencies({ page: 0, size: pageSize });
+  const all = [...firstPage.content];
+
+  for (let page = 1; page < firstPage.totalPages; page++) {
+    const nextPage = await listPublicAgencies({ page, size: pageSize });
+    all.push(...nextPage.content);
+  }
+
+  return all;
+}
+
 export function getPublicAgencyById(id: number | string) {
   return http.get<PublicAgencyResponseDTO>(`${BASE}/${id}`);
 }

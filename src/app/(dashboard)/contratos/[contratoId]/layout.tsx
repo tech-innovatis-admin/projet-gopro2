@@ -10,10 +10,10 @@ import {
   getProjectById,
   getPublicAgencyById,
   getSecretaryById,
+  listAllPublicAgencies,
+  listAllSecretaries,
   listPartners,
   listPeople,
-  listPublicAgencies,
-  listSecretaries,
   updateProject,
 } from "@/src/lib/api/endpoints";
 import {
@@ -86,12 +86,12 @@ const PROJECT_STATUS_OPTIONS: Array<{
   value: ProjectStatusEnum;
   label: string;
 }> = [
-  { value: "PRE_PROJETO", label: "Pre-projeto" },
-  { value: "PLANEJAMENTO", label: "Planejamento" },
-  { value: "EXECUCAO", label: "Execucao" },
-  { value: "FINALIZADO", label: "Finalizado" },
-  { value: "SUSPENSO", label: "Suspenso" },
-];
+    { value: "PRE_PROJETO", label: "Pre-projeto" },
+    { value: "PLANEJAMENTO", label: "Planejamento" },
+    { value: "EXECUCAO", label: "Execucao" },
+    { value: "FINALIZADO", label: "Finalizado" },
+    { value: "SUSPENSO", label: "Suspenso" },
+  ];
 
 const EMPTY_CONTRATO: ContratoView = {
   id: "",
@@ -259,11 +259,11 @@ export default function ContratoLayout({
   }, [contratoId]);
 
   const loadSelectOptions = useCallback(async () => {
-    const [partnersPage, peoplePage, publicAgenciesPage, secretariesPage] = await Promise.all([
+    const [partnersPage, peoplePage, publicAgencies, secretaries] = await Promise.all([
       listPartners({ page: 0, size: 100 }).catch(() => null),
       listPeople({ page: 0, size: 100 }).catch(() => null),
-      listPublicAgencies({ page: 0, size: 100 }).catch(() => null),
-      listSecretaries({ page: 0, size: 100 }).catch(() => null),
+      listAllPublicAgencies(100).catch(() => []),
+      listAllSecretaries(100).catch(() => []),
     ]);
 
     const nextPartnerOptions: SelectOption[] = (partnersPage?.content ?? []).map((partner) => ({
@@ -276,14 +276,14 @@ export default function ContratoLayout({
       label: person.fullName,
     }));
 
-    const nextPublicAgencyOptions: SelectOption[] = (publicAgenciesPage?.content ?? []).map(
+    const nextPublicAgencyOptions: SelectOption[] = publicAgencies.map(
       (agency) => ({
         id: agency.id,
         label: agency.name,
       })
     );
 
-    const nextSecretaryOptions: SecretaryOption[] = (secretariesPage?.content ?? []).map(
+    const nextSecretaryOptions: SecretaryOption[] = secretaries.map(
       (secretary) => ({
         id: secretary.id,
         label: secretary.name,
@@ -504,7 +504,7 @@ export default function ContratoLayout({
       : 0;
   // const saldoTotal = (currentContrato.valorTotal || 0) - (currentContrato.valorExecutado || 0);
   const canEditContrato = !isLoadingContrato && !loadContratoError && !!projectSnapshot;
-  
+
   // Truncar descrição para preview
   const currentDescricao = isEditing ? editContrato.descricao : contrato.descricao;
   const descricaoPreview = currentDescricao
@@ -723,13 +723,12 @@ export default function ContratoLayout({
                           projectGovIf: (e.target.value || null) as ProjectGovIfEnum | null,
                         })
                       }
-                      className={`h-9 rounded-full border px-3 text-sm font-semibold focus:outline-none focus:ring-2 ${
-                        editRelations.projectGovIf === "GOV"
+                      className={`h-9 rounded-full border px-3 text-sm font-semibold focus:outline-none focus:ring-2 ${editRelations.projectGovIf === "GOV"
                           ? "border-sky-200 bg-sky-50 text-sky-700 focus:ring-sky-200/70"
                           : editRelations.projectGovIf === "IF"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 focus:ring-emerald-200/70"
-                          : "border-gray-300 bg-white text-gray-700 focus:ring-[#004225]/20 focus:border-[#004225]"
-                      }`}
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 focus:ring-emerald-200/70"
+                            : "border-gray-300 bg-white text-gray-700 focus:ring-[#004225]/20 focus:border-[#004225]"
+                        }`}
                     >
                       <option value="">Gov/IF</option>
                       <option value="GOV">GOV</option>
@@ -743,11 +742,10 @@ export default function ContratoLayout({
                     </h1>
                     {currentContrato.unidade && (
                       <span
-                        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${
-                          String(currentContrato.unidade).toUpperCase() === "GOV"
+                        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${String(currentContrato.unidade).toUpperCase() === "GOV"
                             ? "border-sky-200 bg-sky-50 text-sky-700"
                             : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        }`}
+                          }`}
                       >
                         {String(currentContrato.unidade).toUpperCase()}
                       </span>
@@ -850,48 +848,48 @@ export default function ContratoLayout({
                     {isSaving ? "Salvando..." : "Salvar"}
                   </button>
                 </>
-                ) : (
-                  <>
-                    {isMounted ? (
-                      <div className="relative">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button 
-                              type="button"
-                              disabled={!canEditContrato}
-                              className="inline-flex items-center justify-center w-10 h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            sideOffset={5}
-                            className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] z-50"
+              ) : (
+                <>
+                  {isMounted ? (
+                    <div className="relative">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            disabled={!canEditContrato}
+                            className="inline-flex items-center justify-center w-10 h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                           >
-                            <DropdownMenuItem
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                handleEdit();
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer focus:bg-gray-50 outline-none"
-                            >
-                              <Edit className="h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    ) : (
-                      <button 
-                        type="button"
-                        className="inline-flex items-center justify-center w-10 h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    )}
-                  </>
-                )}
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          sideOffset={5}
+                          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] z-50"
+                        >
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              handleEdit();
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer focus:bg-gray-50 outline-none"
+                          >
+                            <Edit className="h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center w-10 h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -899,39 +897,12 @@ export default function ContratoLayout({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
             {/* Coluna 1 - Cliente/Parceiro */}
             <div className="space-y-3">
+
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                    Cliente Primario
-                  </p>
-                  {isEditing ? (
-                    <select
-                      value={editRelations.primaryClientId ?? ""}
-                      onChange={(e) =>
-                        handleRelationChange({
-                          primaryClientId: parseSelectNumber(e.target.value),
-                        })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                    >
-                      <option value="">Selecione um cliente</option>
-                      {publicAgencyOptions.map((agency) => (
-                        <option key={agency.id} value={agency.id}>
-                          {agency.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-sm font-medium text-gray-900">{contrato.cliente || NO_INFO_LABEL}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-start gap-3 group">
-                <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                    Parceiro Primario
+                    Parceiro Primário
                   </p>
                   {isEditing ? (
                     <select
@@ -961,7 +932,7 @@ export default function ContratoLayout({
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                    Parceiro Secundario
+                    Parceiro Secundário
                   </p>
                   {isEditing ? (
                     <select
@@ -973,7 +944,7 @@ export default function ContratoLayout({
                       }
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
                     >
-                      <option value="">Sem parceiro secundario</option>
+                      <option value="">Sem parceiro secundário</option>
                       {partnerOptions.map((partner) => (
                         <option key={partner.id} value={partner.id}>
                           {partner.label}
@@ -995,7 +966,35 @@ export default function ContratoLayout({
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
-                    Cliente Secundario (Secretaria)
+                    Cliente Primário
+                  </p>
+                  {isEditing ? (
+                    <select
+                      value={editRelations.primaryClientId ?? ""}
+                      onChange={(e) =>
+                        handleRelationChange({
+                          primaryClientId: parseSelectNumber(e.target.value),
+                        })
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {publicAgencyOptions.map((agency) => (
+                        <option key={agency.id} value={agency.id}>
+                          {agency.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-900">{contrato.cliente || NO_INFO_LABEL}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-start gap-3 group">
+                <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                    Cliente Secundário (Secretaria)
                   </p>
                   {isEditing ? (
                     <select
@@ -1011,7 +1010,7 @@ export default function ContratoLayout({
                       <option value="">
                         {editRelations.primaryClientId
                           ? "Selecione uma secretaria"
-                          : "Selecione primeiro o cliente primario"}
+                          : "Selecione primeiro o cliente primário"}
                       </option>
                       {filteredSecondaryClientOptions.map((secretary) => (
                         <option key={secretary.id} value={secretary.id}>
@@ -1022,6 +1021,35 @@ export default function ContratoLayout({
                   ) : (
                     <p className="text-sm font-medium text-gray-900">
                       {contrato.clienteSecundario || contrato.orgaoFinanciador || NO_INFO_LABEL}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Coluna 3 - Valor Total/Situação Financeira */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 group">
+                <DollarSign className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Valor Total</p>
+                  {isEditing ? (
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">R$</span>
+                      <input
+                        type="text"
+                        value={editContrato.valorTotal.toLocaleString("pt-BR")}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value.replace(/\D/g, "")) / 100;
+                          if (!isNaN(value)) handleChange({ valorTotal: value });
+                        }}
+                        className="w-full pl-8 pr-2 py-1 text-sm font-bold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                        placeholder="0,00"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm font-bold text-gray-900">
+                      R$ {contrato.valorTotal.toLocaleString("pt-BR")}
                     </p>
                   )}
                 </div>
@@ -1048,37 +1076,8 @@ export default function ContratoLayout({
                   )}
                 </div>
               </div>
-            </div>
-
-            {/* Coluna 3 - Valor Total/Situação Financeira */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 group">
-                <DollarSign className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Valor Total</p>
-                  {isEditing ? (
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">R$</span>
-                      <input
-                        type="text"
-                        value={editContrato.valorTotal.toLocaleString("pt-BR")}
-                        onChange={(e) => {
-                          const value = parseFloat(e.target.value.replace(/\D/g, "")) / 100;
-                          if (!isNaN(value)) handleChange({ valorTotal: value });
-                        }}
-                        className="w-full pl-8 pr-2 py-1 text-sm font-bold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
-                        placeholder="0,00"
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-sm font-bold text-gray-900">
-                      R$ {contrato.valorTotal.toLocaleString("pt-BR")}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-start gap-3 group">
-                <div className="h-5 w-5" /> {/* Spacer */}
+              {/* <div className="flex items-start gap-3 group">
+                <div className="h-5 w-5" /> {/* Spacer
                 <div>
                     <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Situação Financeira</p>
                   <div className="flex items-center gap-2">
@@ -1093,7 +1092,7 @@ export default function ContratoLayout({
                     </span>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* Coluna 4 - Datas */}
@@ -1101,7 +1100,7 @@ export default function ContratoLayout({
               <div className="flex items-start gap-3 group">
                 <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Início</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Início</p>
                   {isEditing ? (
                     <input
                       type="date"
@@ -1119,7 +1118,7 @@ export default function ContratoLayout({
               <div className="flex items-start gap-3 group">
                 <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
                 <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Término</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Término</p>
                   {isEditing ? (
                     <input
                       type="date"
@@ -1147,9 +1146,8 @@ export default function ContratoLayout({
                 Informações Complementares
               </span>
               <ChevronDown
-                className={`h-4 w-4 text-gray-400 transition-transform duration-500 ease-out ${
-                  isInfoComplementarExpanded ? "rotate-180" : ""
-                }`}
+                className={`h-4 w-4 text-gray-400 transition-transform duration-500 ease-out ${isInfoComplementarExpanded ? "rotate-180" : ""
+                  }`}
                 style={{
                   transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
@@ -1157,9 +1155,8 @@ export default function ContratoLayout({
             </button>
 
             <div
-              className={`overflow-hidden transition-all duration-700 ease-out ${
-                isInfoComplementarExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
-              }`}
+              className={`overflow-hidden transition-all duration-700 ease-out ${isInfoComplementarExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
+                }`}
               style={{
                 transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
               }}
@@ -1232,11 +1229,10 @@ export default function ContratoLayout({
                                   key={segmento}
                                   type="button"
                                   onClick={() => toggleSegmento(segmento)}
-                                  className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                    isActive
+                                  className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${isActive
                                       ? "bg-[#004225] text-white border-[#004225]"
                                       : "bg-white text-gray-700 border-gray-300 hover:border-[#004225]"
-                                  }`}
+                                    }`}
                                 >
                                   {segmento}
                                 </button>
@@ -1363,10 +1359,9 @@ export default function ContratoLayout({
                   href={tab.href}
                   className={`
                     flex-shrink-0 px-6 py-4 text-sm font-medium border-b-2 transition-colors
-                    ${
-                      isActiveTab(tab.href)
-                        ? "border-[#004225] text-[#004225]"
-                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    ${isActiveTab(tab.href)
+                      ? "border-[#004225] text-[#004225]"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                     }
                   `}
                 >

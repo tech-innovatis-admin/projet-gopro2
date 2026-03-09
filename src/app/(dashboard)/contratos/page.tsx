@@ -25,10 +25,10 @@ import { MoneyInput } from "./[contratoId]/desembolso/_components/MoneyImput";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import * as XLSX from "xlsx";
 import {
+  listAllPublicAgencies,
   listPartners,
   listPeople,
   listProjects,
-  listPublicAgencies,
 } from "@/src/lib/api/endpoints";
 import {
   HttpError,
@@ -399,7 +399,7 @@ export default function ContratosPage() {
       const [projectsPage, partnersPage, clientsPage, peoplePage] = await Promise.all([
         listProjects({ page: 0, size: 20 }),
         listPartners({ page: 0, size: 20 }),
-        listPublicAgencies({ page: 0, size: 20 }),
+        listAllPublicAgencies(100),
         listPeople({ page: 0, size: 20 }),
       ]);
 
@@ -409,7 +409,7 @@ export default function ContratosPage() {
       });
 
       const clientsById: Record<number, string> = {};
-      clientsPage.content.forEach((agency) => {
+      clientsPage.forEach((agency) => {
         clientsById[agency.id] = agency.name;
       });
 
@@ -430,7 +430,7 @@ export default function ContratosPage() {
       setAvailableClients(
         [
           ...new Set(
-            clientsPage.content
+            clientsPage
               .filter((agency) => agency.isClient)
               .map((agency) => agency.name)
               .filter(Boolean)
@@ -694,21 +694,21 @@ export default function ContratosPage() {
             subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Pre-Projetos"
+            title="Pré-projetos"
             value={counts.preProjetos}
             icon={Clock}
             tone="PRE_PROJETO"
             subtitle={`R$ ${counts.valorPreProjetos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Execucao"
+            title="Execução"
             value={counts.emExecucao}
             icon={TrendingUp}
             tone="EXECUCAO"
             subtitle={`R$ ${counts.valorEmExecucao.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Concluidos"
+            title="Concluídos"
             value={counts.concluidos}
             icon={CheckCircle}
             tone="FINALIZADO"

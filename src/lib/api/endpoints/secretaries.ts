@@ -22,6 +22,18 @@ export function listSecretaries(params: ListSecretariesParams = {}) {
   });
 }
 
+export async function listAllSecretaries(pageSize = 100) {
+  const firstPage = await listSecretaries({ page: 0, size: pageSize });
+  const all = [...firstPage.content];
+
+  for (let page = 1; page < firstPage.totalPages; page++) {
+    const nextPage = await listSecretaries({ page, size: pageSize });
+    all.push(...nextPage.content);
+  }
+
+  return all;
+}
+
 export function getSecretaryById(id: number | string) {
   return http.get<SecretaryResponseDTO>(`${BASE}/${id}`);
 }
