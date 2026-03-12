@@ -5,12 +5,14 @@ import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
+import { BudgetTransferSummary } from "@/src/components/audit/BudgetTransferSummary";
 import { getProjectById } from "@/src/lib/api/endpoints";
+import { listBudgetCategories } from "@/src/lib/api/endpoints/budget-categories";
 import { listBudgetItems } from "@/src/lib/api/endpoints/budget-items";
 import { listAuditLogs } from "@/src/lib/api/endpoints/auth";
-import { AuditLogResponseDTO } from "@/src/lib/api/types";
+import { AuditLogResponseDTO, BudgetItemResponseDTO } from "@/src/lib/api/types";
 import {
-  formatDateTime,
   getErrorMessage,
   parseBeforeAfter,
   parseChanges,
@@ -19,17 +21,20 @@ import {
   resolveActorEmail,
   resolveActorId,
   resolveActorName,
-  resolveContext,
   resolveEntity,
-  resolveEventDate,
-  resolveResultClass,
-  resolveResultLabel,
-  resolveSummary,
 } from "@/src/lib/audit/presentation";
+import {
+  buildBudgetCategoryReferenceLabel,
+  buildBudgetItemReferenceLabel,
+  buildBudgetItemReferencePresentation,
+  buildBudgetTransferBusinessSummary,
+  enhanceBudgetReferenceChanges,
+  resolveBudgetReferenceEntityLabel,
+} from "@/src/lib/audit/budget-reference-presentation";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
 import { fetchCurrentUser, isSuperAdmin } from "@/src/lib/auth/session";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 type EntityFilterOption = {
   key: "ALL" | "RUBRICAS" | "INCOMES" | "EXPENSES";
@@ -53,15 +58,15 @@ const ENTITY_FILTER_OPTIONS: EntityFilterOption[] = [
   },
   {
     key: "INCOMES",
-    label: "Incomes",
+    label: "Receitas",
     entityType: "incomes",
     description: "Eventos de receitas/entradas financeiras do contrato.",
   },
   {
     key: "EXPENSES",
-    label: "Expenses",
+    label: "Despesas",
     entityType: "expenses",
-    description: "Eventos de despesas/saidas financeiras do contrato.",
+    description: "Eventos de despesas/saídas financeiras do contrato.",
   },
 ];
 
@@ -69,7 +74,7 @@ const USER_ROLE_LABELS: Record<string, string> = {
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",
-  ESTAGIARIO: "Estagiario",
+  ESTAGIARIO: "Estagiário",
 };
 
 type TransferDirection = {
@@ -220,23 +225,25 @@ function resolveTransferDirection(log: AuditLogResponseDTO): TransferDirection |
 
 function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number, string>): string {
   if (itemId === null) {
-    return "Nao informado";
+    return "Não informado";
   }
-  const description = labelsById[itemId];
-  if (!description) {
+  const label = labelsById[itemId];
+  if (!label) {
     return `Item #${itemId}`;
   }
-  return `${description} (ID ${itemId})`;
+  return label;
 }
 
 function formatCurrencyBRL(value: number | null): string {
   if (value === null) {
-    return "Nao informado";
+    return "Não informado";
   }
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(value);
+  })
+    .format(value)
+    .replace(/\u00a0/g, " ");
 }
 
 function resolveActorRoleLabel(log: AuditLogResponseDTO): string | null {
@@ -245,24 +252,6 @@ function resolveActorRoleLabel(log: AuditLogResponseDTO): string | null {
     return null;
   }
   return USER_ROLE_LABELS[role] || role;
-}
-
-function sanitizeAuditDescription(value?: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const withoutChangedFields = trimmed
-    .replace(/\s*campos?\s+alterad[oa]s?\s*:.*$/i, "")
-    .replace(/[;,\-:\s]+$/g, "")
-    .trim();
-
-  return withoutChangedFields || null;
 }
 
 export default function ContractAuditPage() {
@@ -275,7 +264,9 @@ export default function ContractAuditPage() {
 
   const [logs, setLogs] = useState<AuditLogResponseDTO[]>([]);
   const [actorNamesById, setActorNamesById] = useState<Record<number, string>>({});
+  const [budgetCategoryLabelsById, setBudgetCategoryLabelsById] = useState<Record<number, string>>({});
   const [budgetItemLabelsById, setBudgetItemLabelsById] = useState<Record<number, string>>({});
+  const [budgetItemsById, setBudgetItemsById] = useState<Record<number, BudgetItemResponseDTO>>({});
   const [contractName, setContractName] = useState<string | null>(null);
   const [loadingContractName, setLoadingContractName] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
@@ -317,7 +308,7 @@ export default function ContractAuditPage() {
     }
 
     if (!contractId) {
-      setError("ID do contrato invalido.");
+      setError("ID do contrato inválido.");
       setLogs([]);
       setActorNamesById({});
       setTotalPages(0);
@@ -401,7 +392,57 @@ export default function ContractAuditPage() {
 
   useEffect(() => {
     if (!canView || !contractId) {
+      setBudgetCategoryLabelsById({});
+      return;
+    }
+    const resolvedContractId = contractId;
+
+    let cancelled = false;
+
+    async function loadBudgetCategories() {
+      const labels: Record<number, string> = {};
+      let page = 0;
+      const size = 100;
+
+      try {
+        while (true) {
+          const response = await listBudgetCategories({
+            projectId: resolvedContractId,
+            page,
+            size,
+          });
+
+          for (const category of response.content) {
+            labels[category.id] = buildBudgetCategoryReferenceLabel(category);
+          }
+
+          const isLastPage = response.last || page >= response.totalPages - 1;
+          if (isLastPage) {
+            break;
+          }
+          page += 1;
+        }
+
+        if (!cancelled) {
+          setBudgetCategoryLabelsById(labels);
+        }
+      } catch {
+        if (!cancelled) {
+          setBudgetCategoryLabelsById({});
+        }
+      }
+    }
+
+    void loadBudgetCategories();
+    return () => {
+      cancelled = true;
+    };
+  }, [canView, contractId]);
+
+  useEffect(() => {
+    if (!canView || !contractId) {
       setBudgetItemLabelsById({});
+      setBudgetItemsById({});
       return;
     }
     const resolvedContractId = contractId;
@@ -410,6 +451,7 @@ export default function ContractAuditPage() {
 
     async function loadBudgetItems() {
       const labels: Record<number, string> = {};
+      const itemsById: Record<number, BudgetItemResponseDTO> = {};
       let page = 0;
       const size = 100;
 
@@ -422,7 +464,8 @@ export default function ContractAuditPage() {
           });
 
           for (const item of response.content) {
-            labels[item.id] = item.description?.trim() || `Item #${item.id}`;
+            labels[item.id] = buildBudgetItemReferenceLabel(item);
+            itemsById[item.id] = item;
           }
 
           const isLastPage = response.last || page >= response.totalPages - 1;
@@ -434,10 +477,12 @@ export default function ContractAuditPage() {
 
         if (!cancelled) {
           setBudgetItemLabelsById(labels);
+          setBudgetItemsById(itemsById);
         }
       } catch {
         if (!cancelled) {
           setBudgetItemLabelsById({});
+          setBudgetItemsById({});
         }
       }
     }
@@ -447,6 +492,20 @@ export default function ContractAuditPage() {
       cancelled = true;
     };
   }, [canView, contractId]);
+
+  const budgetItemPresentationsById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(budgetItemsById).map((item) => [
+          item.id,
+          buildBudgetItemReferencePresentation(
+            item,
+            budgetCategoryLabelsById[item.categoryId] || null
+          ),
+        ])
+      ),
+    [budgetItemsById, budgetCategoryLabelsById]
+  );
 
   function handleSubmitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -495,12 +554,12 @@ export default function ContractAuditPage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <h2 className="text-xl font-semibold text-zinc-900">Auditoria</h2>
-        <p className="text-sm text-zinc-600">Acoes realizadas no contrato.</p>
+        <p className="text-sm text-zinc-600">Ações realizadas no contrato.</p>
       </header>
 
       {loadingAccess && (
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-zinc-600">Validando permissao...</p>
+          <p className="text-sm text-zinc-600">Validando permissão...</p>
         </section>
       )}
 
@@ -550,13 +609,13 @@ export default function ContractAuditPage() {
                   id="search"
                   value={searchFilter}
                   onChange={(event) => setSearchFilter(event.target.value)}
-                  placeholder="Resumo, descricao ou campo"
+                  placeholder="Resumo, descrição ou campo"
                 />
               </div>
 
               <div className="space-y-1">
                 <label htmlFor="actorName" className="text-sm font-medium text-zinc-700">
-                  Usuario responsavel
+                  Usuário responsável
                 </label>
                 <Input
                   id="actorName"
@@ -568,7 +627,7 @@ export default function ContractAuditPage() {
 
               <div className="space-y-1">
                 <label htmlFor="action" className="text-sm font-medium text-zinc-700">
-                  Tipo de acao
+                  Tipo de ação
                 </label>
                 <Input
                   id="action"
@@ -580,13 +639,13 @@ export default function ContractAuditPage() {
 
               <div className="space-y-1">
                 <label htmlFor="entityType" className="text-sm font-medium text-zinc-700">
-                  Classificacao interna
+                  Classificação interna
                 </label>
                 <Input
                   id="entityType"
                   value={entityTypeFilter}
                   onChange={(event) => setEntityTypeFilter(event.target.value)}
-                  placeholder="Ex.: rubricas, incomes, expenses"
+                    placeholder="Ex.: rubricas, receitas, despesas"
                 />
               </div>
 
@@ -615,64 +674,70 @@ export default function ContractAuditPage() {
                   {logs.map((log, index) => {
                     const hasConnector = index < logs.length - 1;
                     const actorRoleLabel = resolveActorRoleLabel(log);
-                    const cleanedDescription = sanitizeAuditDescription(log.descricao);
                     const transferDirection = resolveTransferDirection(log);
+                    const enhancedChanges = enhanceBudgetReferenceChanges(
+                      parseChanges(log.alteracoesJson),
+                      {
+                        categoryLabelsById: budgetCategoryLabelsById,
+                        itemLabelsById: budgetItemLabelsById,
+                      }
+                    );
+                    const entityTextOverride = resolveBudgetReferenceEntityLabel(log, {
+                      categoryLabelsById: budgetCategoryLabelsById,
+                      itemLabelsById: budgetItemLabelsById,
+                      itemPresentationsById: budgetItemPresentationsById,
+                    });
+                    const transferSummary = transferDirection
+                      ? buildBudgetTransferBusinessSummary(log, {
+                          categoryLabelsById: budgetCategoryLabelsById,
+                          itemLabelsById: budgetItemLabelsById,
+                          itemPresentationsById: budgetItemPresentationsById,
+                        })
+                      : null;
+                    const resolvedTransferSummary =
+                      transferSummary ||
+                      (transferDirection
+                        ? {
+                            sourceLabel: resolveBudgetItemLabel(
+                              transferDirection.fromItemId,
+                              budgetItemLabelsById
+                            ),
+                            destinationLabel: resolveBudgetItemLabel(
+                              transferDirection.toItemId,
+                              budgetItemLabelsById
+                            ),
+                            sourceInitialTotal: "NÃ£o informado",
+                            destinationInitialTotal: "NÃ£o informado",
+                            transferredAmount: formatCurrencyBRL(transferDirection.amount),
+                            sourceFinalTotal: "NÃ£o informado",
+                            destinationFinalTotal: "NÃ£o informado",
+                          }
+                        : null);
 
                     return (
                       <div key={log.auditId || log.id} className="relative pl-8">
                         <span className="absolute left-1 top-5 h-3 w-3 rounded-full border border-emerald-300 bg-emerald-500" />
                         {hasConnector && <span className="absolute left-[7px] top-8 h-[calc(100%-12px)] w-px bg-zinc-200" />}
 
-                        <article className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
-                          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="space-y-2">
-                              <h3 className="text-base font-semibold text-zinc-900">{resolveSummary(log)}</h3>
-                              {cleanedDescription && (
-                                <p className="text-sm text-zinc-700">{cleanedDescription}</p>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                                    resolveResultClass(log.resultado)
-                                  )}
-                                >
-                                  {resolveResultLabel(log.resultado)}
-                                </span>
-                                <span className="inline-flex rounded-full border border-zinc-300 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700">
-                                  {resolveContext(log)}
-                                </span>
-                              </div>
-                              {transferDirection && (
-                                <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
-                                  <p>
-                                    <span className="font-semibold text-zinc-900">Origem:</span>{" "}
-                                    {resolveBudgetItemLabel(
-                                      transferDirection.fromItemId,
-                                      budgetItemLabelsById
-                                    )}
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-zinc-900">Destino:</span>{" "}
-                                    {resolveBudgetItemLabel(
-                                      transferDirection.toItemId,
-                                      budgetItemLabelsById
-                                    )}
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-zinc-900">Valor remanejado:</span>{" "}
-                                    {formatCurrencyBRL(transferDirection.amount)}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                            <p className="text-xs text-zinc-500">{formatDateTime(resolveEventDate(log))}</p>
-                          </header>
+                        <AuditLogCard
+                          log={log}
+                          changesOverride={enhancedChanges}
+                          actorNamesById={actorNamesById}
+                          actorRoleLabel={actorRoleLabel}
+                          entityTextOverride={entityTextOverride}
+                          secondaryEntityText={contractLabel}
+                          className="bg-zinc-50/60"
+                          extraSummaryContent={
+                            resolvedTransferSummary ? (
+                              <BudgetTransferSummary summary={resolvedTransferSummary} />
+                            ) : null
+                          }
+                        >
 
                           <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                             <div>
                               <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                Usuario responsavel
+                                Usuário responsável
                               </dt>
                               <dd className="mt-1 font-medium text-zinc-900">
                                 {resolveActorName(log, actorNamesById)}
@@ -694,9 +759,7 @@ export default function ContractAuditPage() {
                               </dd>
                             </div>
                           </dl>
-
-                          {/* TODO: bloco de detalhamento temporariamente oculto por problemas de formatacao. */}
-                        </article>
+                        </AuditLogCard>
                       </div>
                     );
                   })}
@@ -704,7 +767,7 @@ export default function ContractAuditPage() {
 
                 <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-zinc-600">
-                    Pagina {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
+                    Página {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -721,7 +784,7 @@ export default function ContractAuditPage() {
                       disabled={loading || totalPages === 0 || currentPage >= totalPages - 1}
                       onClick={() => setCurrentPage((page) => page + 1)}
                     >
-                      Proxima
+                      Próxima
                     </Button>
                   </div>
                 </div>

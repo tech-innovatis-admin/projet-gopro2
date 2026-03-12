@@ -8,7 +8,6 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   CircleCheck,
   CircleX,
   LifeBuoy,
@@ -28,18 +27,45 @@ import { listMyAuditLogs, me as fetchAuthMe, uploadMyAvatar } from "@/src/lib/ap
 import { generateDocumentDownloadUrl } from "@/src/lib/api/endpoints/documents";
 import { type AuditLogResponseDTO, type AuthUserResponseDTO, HttpError } from "@/src/lib/api/types";
 import {
-  formatDateTime,
   resolveContext,
   resolveEntity,
-  resolveEventDate,
-  resolveResultClass,
-  resolveResultLabel,
-  resolveSummary,
 } from "@/src/lib/audit/presentation";
+import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
 import { ProfileHeader } from "./_components";
 
 const ACTIVITY_CARDS_PER_PAGE = 4;
 const MAX_PROFILE_PHOTO_BYTES = 20 * 1024 * 1024;
+const AUDIT_FETCH_PAGE_SIZE = 50;
+const MAX_AUDIT_FETCH_PAGES = 30;
+
+const CONTRACT_ACTIVITY_TERMS = [
+  "contrat",
+  "project",
+  "projeto",
+  "orcament",
+  "rubrica",
+  "desembolso",
+  "receita",
+  "despesa",
+  "meta",
+  "etapa",
+  "fase",
+  "remanej",
+] as const;
+
+const CONTRACT_ENTITY_TERMS = [
+  "project",
+  "contract",
+  "budget",
+  "income",
+  "expense",
+  "goal",
+  "stage",
+  "phase",
+  "disbursement",
+] as const;
+
+const LOGIN_ACTIVITY_TERMS = ["login", "signin", "autentic", "logout", "signout"] as const;
 
 type ProfileTab = "overview" | "activities";
 
@@ -50,7 +76,7 @@ function getRequestErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return "Nao foi possivel carregar os dados.";
+  return "Não foi possível carregar os dados.";
 }
 
 function isUuid(value?: string | null): boolean {
@@ -108,6 +134,92 @@ function includesAny(value: string, terms: readonly string[]): boolean {
   return terms.some((term) => value.includes(term));
 }
 
+function normalizeAuditText(value?: string | null): string {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isLoginActivity(log: AuditLogResponseDTO): boolean {
+  const searchable = [
+    log.action,
+    log.modulo,
+    log.feature,
+    log.aba,
+    log.subsecao,
+    log.resumo,
+    log.descricao,
+    log.entityType,
+    log.entidadePrincipal,
+  ]
+    .map((value) => normalizeAuditText(value))
+    .join(" ");
+
+  return includesAny(searchable, LOGIN_ACTIVITY_TERMS);
+}
+
+function isContractActivity(log: AuditLogResponseDTO): boolean {
+  if (log.tipoAuditoria === "CONTRACTS") {
+    return true;
+  }
+
+  const entityType = normalizeAuditText(log.entityType);
+  if (includesAny(entityType, CONTRACT_ENTITY_TERMS)) {
+    return true;
+  }
+
+  const searchable = [
+    log.action,
+    log.modulo,
+    log.feature,
+    log.aba,
+    log.subsecao,
+    log.resumo,
+    log.descricao,
+    log.entidadePrincipal,
+  ]
+    .map((value) => normalizeAuditText(value))
+    .join(" ");
+
+  return includesAny(searchable, CONTRACT_ACTIVITY_TERMS);
+}
+
+async function fetchMyContractActivities(): Promise<AuditLogResponseDTO[]> {
+  const contractLogs: AuditLogResponseDTO[] = [];
+  const seenKeys = new Set<string>();
+
+  for (let page = 0; page < MAX_AUDIT_FETCH_PAGES; page += 1) {
+    const response = await listMyAuditLogs({
+      page,
+      size: AUDIT_FETCH_PAGE_SIZE,
+    });
+
+    for (const log of response.content) {
+      if (isLoginActivity(log)) {
+        continue;
+      }
+      if (!isContractActivity(log)) {
+        continue;
+      }
+
+      const key = (log.auditId || "").trim() || String(log.id);
+      if (seenKeys.has(key)) {
+        continue;
+      }
+      seenKeys.add(key);
+      contractLogs.push(log);
+    }
+
+    if (response.last || response.content.length === 0 || page >= response.totalPages - 1) {
+      break;
+    }
+  }
+
+  return contractLogs;
+}
+
 function resolveActivityAccent(action?: string | null): ActivityAccent {
   const normalizedAction = (action || "").trim().toUpperCase();
 
@@ -123,7 +235,7 @@ function resolveActivityAccent(action?: string | null): ActivityAccent {
 
   if (includesAny(normalizedAction, ["EXCLUI", "DELETE", "REMOV", "CANCEL"])) {
     return {
-      label: "Exclusao",
+      label: "Exclusão",
       icon: Trash2,
       iconClass: "border-rose-200 bg-rose-50 text-rose-600",
       barClass: "bg-gradient-to-r from-rose-500 to-red-500",
@@ -133,7 +245,7 @@ function resolveActivityAccent(action?: string | null): ActivityAccent {
 
   if (includesAny(normalizedAction, ["CRIAR", "CREATE", "POST", "ADICION", "REGISTER"])) {
     return {
-      label: "Criacao",
+      label: "Criação",
       icon: PlusCircle,
       iconClass: "border-emerald-200 bg-emerald-50 text-emerald-600",
       barClass: "bg-gradient-to-r from-emerald-500 to-teal-500",
@@ -143,7 +255,7 @@ function resolveActivityAccent(action?: string | null): ActivityAccent {
 
   if (includesAny(normalizedAction, ["ATUALIZ", "UPDATE", "PATCH", "PUT", "ALTER", "EDIT"])) {
     return {
-      label: "Atualizacao",
+      label: "Atualização",
       icon: PencilLine,
       iconClass: "border-amber-200 bg-amber-50 text-amber-700",
       barClass: "bg-gradient-to-r from-amber-500 to-orange-500",
@@ -173,20 +285,20 @@ function resolveActivityAccent(action?: string | null): ActivityAccent {
 const quickActions = [
   {
     href: "/perfil/seguranca",
-    title: "Seguranca e senha",
-    description: "Atualize senha e reforce a protecao da conta.",
+    title: "Segurança e senha",
+    description: "Atualize senha e reforce a proteção da conta.",
     icon: Shield,
   },
-  // TODO: Reativar quando as paginas estiverem implementadas.
+  // TODO: Reativar quando as páginas estiverem implementadas.
   // {
   //   href: "/perfil/configuracoes",
-  //   title: "Configuracoes da conta",
-  //   description: "Ajuste preferencias pessoais e exibicao.",
+  //   title: "Configurações da conta",
+  //   description: "Ajuste preferências pessoais e exibição.",
   //   icon: Settings2,
   // },
   // {
   //   href: "/perfil/notificacoes",
-  //   title: "Notificacoes",
+  //   title: "Notificações",
   //   description: "Defina como e quando deseja ser avisado.",
   //   icon: Bell,
   // },
@@ -204,9 +316,7 @@ export default function PerfilPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const [activityPage, setActivityPage] = useState(0);
-  const [activityLogs, setActivityLogs] = useState<AuditLogResponseDTO[]>([]);
-  const [activityTotalPages, setActivityTotalPages] = useState(0);
-  const [activityTotalElements, setActivityTotalElements] = useState(0);
+  const [allContractActivityLogs, setAllContractActivityLogs] = useState<AuditLogResponseDTO[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [activitiesError, setActivitiesError] = useState<string | null>(null);
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null);
@@ -300,25 +410,18 @@ export default function PerfilPage() {
       setActivitiesError(null);
 
       try {
-        const response = await listMyAuditLogs({
-          page: activityPage,
-          size: ACTIVITY_CARDS_PER_PAGE,
-        });
+        const logs = await fetchMyContractActivities();
 
         if (cancelled) {
           return;
         }
 
-        setActivityLogs(response.content);
-        setActivityTotalPages(response.totalPages);
-        setActivityTotalElements(response.totalElements);
+        setAllContractActivityLogs(logs);
       } catch (error) {
         if (cancelled) {
           return;
         }
-        setActivityLogs([]);
-        setActivityTotalPages(0);
-        setActivityTotalElements(0);
+        setAllContractActivityLogs([]);
         setActivitiesError(getRequestErrorMessage(error));
       } finally {
         if (!cancelled) {
@@ -332,7 +435,16 @@ export default function PerfilPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, activityPage]);
+  }, [activeTab]);
+
+  const activityTotalElements = allContractActivityLogs.length;
+  const activityTotalPages =
+    activityTotalElements === 0 ? 0 : Math.ceil(activityTotalElements / ACTIVITY_CARDS_PER_PAGE);
+  const activityLogs = useMemo(() => {
+    const safePage = activityTotalPages === 0 ? 0 : Math.min(activityPage, activityTotalPages - 1);
+    const start = safePage * ACTIVITY_CARDS_PER_PAGE;
+    return allContractActivityLogs.slice(start, start + ACTIVITY_CARDS_PER_PAGE);
+  }, [activityPage, activityTotalPages, allContractActivityLogs]);
 
   useEffect(() => {
     if (activityTotalPages === 0 && activityPage !== 0) {
@@ -451,7 +563,7 @@ export default function PerfilPage() {
             <div className="text-center">
               <User className="mx-auto mb-4 h-12 w-12 text-gray-300" />
               <p className="text-gray-600">
-                {errorMessage ?? "Nao foi possivel carregar os dados do perfil."}
+                {errorMessage ?? "Não foi possível carregar os dados do perfil."}
               </p>
             </div>
           </div>
@@ -495,7 +607,7 @@ export default function PerfilPage() {
                     : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                 }`}
               >
-                Visao geral
+                Visão geral
               </button>
               <button
                 type="button"
@@ -509,7 +621,7 @@ export default function PerfilPage() {
                     : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                 }`}
               >
-                Ultimas atividades
+                Últimas atividades
               </button>
             </div>
           </section>
@@ -519,7 +631,7 @@ export default function PerfilPage() {
               <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-2">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Ações rapidas</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">Ações rápidas</h2>
                     <p className="text-sm text-gray-600">
                       Acesse as áreas mais usadas para manter seu perfil atualizado.
                     </p>
@@ -553,9 +665,9 @@ export default function PerfilPage() {
               </div>
 
               <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900">Saude da conta</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Saúde da conta</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Indicadores basicos para monitorar sua conta.
+                  Indicadores básicos para monitorar sua conta.
                 </p>
 
                 <div className="mt-5">
@@ -583,7 +695,7 @@ export default function PerfilPage() {
                       <p className="text-xs text-gray-600">
                         {currentUser.status === "ACTIVE"
                           ? "Conta ativa e pronta para uso."
-                          : "Conta com restricoes. Revise com o administrador."}
+                          : "Conta com restrições. Revise com o administrador."}
                       </p>
                     </div>
                   </div>
@@ -595,11 +707,11 @@ export default function PerfilPage() {
                       <CircleX className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
                     )}
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Identificador de usuario</p>
+                      <p className="text-sm font-medium text-gray-900">Identificador de usuário</p>
                       <p className="text-xs text-gray-600">
                         {currentUser.username
                           ? `@${currentUser.username}`
-                          : "Defina um usuario em Configuracoes para facilitar identificacao."}
+                          : "Defina um usuário em Configurações para facilitar identificação."}
                       </p>
                     </div>
                   </div>
@@ -612,9 +724,9 @@ export default function PerfilPage() {
             <section className="overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/60 p-6 shadow-sm">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Ultimas atividades</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Últimas atividades</h2>
                   <p className="text-sm text-gray-600">
-                    Ultimas acoes do usuario logado no sistema (auditoria).
+                    Últimas ações do usuário logado relacionadas a contratos.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -622,7 +734,7 @@ export default function PerfilPage() {
                     {activityTotalElements} registro(s)
                   </span>
                   <span className="rounded-full border border-gray-200 bg-white px-3 py-1 font-medium text-gray-700">
-                    {ACTIVITY_CARDS_PER_PAGE} por pagina
+                    {ACTIVITY_CARDS_PER_PAGE} por página
                   </span>
                 </div>
               </div>
@@ -651,53 +763,31 @@ export default function PerfilPage() {
               ) : activityLogs.length === 0 ? (
                 <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white/90 p-5 text-sm text-gray-600">
                   <Activity className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-500" />
-                  <span>Nenhuma atividade de auditoria encontrada para este usuario.</span>
+                  <span>Nenhuma atividade de contratos encontrada para este usuário.</span>
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {activityLogs.map((log) => {
                       const accent = resolveActivityAccent(log.action);
-                      const Icon = accent.icon;
 
                       return (
-                        <article
+                        <AuditLogCard
                           key={log.auditId || String(log.id)}
-                          className={`group relative overflow-hidden rounded-2xl border bg-white/90 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${accent.borderClass}`}
+                          log={log}
+                          accent={{
+                            label: accent.label,
+                            icon: accent.icon,
+                            iconClassName: accent.iconClass,
+                            barClassName: accent.barClass,
+                            borderClassName: accent.borderClass,
+                          }}
+                          className="group h-full bg-white/90 transition-all hover:-translate-y-0.5 hover:shadow-md"
                         >
-                          <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${accent.barClass}`} />
-
-                          <div className="mb-3 flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 items-start gap-3">
-                              <div
-                                className={`mt-0.5 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border ${accent.iconClass}`}
-                              >
-                                <Icon className="h-4 w-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                  {accent.label}
-                                </p>
-                                <h3 className="line-clamp-2 text-sm font-semibold text-gray-900">
-                                  {resolveSummary(log)}
-                                </h3>
-                              </div>
-                            </div>
-                            <span
-                              className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${resolveResultClass(log.resultado)}`}
-                            >
-                              {resolveResultLabel(log.resultado)}
-                            </span>
-                          </div>
-
-                          <p className="line-clamp-2 text-sm text-gray-600">
-                            {log.descricao || resolveContext(log)}
-                          </p>
-
                           <div className="mt-4 grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
                             <div className="rounded-lg border border-gray-200 bg-white/90 p-2.5">
                               <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                                Modulo / tela
+                                Módulo / tela
                               </p>
                               <p className="line-clamp-2 font-medium text-gray-700">{resolveContext(log)}</p>
                             </div>
@@ -709,19 +799,14 @@ export default function PerfilPage() {
                               <p className="line-clamp-2 font-medium text-gray-700">{resolveEntity(log)}</p>
                             </div>
                           </div>
-
-                          <div className="mt-3 flex items-center justify-end gap-1 text-xs font-medium text-gray-500">
-                            <Clock3 className="h-3.5 w-3.5" />
-                            <span>{formatDateTime(resolveEventDate(log))}</span>
-                          </div>
-                        </article>
+                        </AuditLogCard>
                       );
                     })}
                   </div>
 
                   <div className="mt-6 flex flex-col gap-3 rounded-xl border border-emerald-100 bg-white/90 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-gray-700">
-                      Pagina {activityTotalPages === 0 ? 0 : activityPage + 1} de {activityTotalPages} |{" "}
+                      Página {activityTotalPages === 0 ? 0 : activityPage + 1} de {activityTotalPages} |{" "}
                       {activityTotalElements} atividade(s)
                     </p>
                     <div className="flex gap-2">
@@ -746,7 +831,7 @@ export default function PerfilPage() {
                         }
                         disabled={activityTotalPages === 0 || activityPage >= activityTotalPages - 1}
                       >
-                        Proxima
+                        Próxima
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
@@ -768,7 +853,7 @@ export default function PerfilPage() {
                     type="button"
                     onClick={closeEditProfile}
                     className="rounded-lg p-2 transition hover:bg-white/15"
-                    aria-label="Fechar modal de edicao de perfil"
+                    aria-label="Fechar modal de edição de perfil"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -793,7 +878,7 @@ export default function PerfilPage() {
 
                     <div className="min-w-0 space-y-1">
                       <p className="truncate text-sm font-semibold text-gray-900">{currentUser.fullName}</p>
-                      <p className="truncate text-xs text-gray-600">@{currentUser.username || "sem-usuario"}</p>
+                      <p className="truncate text-xs text-gray-600">@{currentUser.username || "sem-usuário"}</p>
                       <p className="text-xs text-gray-500">Formatos recomendados: JPG e PNG (max. 20MB).</p>
                     </div>
                   </div>

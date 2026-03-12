@@ -5,32 +5,30 @@ import { NavBar } from "@/components/ui/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
+import { BudgetTransferSummary } from "@/src/components/audit/BudgetTransferSummary";
+import { getBudgetCategoryById } from "@/src/lib/api/endpoints/budget-categories";
 import { getBudgetItemById } from "@/src/lib/api/endpoints/budget-items";
 import { listAuditLogs } from "@/src/lib/api/endpoints/auth";
-import { AuditLogResponseDTO, AuditScopeEnum } from "@/src/lib/api/types";
+import { AuditLogResponseDTO, AuditScopeEnum, BudgetItemResponseDTO } from "@/src/lib/api/types";
 import {
-  formatDateTime,
-  formatUnknown,
   getErrorMessage,
   parseBeforeAfter,
   parseChanges,
   parseContractId,
   parseTechnical,
-  resolveActorEmail,
   resolveActorId,
-  resolveActorName,
-  resolveContext,
-  resolveEntity,
-  resolveEventDate,
-  resolveResultClass,
-  resolveResultLabel,
   resolveScopeLabel,
-  resolveSummary,
 } from "@/src/lib/audit/presentation";
+import {
+  buildBudgetCategoryReferenceLabel,
+  buildBudgetItemReferencePresentation,
+  buildBudgetTransferBusinessSummary,
+} from "@/src/lib/audit/budget-reference-presentation";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
 import { fetchCurrentUser, isSuperAdmin } from "@/src/lib/auth/session";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 type ScopeCard = {
   value: AuditScopeEnum;
@@ -42,17 +40,17 @@ const scopeCards: ScopeCard[] = [
   {
     value: "SYSTEM",
     title: "Auditoria do sistema",
-    description: "Login, logout, erros e alteracoes de configuracao.",
+    description: "Login, logout, erros e alterações de configuração.",
   },
   {
     value: "CONTRACTS",
     title: "Auditoria de contratos",
-    description: "Visao geral de acoes em todos os contratos.",
+    description: "Visão geral de ações em todos os contratos.",
   },
   {
     value: "USERS",
-    title: "Auditoria de usuarios",
-    description: "Permissoes, bloqueios, cadastro e alteracoes de usuarios.",
+    title: "Auditoria de usuários",
+    description: "Permissões, bloqueios, cadastro e alterações de usuários.",
   },
 ];
 
@@ -205,7 +203,7 @@ function resolveTransferDirection(log: AuditLogResponseDTO): TransferDirection |
 
 function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number, string>): string {
   if (itemId === null) {
-    return "Nao informado";
+    return "Não informado";
   }
   const description = labelsById[itemId];
   if (!description) {
@@ -216,7 +214,7 @@ function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number
 
 function formatCurrencyBRL(value: number | null): string {
   if (value === null) {
-    return "Nao informado";
+    return "Não informado";
   }
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -231,7 +229,9 @@ export default function AdminAuditoriaPage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logs, setLogs] = useState<AuditLogResponseDTO[]>([]);
   const [actorNamesById, setActorNamesById] = useState<Record<number, string>>({});
+  const [budgetCategoryLabelsById, setBudgetCategoryLabelsById] = useState<Record<number, string>>({});
   const [budgetItemLabelsById, setBudgetItemLabelsById] = useState<Record<number, string>>({});
+  const [budgetItemsById, setBudgetItemsById] = useState<Record<number, BudgetItemResponseDTO>>({});
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -351,9 +351,9 @@ export default function AdminAuditoriaPage() {
         missingIds.map(async (id) => {
           try {
             const item = await getBudgetItemById(id);
-            return [id, item.description?.trim() || `Item #${id}`] as const;
+            return item;
           } catch {
-            return [id, `Item #${id}`] as const;
+            return null;
           }
         })
       );
@@ -364,8 +364,22 @@ export default function AdminAuditoriaPage() {
 
       setBudgetItemLabelsById((prev) => {
         const next = { ...prev };
-        for (const [id, label] of resolvedItems) {
-          next[id] = label;
+        for (const item of resolvedItems) {
+          if (!item) {
+            continue;
+          }
+          next[item.id] = buildBudgetItemReferencePresentation(item).label;
+        }
+        return next;
+      });
+
+      setBudgetItemsById((prev) => {
+        const next = { ...prev };
+        for (const item of resolvedItems) {
+          if (!item) {
+            continue;
+          }
+          next[item.id] = item;
         }
         return next;
       });
@@ -376,6 +390,71 @@ export default function AdminAuditoriaPage() {
       cancelled = true;
     };
   }, [logs, budgetItemLabelsById]);
+
+  useEffect(() => {
+    const missingCategoryIds = Array.from(
+      new Set(
+        Object.values(budgetItemsById)
+          .map((item) => item.categoryId)
+          .filter(
+            (categoryId): categoryId is number =>
+              Number.isInteger(categoryId) && categoryId > 0 && !budgetCategoryLabelsById[categoryId]
+          )
+      )
+    );
+
+    if (missingCategoryIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadBudgetCategories() {
+      const resolvedCategories = await Promise.all(
+        missingCategoryIds.map(async (id) => {
+          try {
+            const category = await getBudgetCategoryById(id);
+            return [id, buildBudgetCategoryReferenceLabel(category)] as const;
+          } catch {
+            return [id, null] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setBudgetCategoryLabelsById((prev) => {
+        const next = { ...prev };
+        for (const [id, label] of resolvedCategories) {
+          if (label) {
+            next[id] = label;
+          }
+        }
+        return next;
+      });
+    }
+
+    void loadBudgetCategories();
+    return () => {
+      cancelled = true;
+    };
+  }, [budgetCategoryLabelsById, budgetItemsById]);
+
+  const budgetItemPresentationsById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(budgetItemsById).map((item) => [
+          item.id,
+          buildBudgetItemReferencePresentation(
+            item,
+            budgetCategoryLabelsById[item.categoryId] || null
+          ),
+        ])
+      ),
+    [budgetItemsById, budgetCategoryLabelsById]
+  );
 
   function handleApplyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -406,13 +485,13 @@ export default function AdminAuditoriaPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-bold text-zinc-900">Auditoria geral</h1>
           <p className="text-sm text-zinc-600">
-            Painel unico para auditoria de sistema, contratos e usuarios.
+            Painel único para auditoria de sistema, contratos e usuários.
           </p>
         </header>
 
         {loadingAccess && (
           <section className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-            Validando permissao...
+            Validando permissão...
           </section>
         )}
 
@@ -456,13 +535,13 @@ export default function AdminAuditoriaPage() {
                     id="search"
                     value={searchFilter}
                     onChange={(event) => setSearchFilter(event.target.value)}
-                    placeholder="Resumo, descricao, contrato, nome..."
+                    placeholder="Resumo, descrição, contrato, nome..."
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label htmlFor="actorName" className="text-sm font-medium text-zinc-700">
-                    Usuario responsavel
+                    Usuário responsável
                   </label>
                   <Input
                     id="actorName"
@@ -474,7 +553,7 @@ export default function AdminAuditoriaPage() {
 
                 <div className="space-y-1">
                   <label htmlFor="action" className="text-sm font-medium text-zinc-700">
-                    Tipo de acao
+                    Tipo de ação
                   </label>
                   <Input
                     id="action"
@@ -503,14 +582,14 @@ export default function AdminAuditoriaPage() {
                     onClick={() => setShowAdvancedFilters((prev) => !prev)}
                     className="text-xs font-medium text-zinc-600 hover:text-zinc-900"
                   >
-                    {showAdvancedFilters ? "Ocultar filtro avancado" : "Exibir filtro avancado"}
+                    {showAdvancedFilters ? "Ocultar filtro avançado" : "Exibir filtro avançado"}
                   </button>
                 </div>
 
                 {showAdvancedFilters && (
                   <div className="space-y-1 md:col-span-2">
                     <label htmlFor="entityType" className="text-sm font-medium text-zinc-700">
-                      Classificacao interna (opcional)
+                      Classificação interna (opcional)
                     </label>
                     <Input
                       id="entityType"
@@ -549,156 +628,53 @@ export default function AdminAuditoriaPage() {
               ) : (
                 <div className="space-y-4">
                   {logs.map((log) => {
-                    const changes = parseChanges(log.alteracoesJson);
-                    const before = parseBeforeAfter(log.beforeJson);
-                    const after = parseBeforeAfter(log.afterJson);
-                    const technical = parseTechnical(log.detalhesTecnicosJson);
                     const transferDirection = resolveTransferDirection(log);
+                    const transferSummary = transferDirection
+                      ? buildBudgetTransferBusinessSummary(log, {
+                          categoryLabelsById: budgetCategoryLabelsById,
+                          itemLabelsById: budgetItemLabelsById,
+                          itemPresentationsById: budgetItemPresentationsById,
+                        })
+                      : null;
+                    const resolvedTransferSummary =
+                      transferSummary ||
+                      (transferDirection
+                        ? {
+                            sourceLabel: resolveBudgetItemLabel(
+                              transferDirection.fromItemId,
+                              budgetItemLabelsById
+                            ),
+                            destinationLabel: resolveBudgetItemLabel(
+                              transferDirection.toItemId,
+                              budgetItemLabelsById
+                            ),
+                            sourceInitialTotal: "NÃ£o informado",
+                            destinationInitialTotal: "NÃ£o informado",
+                            transferredAmount: formatCurrencyBRL(transferDirection.amount),
+                            sourceFinalTotal: "NÃ£o informado",
+                            destinationFinalTotal: "NÃ£o informado",
+                          }
+                        : null);
 
                     return (
-                      <article
+                      <AuditLogCard
                         key={log.auditId || log.id}
-                        className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4"
-                      >
-                        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="inline-flex rounded-full border border-zinc-300 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700">
-                                {resolveScopeLabel(log.tipoAuditoria || scope)}
-                              </span>
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                                  resolveResultClass(log.resultado)
-                                )}
-                              >
-                                {resolveResultLabel(log.resultado)}
-                              </span>
-                            </div>
-                            <h2 className="text-base font-semibold text-zinc-900">{resolveSummary(log)}</h2>
-                            {log.descricao && <p className="text-sm text-zinc-700">{log.descricao}</p>}
-                            {transferDirection && (
-                              <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
-                                <p>
-                                  <span className="font-semibold text-zinc-900">Origem:</span>{" "}
-                                  {resolveBudgetItemLabel(
-                                    transferDirection.fromItemId,
-                                    budgetItemLabelsById
-                                  )}
-                                </p>
-                                <p>
-                                  <span className="font-semibold text-zinc-900">Destino:</span>{" "}
-                                  {resolveBudgetItemLabel(
-                                    transferDirection.toItemId,
-                                    budgetItemLabelsById
-                                  )}
-                                </p>
-                                <p>
-                                  <span className="font-semibold text-zinc-900">Valor remanejado:</span>{" "}
-                                  {formatCurrencyBRL(transferDirection.amount)}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-xs text-zinc-500">{formatDateTime(resolveEventDate(log))}</p>
-                        </header>
-
-                        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                          <div>
-                            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              Usuario responsavel
-                            </dt>
-                            <dd className="mt-1 font-medium text-zinc-900">
-                              {resolveActorName(log, actorNamesById)}
-                            </dd>
-                            {resolveActorEmail(log) && (
-                              <dd className="text-xs text-zinc-600">{resolveActorEmail(log)}</dd>
-                            )}
-                          </div>
-                          <div>
-                            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              Modulo e tela
-                            </dt>
-                            <dd className="mt-1 text-zinc-800">{resolveContext(log)}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              Registro afetado
-                            </dt>
-                            <dd className="mt-1 text-zinc-800">{resolveEntity(log)}</dd>
-                          </div>
-                        </dl>
-
-                        <details className="mt-4 rounded-lg border border-zinc-200 bg-white p-3">
-                          <summary className="cursor-pointer text-sm font-medium text-zinc-700">
-                            Ver detalhamento completo
-                          </summary>
-                          <div className="mt-3 space-y-3 text-sm text-zinc-700">
-                            {changes.length > 0 && (
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b border-zinc-200 text-left text-zinc-600">
-                                      <th className="py-2 pr-2">Campo</th>
-                                      <th className="py-2 pr-2">Valor anterior</th>
-                                      <th className="py-2 pr-2">Novo valor</th>
-                                      <th className="py-2 pr-2">Tipo</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {changes.map((change, index) => (
-                                      <tr key={`${log.id}-change-${index}`} className="border-b border-zinc-100">
-                                        <td className="py-2 pr-2 font-medium">{change.caminho || "-"}</td>
-                                        <td className="py-2 pr-2">{formatUnknown(change.de)}</td>
-                                        <td className="py-2 pr-2">{formatUnknown(change.para)}</td>
-                                        <td className="py-2 pr-2">{change.tipo || "-"}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-
-                            {(before !== null || after !== null) && (
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <div>
-                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                                    Antes
-                                  </p>
-                                  <pre className="max-h-56 overflow-auto rounded-md bg-zinc-100 p-2 text-[11px] text-zinc-700">
-                                    {JSON.stringify(before, null, 2) || "null"}
-                                  </pre>
-                                </div>
-                                <div>
-                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                                    Depois
-                                  </p>
-                                  <pre className="max-h-56 overflow-auto rounded-md bg-zinc-100 p-2 text-[11px] text-zinc-700">
-                                    {JSON.stringify(after, null, 2) || "null"}
-                                  </pre>
-                                </div>
-                              </div>
-                            )}
-
-                            {technical && (
-                              <div>
-                                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                                  Detalhes tecnicos
-                                </p>
-                                <pre className="max-h-56 overflow-auto rounded-md bg-zinc-100 p-2 text-[11px] text-zinc-700">
-                                  {JSON.stringify(technical, null, 2)}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      </article>
+                        log={log}
+                        actorNamesById={actorNamesById}
+                        scopeFallback={scope}
+                        showScopeBadge
+                        extraSummaryContent={
+                          resolvedTransferSummary ? (
+                            <BudgetTransferSummary summary={resolvedTransferSummary} />
+                          ) : null
+                        }
+                      />
                     );
                   })}
 
                   <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-zinc-600">
-                      Pagina {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
+                      Página {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -715,7 +691,7 @@ export default function AdminAuditoriaPage() {
                         disabled={loadingLogs || totalPages === 0 || currentPage >= totalPages - 1}
                         onClick={() => setCurrentPage((page) => page + 1)}
                       >
-                        Proxima
+                        Próxima
                       </Button>
                     </div>
                   </div>

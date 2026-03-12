@@ -226,6 +226,9 @@ export interface AuditLogResponseDTO {
   action: string;
   entityType: string;
   entityId: string | null;
+  contractId?: number | null;
+  contractCode?: string | null;
+  contractName?: string | null;
   beforeJson: string | null;
   afterJson: string | null;
   ip: string | null;

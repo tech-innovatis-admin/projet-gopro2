@@ -1,9 +1,17 @@
-import { AuditLogResponseDTO, AuditScopeEnum, HttpError } from "@/src/lib/api/types";
+import { AuditLogResponseDTO, AuditScopeEnum, HttpError } from "../api/types";
+export {
+  resolveAuditDescription,
+  resolveAuditOperationKind,
+  type AuditOperationKind,
+} from "./log-presentation";
 
 export type AuditChange = {
   caminho?: string;
+  label?: string;
   de?: unknown;
+  deLabel?: unknown;
   para?: unknown;
+  paraLabel?: unknown;
   tipo?: string;
 };
 
@@ -12,7 +20,7 @@ type AuditBeforeAfter = Record<string, unknown> | Array<unknown> | null;
 const scopeLabels: Record<AuditScopeEnum, string> = {
   SYSTEM: "Sistema",
   CONTRACTS: "Contratos",
-  USERS: "Usuarios",
+  USERS: "Usuários",
   PEOPLE_COMPANIES: "Pessoas e empresas",
 };
 
@@ -22,8 +30,73 @@ const actionLabels: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /(create|post|criar|criacao|adicion)/i, label: "Criou um registro" },
   { pattern: /(update|patch|put|editar|atualiz|alter)/i, label: "Atualizou um registro" },
   { pattern: /(delete|remov|exclu|cancel)/i, label: "Excluiu um registro" },
-  { pattern: /(error|erro|falha|exception)/i, label: "Falha durante operacao" },
+  { pattern: /(error|erro|falha|exception)/i, label: "Falha durante operação" },
 ];
+
+function correctAuditDisplayText(value: string): string {
+  return value
+    .replace(/\bUsuarios\b/g, "Usuários")
+    .replace(/\bUsuario\b/g, "Usuário")
+    .replace(/\bGestao\b/g, "Gestão")
+    .replace(/\bOperacoes\b/g, "Operações")
+    .replace(/\bConfiguracoes\b/g, "Configurações")
+    .replace(/\bConfiguracao\b/g, "Configuração")
+    .replace(/\bPermissoes\b/g, "Permissões")
+    .replace(/\bPermissao\b/g, "Permissão")
+    .replace(/\bExclusao\b/g, "Exclusão")
+    .replace(/\bEdicao\b/g, "Edição")
+    .replace(/\bDescricao\b/g, "Descrição")
+    .replace(/\bdescricao\b/g, "descrição")
+    .replace(/\bAcoes\b/g, "Ações")
+    .replace(/\bacoes\b/g, "ações")
+    .replace(/\bAcao\b/g, "Ação")
+    .replace(/\bacao\b/g, "ação")
+    .replace(/\bNao\b/g, "Não")
+    .replace(/\bnao\b/g, "não")
+    .replace(/\bSessao\b/g, "Sessão")
+    .replace(/\bsessao\b/g, "sessão")
+    .replace(/\bAutenticacao\b/g, "Autenticação")
+    .replace(/\bautenticacao\b/g, "autenticação")
+    .replace(/\binvalidas\b/g, "inválidas")
+    .replace(/\bvalido\b/g, "válido")
+    .replace(/\badministracao\b/g, "administração")
+    .replace(/\bAdministracao\b/g, "Administração")
+    .replace(/\bespecifica\b/g, "específica")
+    .replace(/\bnegocio\b/g, "negócio")
+    .replace(/\btecnico\b/g, "técnico")
+    .replace(/\btecnicos\b/g, "técnicos")
+    .replace(/\btecnica\b/g, "técnica")
+    .replace(/\bCodigo\b/g, "Código")
+    .replace(/\bcodigo\b/g, "código")
+    .replace(/\bprimario\b/g, "primário")
+    .replace(/\bsecundario\b/g, "secundário")
+    .replace(/\binicio\b/g, "início")
+    .replace(/\btermino\b/g, "término")
+    .replace(/\bexecucao\b/g, "execução")
+    .replace(/\bOrganizacao\b/g, "Organização")
+    .replace(/\borganizacao\b/g, "organização")
+    .replace(/\bvinculo\b/g, "vínculo")
+    .replace(/\bvinculos\b/g, "vínculos")
+    .replace(/\bUltimo\b/g, "Último")
+    .replace(/\bultimo\b/g, "último")
+    .replace(/\bPagina\b/g, "Página")
+    .replace(/\bpagina\b/g, "página")
+    .replace(/\bProxima\b/g, "Próxima")
+    .replace(/\bproxima\b/g, "próxima")
+    .replace(/\bVisao\b/g, "Visão")
+    .replace(/\bSeguranca\b/g, "Segurança")
+    .replace(/\bSaude\b/g, "Saúde")
+    .replace(/\bRapidas\b/g, "Rápidas")
+    .replace(/\brapidas\b/g, "rápidas")
+    .replace(/\bUltimas\b/g, "Últimas")
+    .replace(/\bultimas\b/g, "últimas")
+    .replace(/\bExperiencia\b/g, "Experiência")
+    .replace(/\bRestricoes\b/g, "Restrições")
+    .replace(/\bInvalido\b/g, "Inválido")
+    .replace(/\binvalido\b/g, "inválido")
+    .replace(/\bClassificacao\b/g, "Classificação")
+    .replace(/\bclassificacao\b/g, "classificação");
+}
 
 export function parseJsonValue<T>(value: string | null | undefined): T | null {
   if (!value) {
@@ -67,7 +140,7 @@ export function getErrorMessage(error: unknown): string {
 
 export function formatDateTime(value?: string | null): string {
   if (!value) {
-    return "-";
+    return "NÃ£o informado";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -135,7 +208,7 @@ export function resolveScopeLabel(scope?: AuditScopeEnum | null): string {
   if (!scope) {
     return "-";
   }
-  return scopeLabels[scope] || scope;
+  return correctAuditDisplayText(scopeLabels[scope] || scope);
 }
 
 export function resolveContext(log: AuditLogResponseDTO): string {
@@ -143,22 +216,45 @@ export function resolveContext(log: AuditLogResponseDTO): string {
     .map((value) => (value || "").trim())
     .filter((value) => value.length > 0);
   if (pieces.length > 0) {
-    return pieces.join(" / ");
+    return correctAuditDisplayText(pieces.join(" / "));
   }
 
   if (log.entityType) {
-    return log.entityType;
+    return correctAuditDisplayText(log.entityType);
   }
 
   return "-";
 }
 
 export function resolveEntity(log: AuditLogResponseDTO): string {
+  const contractCode = (log.contractCode || "").trim();
+  const contractName = (log.contractName || "").trim();
+  const contractId = log.contractId ?? null;
+
+  let contractLabel: string | null = null;
+  if (contractCode && contractName) {
+    contractLabel = `Contrato ${contractCode} (${contractName})`;
+  } else if (contractCode) {
+    contractLabel = `Contrato ${contractCode}`;
+  } else if (contractName) {
+    contractLabel = `Contrato ${contractName}`;
+  } else if (contractId && contractId > 0) {
+    contractLabel = `Contrato #${contractId}`;
+  }
+
+  if (contractLabel) {
+    const entityId = (log.entityId || "").trim();
+    if (entityId && String(contractId || "") !== entityId) {
+      return correctAuditDisplayText(`${contractLabel} | Registro #${entityId}`);
+    }
+    return correctAuditDisplayText(contractLabel);
+  }
+
   const pieces = [log.entidadePrincipal, log.entityId]
     .map((value) => (value || "").trim())
     .filter((value) => value.length > 0);
   if (pieces.length > 0) {
-    return pieces.join(" #");
+    return correctAuditDisplayText(pieces.join(" #"));
   }
   return "-";
 }
@@ -174,22 +270,22 @@ function normalizeAction(value?: string | null): string | null {
 export function resolveActionLabel(log: AuditLogResponseDTO): string {
   const action = normalizeAction(log.action);
   if (!action) {
-    return "Acao registrada";
+    return "Ação registrada";
   }
 
   for (const definition of actionLabels) {
     if (definition.pattern.test(action)) {
-      return definition.label;
+      return correctAuditDisplayText(definition.label);
     }
   }
 
-  return action;
+  return correctAuditDisplayText(action);
 }
 
 export function resolveSummary(log: AuditLogResponseDTO): string {
   const summary = log.resumo?.trim();
   if (summary) {
-    return summary;
+    return correctAuditDisplayText(summary);
   }
   return resolveActionLabel(log);
 }
@@ -197,7 +293,7 @@ export function resolveSummary(log: AuditLogResponseDTO): string {
 export function resolveResultLabel(result?: string | null): string {
   const normalized = (result || "").trim().toUpperCase();
   if (!normalized) {
-    return "Nao informado";
+    return "Não informado";
   }
   if (normalized === "SUCESSO") {
     return "Sucesso";
@@ -205,7 +301,7 @@ export function resolveResultLabel(result?: string | null): string {
   if (normalized === "FALHA") {
     return "Falha";
   }
-  return result || "Nao informado";
+  return correctAuditDisplayText(result || "Não informado");
 }
 
 export function resolveResultClass(result?: string | null): string {
@@ -218,4 +314,3 @@ export function resolveResultClass(result?: string | null): string {
   }
   return "border-zinc-200 bg-zinc-50 text-zinc-700";
 }
-
