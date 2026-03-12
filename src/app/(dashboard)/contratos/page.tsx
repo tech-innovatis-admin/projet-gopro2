@@ -150,6 +150,7 @@ type Contrato = {
   segmentos: string[];
   status: ProjectStatus;
   valorTotal: number;
+  dataCriacao: string;
   dataInicio: string;
   dataTermino?: string;
   dataInicioEfetivo?: string;
@@ -281,6 +282,7 @@ function mapProjectToContrato(
     segmentos: normalizeSegments(project.areaSegmento),
     status: project.projectStatus,
     valorTotal: normalizeMoneyValue(project.contractValue),
+    dataCriacao: project.createdAt ?? "",
     dataInicio: project.startDate ?? project.openingDate ?? "",
     dataTermino: project.endDate ?? project.closingDate ?? undefined,
     dataInicioEfetivo: project.openingDate ?? undefined,
@@ -308,7 +310,7 @@ export default function ContratosPage() {
     coordenador: "",
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
-    key: "dataInicio",
+    key: "dataCriacao",
     direction: "desc",
   });
   const [loading, setLoading] = useState(false);
@@ -418,9 +420,13 @@ export default function ContratosPage() {
         peopleById[person.id] = person.fullName;
       });
 
-      const mappedProjects = projectsPage.content.map((project) =>
-        mapProjectToContrato(project, partnersById, clientsById, peopleById)
-      );
+      const mappedProjects = projectsPage.content
+        .map((project) => mapProjectToContrato(project, partnersById, clientsById, peopleById))
+        .sort((a, b) => {
+          if (!a.dataCriacao) return 1;
+          if (!b.dataCriacao) return -1;
+          return b.dataCriacao.localeCompare(a.dataCriacao);
+        });
 
       setAvailablePartners(
         [...new Set(partnersPage.content.map((partner) => partner.name).filter(Boolean))].sort((a, b) =>
@@ -685,20 +691,20 @@ export default function ContratosPage() {
         </div>
 
         {/* Cards de Metricas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-          <MetricCard
-            title="Total de Contratos"
-            value={counts.total}
-            icon={FileText}
-            tone="TOTAL"
-            subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
           <MetricCard
             title="Pré-projetos"
             value={counts.preProjetos}
             icon={Clock}
             tone="PRE_PROJETO"
             subtitle={`R$ ${counts.valorPreProjetos.toLocaleString("pt-BR")}`}
+          />
+          <MetricCard
+            title="Planejamento"
+            value={counts.emPlanejamento}
+            icon={Clock}
+            tone="PLANEJAMENTO"
+            subtitle={`R$ ${counts.valorPlanejamento.toLocaleString("pt-BR")}`}
           />
           <MetricCard
             title="Execução"
@@ -722,11 +728,11 @@ export default function ContratosPage() {
             subtitle={`R$ ${counts.valorSuspensos.toLocaleString("pt-BR")}`}
           />
           <MetricCard
-            title="Planejamento"
-            value={counts.emPlanejamento}
-            icon={Clock}
-            tone="PLANEJAMENTO"
-            subtitle={`R$ ${counts.valorPlanejamento.toLocaleString("pt-BR")}`}
+            title="Total de Contratos"
+            value={counts.total}
+            icon={FileText}
+            tone="TOTAL"
+            subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
           />
         </div>
 
@@ -1214,7 +1220,7 @@ function MetricCard({
 
   return (
     <article
-      className={`group relative h-full overflow-hidden rounded-xl border bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${toneStyle.border}`}
+      className={`group relative h-full overflow-hidden rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 lg:p-5 ${toneStyle.border}`}
       aria-label={`${title}: ${value} contratos`}
     >
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${toneStyle.accent}`} />
@@ -1224,11 +1230,11 @@ function MetricCard({
           <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneStyle.iconBg}`}>
             <Icon className={`h-5 w-5 ${toneStyle.iconColor}`} />
           </span>
-          <p className="text-sm font-medium leading-5 text-zinc-700">{title}</p>
+          <p className="line-clamp-2 min-h-10 text-sm font-medium leading-5 text-zinc-700">{title}</p>
         </div>
 
         <div className="mt-4 flex items-baseline gap-2">
-          <p className="text-3xl font-bold leading-none tracking-tight text-zinc-900 tabular-nums">
+          <p className="text-2xl font-bold leading-none tracking-tight text-zinc-900 tabular-nums sm:text-3xl">
             {value}
           </p>
           <span className="text-xs font-normal leading-none text-zinc-500">contratos</span>
