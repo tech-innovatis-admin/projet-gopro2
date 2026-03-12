@@ -26,6 +26,7 @@ import {
   listBudgetItems,
   listBudgetTransfers,
   listGoals,
+  updateBudgetCategory,
   updateBudgetItem,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
@@ -93,6 +94,10 @@ interface MetaOption {
   titulo: string;
 }
 
+interface RubricaEditForm {
+  nome: string;
+}
+
 const PAGE_SIZE = 20;
 const MAX_PAGE_REQUESTS = 1000;
 
@@ -153,6 +158,8 @@ export default function RubricasPage() {
 
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [metas, setMetas] = useState<MetaOption[]>([]);
+  const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
+  const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ItemRubrica | null>(null);
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
@@ -496,9 +503,55 @@ export default function RubricasPage() {
     }
   };
 
+  const handleStartEditRubrica = (rubrica: Rubrica) => {
+    setEditingRubrica(rubrica.id);
+    setEditRubricaForm({ nome: rubrica.nome });
+    setEditingItem(null);
+    setEditForm(null);
+    setAddingToRubrica(null);
+  };
+
+  const handleSaveRubricaEdit = async (rubricaId: string) => {
+    if (!editRubricaForm?.nome.trim()) {
+      setActionError('Informe o nome da rubrica.');
+      return;
+    }
+
+    if (!isPersistedId(rubricaId)) {
+      setActionError('Rubrica invalida para atualizacao.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
+
+    try {
+      const actorUserId = await requireCurrentUserId();
+      await updateBudgetCategory(toPersistedId(rubricaId), {
+        name: editRubricaForm.nome.trim(),
+        updatedBy: actorUserId,
+      });
+
+      await loadData();
+      setEditingRubrica(null);
+      setEditRubricaForm(null);
+      showSavedMessage('Rubrica atualizada com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel atualizar a rubrica.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCancelAddRubrica = () => {
     setNewRubrica({ nome: '' });
     setIsAddingRubrica(false);
+  };
+
+  const handleCancelEditRubrica = () => {
+    setEditingRubrica(null);
+    setEditRubricaForm(null);
   };
 
   const handleRemoveRubrica = async (rubricaId: string) => {
@@ -729,54 +782,114 @@ export default function RubricasPage() {
         {rubricas.map((rubrica) => (
           <div key={rubrica.id} className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100">
-              <div
-                className="flex items-center gap-3 flex-1 cursor-pointer"
-                onClick={() => toggleExpand(rubrica.id)}
-              >
-                {rubrica.expanded ? (
-                  <ChevronDown className="w-5 h-5 text-gray-500" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-gray-500" />
-                )}
-                <div>
-                  <span className="font-mono text-sm text-gray-500 mr-2">[{rubrica.codigo}]</span>
-                  <span className="font-medium text-gray-900">{rubrica.nome}</span>
-                  <span className="ml-2 text-sm text-gray-500">
-                    ({rubrica.itens.length} {rubrica.itens.length === 1 ? 'item' : 'itens'})
-                  </span>
+              {editingRubrica === rubrica.id && editRubricaForm ? (
+                <div className="flex items-center gap-3 flex-1">
+                  {rubrica.expanded ? (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  )}
+                  <div className="flex-1 max-w-xl">
+                    <p className="font-mono text-sm text-gray-500 mb-1">[{rubrica.codigo}]</p>
+                    <input
+                      type="text"
+                      value={editRubricaForm.nome}
+                      onChange={(e) => setEditRubricaForm({ nome: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="Nome da rubrica"
+                      maxLength={100}
+                      autoFocus
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      {rubrica.itens.length} {rubrica.itens.length === 1 ? 'item cadastrado' : 'itens cadastrados'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="flex items-center gap-3 flex-1 cursor-pointer"
+                  onClick={() => toggleExpand(rubrica.id)}
+                >
+                  {rubrica.expanded ? (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-500" />
+                  )}
+                  <div>
+                    <span className="font-mono text-sm text-gray-500 mr-2">[{rubrica.codigo}]</span>
+                    <span className="font-medium text-gray-900">{rubrica.nome}</span>
+                    <span className="ml-2 text-sm text-gray-500">
+                      ({rubrica.itens.length} {rubrica.itens.length === 1 ? 'item' : 'itens'})
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-4">
                 <span className="font-semibold text-gray-700">
                   {formatCurrency(calcularTotalRubrica(rubrica))}
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAddingToRubrica(rubrica.id);
-                    setRubricas((current) =>
-                      current.map((item) =>
-                        item.id === rubrica.id ? { ...item, expanded: true } : item
-                      )
-                    );
-                  }}
-                  disabled={isSubmitting}
-                  className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Plus className="w-4 h-4" />
-                  Novo Item
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleRemoveRubrica(rubrica.id);
-                  }}
-                  disabled={isSubmitting}
-                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Remover rubrica"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {editingRubrica === rubrica.id ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void handleSaveRubricaEdit(rubrica.id)}
+                      disabled={isSubmitting || !editRubricaForm?.nome.trim()}
+                      className="flex items-center gap-1 px-3 py-1 bg-emerald-600 text-white text-sm rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Check className="w-4 h-4" />
+                      Salvar
+                    </button>
+                    <button
+                      onClick={handleCancelEditRubrica}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-1 px-3 py-1 bg-white text-gray-700 text-sm rounded-md border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAddingToRubrica(rubrica.id);
+                        setRubricas((current) =>
+                          current.map((item) =>
+                            item.id === rubrica.id ? { ...item, expanded: true } : item
+                          )
+                        );
+                      }}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-1 px-3 py-1 bg-[#004225] text-white text-sm rounded-md hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Novo Item
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEditRubrica(rubrica);
+                      }}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-1 px-3 py-1 bg-white text-gray-700 text-sm rounded-md border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Editar rubrica"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleRemoveRubrica(rubrica.id);
+                      }}
+                      disabled={isSubmitting}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Remover rubrica"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -796,7 +909,7 @@ export default function RubricasPage() {
                   >
                     <thead>
                       <tr className="border-b border-gray-200">
-                        <th className="text-left py-2 px-2 font-medium text-gray-600">Descricao</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-600">Descrição</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Qtd</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Meses</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Valor Unit.</th>
@@ -805,7 +918,7 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Meta</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Acoes</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
