@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavBar } from "@/components/ui/NavBar";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +92,22 @@ export default function AdminConvitesPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runningActionId, setRunningActionId] = useState<number | null>(null);
+
+  const resolvedInviteLink = useMemo(() => {
+    if (!inviteLink) {
+      return null;
+    }
+
+    if (typeof window === "undefined") {
+      return inviteLink;
+    }
+
+    try {
+      return new URL(inviteLink, window.location.origin).toString();
+    } catch {
+      return inviteLink;
+    }
+  }, [inviteLink]);
 
   const loadInvites = useCallback(async () => {
     setLoadingInvites(true);
@@ -216,10 +233,37 @@ export default function AdminConvitesPage() {
   }
 
   async function handleCopyLink() {
-    if (!inviteLink) {
+    if (!resolvedInviteLink) {
       return;
     }
-    await navigator.clipboard.writeText(inviteLink);
+
+    setError(null);
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(resolvedInviteLink);
+      } else {
+        throw new Error("Clipboard API indisponivel.");
+      }
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = resolvedInviteLink;
+      textArea.setAttribute("readonly", "");
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textArea);
+
+      if (!copied) {
+        setError("Nao foi possivel copiar o link automaticamente.");
+        return;
+      }
+    }
+
     setFeedback("Link copiado para a area de transferencia.");
   }
 
@@ -282,14 +326,17 @@ export default function AdminConvitesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="inviteExpiresAt">Expira em (opcional)</Label>
-                  <Input
-                    id="inviteExpiresAt"
-                    type="datetime-local"
+                  <Label>Expira em (opcional)</Label>
+                  <DateTimePicker
                     value={expiresAt}
-                    onChange={(event) => setExpiresAt(event.target.value)}
+                    onChange={setExpiresAt}
+                    placeholder="Selecione data e hora"
                     disabled={creating}
+                    defaultTime="23:59"
                   />
+                  <p className="text-xs text-zinc-500">
+                    Se informar apenas a data, o vencimento sera definido para 23:59.
+                  </p>
                 </div>
 
                 <div className="md:col-span-4">
@@ -300,11 +347,11 @@ export default function AdminConvitesPage() {
               </form>
             </section>
 
-            {inviteLink && (
+            {resolvedInviteLink && (
               <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
                 <p className="mb-2 text-sm font-medium text-zinc-800">Link de convite</p>
                 <div className="flex flex-col gap-2 md:flex-row">
-                  <Input value={inviteLink} readOnly />
+                  <Input value={resolvedInviteLink} readOnly />
                   <Button type="button" variant="outline" onClick={handleCopyLink}>
                     Copiar link
                   </Button>
