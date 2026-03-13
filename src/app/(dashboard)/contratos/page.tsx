@@ -181,6 +181,10 @@ type SortConfig = {
   direction: "asc" | "desc";
 };
 
+type FilterOptions = {
+  ignoreStatus?: boolean;
+};
+
 // Segmentos alinhados com o formulario de cadastro
 const segmentoOptions = [
   "Educacao",
@@ -291,6 +295,78 @@ function mapProjectToContrato(
     localidade: normalizeLocation(project.city, project.state, project.executionLocation),
     scope: project.object,
   };
+}
+
+function matchesContratoFilters(
+  contrato: Contrato,
+  filters: Filters,
+  options: FilterOptions = {}
+): boolean {
+  const { ignoreStatus = false } = options;
+
+  if (filters.govIf !== "TODOS" && contrato.govIf !== filters.govIf) {
+    return false;
+  }
+
+  if (!ignoreStatus && filters.status !== "TODOS" && contrato.status !== filters.status) {
+    return false;
+  }
+
+  if (filters.parceiroPrimario && contrato.parceiroPrimario !== filters.parceiroPrimario) {
+    return false;
+  }
+
+  if (filters.clientePrimario && contrato.clientePrimario !== filters.clientePrimario) {
+    return false;
+  }
+
+  if (filters.segmento && !contrato.segmentos.includes(filters.segmento)) {
+    return false;
+  }
+
+  if (filters.tipo !== "TODOS" && contrato.tipo !== filters.tipo) {
+    return false;
+  }
+
+  if (filters.localidade && contrato.localidade !== filters.localidade) {
+    return false;
+  }
+
+  if (filters.coordenador && contrato.coordenador !== filters.coordenador) {
+    return false;
+  }
+
+  const valorMinimoReais = filters.valorMinimo / 100;
+  const valorMaximoReais = filters.valorMaximo / 100;
+  if (valorMinimoReais > 0 && contrato.valorTotal < valorMinimoReais) {
+    return false;
+  }
+  if (valorMaximoReais > 0 && contrato.valorTotal > valorMaximoReais) {
+    return false;
+  }
+
+  if (filters.periodoInicio && new Date(contrato.dataInicio) < new Date(filters.periodoInicio)) {
+    return false;
+  }
+
+  if (
+    filters.periodoFim &&
+    contrato.dataTermino &&
+    new Date(contrato.dataTermino) > new Date(filters.periodoFim)
+  ) {
+    return false;
+  }
+
+  if (filters.q) {
+    const haystack =
+      `${contrato.codigo} ${contrato.nome} ${contrato.clientePrimario} ${contrato.coordenador} ${contrato.parceiroPrimario} ${contrato.scope}`.toLowerCase();
+
+    if (!haystack.includes(filters.q.toLowerCase())) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export default function ContratosPage() {
@@ -460,41 +536,14 @@ export default function ContratosPage() {
     void loadContratos();
   }, [loadContratos]);
 
+  const metricBase = useMemo(
+    () => contratos.filter((contrato) => matchesContratoFilters(contrato, filters, { ignoreStatus: true })),
+    [contratos, filters]
+  );
+
   // Filtragem e ordenacao
   const filtered = useMemo(() => {
-    let result = contratos
-      .filter((c) => (filters.govIf === "TODOS" ? true : c.govIf === filters.govIf))
-      .filter((c) => (filters.status === "TODOS" ? true : c.status === filters.status))
-      .filter((c) => (filters.parceiroPrimario ? c.parceiroPrimario === filters.parceiroPrimario : true))
-      .filter((c) => (filters.clientePrimario ? c.clientePrimario === filters.clientePrimario : true))
-      .filter((c) => (filters.segmento ? c.segmentos.includes(filters.segmento) : true))
-      .filter((c) => (filters.tipo === "TODOS" ? true : c.tipo === filters.tipo))
-      .filter((c) => (filters.localidade ? c.localidade === filters.localidade : true))
-      .filter((c) => (filters.coordenador ? c.coordenador === filters.coordenador : true))
-      .filter((c) => {
-        // Converter filtros de centavos para reais (MoneyInput trabalha com centavos)
-        const valorMinimoReais = filters.valorMinimo / 100;
-        const valorMaximoReais = filters.valorMaximo / 100;
-        
-        if (valorMinimoReais > 0 && c.valorTotal < valorMinimoReais) return false;
-        if (valorMaximoReais > 0 && c.valorTotal > valorMaximoReais) return false;
-        return true;
-      })
-      .filter((c) => {
-        if (!filters.periodoInicio) return true;
-        return new Date(c.dataInicio) >= new Date(filters.periodoInicio);
-      })
-      .filter((c) => {
-        if (!filters.periodoFim || !c.dataTermino) return true;
-        return new Date(c.dataTermino) <= new Date(filters.periodoFim);
-      })
-      .filter((c) =>
-        filters.q
-          ? `${c.codigo} ${c.nome} ${c.clientePrimario} ${c.coordenador} ${c.parceiroPrimario} ${c.scope}`
-              .toLowerCase()
-              .includes(filters.q.toLowerCase())
-          : true
-      );
+    let result = metricBase.filter((contrato) => matchesContratoFilters(contrato, filters));
 
     // Ordenacao
     if (sortConfig.key) {
@@ -510,30 +559,30 @@ export default function ContratosPage() {
     }
 
     return result;
-  }, [contratos, filters, sortConfig]);
+  }, [filters, metricBase, sortConfig]);
 
-  // Metricas (baseadas nos dados filtrados)
+  // Metricas baseadas no contexto atual, sem restringir pelo status ativo
   const counts = useMemo(() => {
-    const total = filtered.length;
-    const emExecucao = filtered.filter((c) => c.status === "EXECUCAO").length;
-    const concluidos = filtered.filter((c) => c.status === "FINALIZADO").length;
-    const suspensos = filtered.filter((c) => c.status === "SUSPENSO").length;
-    const preProjetos = filtered.filter((c) => c.status === "PRE_PROJETO").length;
-    const emPlanejamento = filtered.filter((c) => c.status === "PLANEJAMENTO").length;
-    const valorTotal = filtered.reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorEmExecucao = filtered
+    const total = metricBase.length;
+    const emExecucao = metricBase.filter((c) => c.status === "EXECUCAO").length;
+    const concluidos = metricBase.filter((c) => c.status === "FINALIZADO").length;
+    const suspensos = metricBase.filter((c) => c.status === "SUSPENSO").length;
+    const preProjetos = metricBase.filter((c) => c.status === "PRE_PROJETO").length;
+    const emPlanejamento = metricBase.filter((c) => c.status === "PLANEJAMENTO").length;
+    const valorTotal = metricBase.reduce((acc, c) => acc + c.valorTotal, 0);
+    const valorEmExecucao = metricBase
       .filter((c) => c.status === "EXECUCAO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorConcluidos = filtered
+    const valorConcluidos = metricBase
       .filter((c) => c.status === "FINALIZADO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorSuspensos = filtered
+    const valorSuspensos = metricBase
       .filter((c) => c.status === "SUSPENSO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorPreProjetos = filtered
+    const valorPreProjetos = metricBase
       .filter((c) => c.status === "PRE_PROJETO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
-    const valorPlanejamento = filtered
+    const valorPlanejamento = metricBase
       .filter((c) => c.status === "PLANEJAMENTO")
       .reduce((acc, c) => acc + c.valorTotal, 0);
     return {
@@ -550,7 +599,7 @@ export default function ContratosPage() {
       valorPreProjetos,
       valorPlanejamento,
     };
-  }, [filtered]);
+  }, [metricBase]);
 
   // Paginacao
   const paginatedData = useMemo(() => {
@@ -566,6 +615,14 @@ export default function ContratosPage() {
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
     }));
+  };
+
+  const handleMetricCardFilter = (status: Filters["status"]) => {
+    setFilters((previous) => ({
+      ...previous,
+      status: status === "TODOS" || previous.status === status ? "TODOS" : status,
+    }));
+    setPage(1);
   };
 
   const clearFilters = () => {
@@ -698,6 +755,7 @@ export default function ContratosPage() {
             icon={Clock}
             tone="PRE_PROJETO"
             subtitle={`R$ ${counts.valorPreProjetos.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("PRE_PROJETO")}
           />
           <MetricCard
             title="Planejamento"
@@ -705,6 +763,7 @@ export default function ContratosPage() {
             icon={Clock}
             tone="PLANEJAMENTO"
             subtitle={`R$ ${counts.valorPlanejamento.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("PLANEJAMENTO")}
           />
           <MetricCard
             title="Execução"
@@ -712,6 +771,7 @@ export default function ContratosPage() {
             icon={TrendingUp}
             tone="EXECUCAO"
             subtitle={`R$ ${counts.valorEmExecucao.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("EXECUCAO")}
           />
           <MetricCard
             title="Concluídos"
@@ -719,6 +779,7 @@ export default function ContratosPage() {
             icon={CheckCircle}
             tone="FINALIZADO"
             subtitle={`R$ ${counts.valorConcluidos.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("FINALIZADO")}
           />
           <MetricCard
             title="Suspensos"
@@ -726,6 +787,7 @@ export default function ContratosPage() {
             icon={PauseCircle}
             tone="SUSPENSO"
             subtitle={`R$ ${counts.valorSuspensos.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("SUSPENSO")}
           />
           <MetricCard
             title="Total de Contratos"
@@ -733,6 +795,7 @@ export default function ContratosPage() {
             icon={FileText}
             tone="TOTAL"
             subtitle={`R$ ${counts.valorTotal.toLocaleString("pt-BR")}`}
+            onClick={() => handleMetricCardFilter("TODOS")}
           />
         </div>
 
@@ -1209,19 +1272,23 @@ function MetricCard({
   icon: Icon,
   tone,
   subtitle,
+  onClick,
 }: {
   title: string;
   value: number | string;
   icon: React.ComponentType<{ className?: string }>;
   tone: MetricCardToneKey;
   subtitle?: string;
+  onClick?: () => void;
 }) {
   const toneStyle = CARD_TONE_BY_STATUS[tone];
 
   return (
-    <article
-      className={`group relative h-full overflow-hidden rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 lg:p-5 ${toneStyle.border}`}
+    <button
+      type="button"
+      onClick={onClick}
       aria-label={`${title}: ${value} contratos`}
+      className={`group relative h-full w-full overflow-hidden rounded-xl border bg-white p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none sm:p-4 lg:p-5 ${toneStyle.border}`}
     >
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${toneStyle.accent}`} />
 
@@ -1246,7 +1313,7 @@ function MetricCard({
           </p>
         )}
       </div>
-    </article>
+    </button>
   );
 }
 
