@@ -21,9 +21,11 @@ type SummaryCard = {
 };
 
 type CardTone = {
+  accent: string;
   iconBg: string;
   iconColor: string;
   valueColor: string;
+  border: string;
 };
 
 const statusLabels: Record<ProjectStatusEnum, string> = {
@@ -40,6 +42,11 @@ const govIfFilterOptions: Array<{ label: string; value: ProjectGovIfEnum | null 
   { label: "IF", value: "IF" },
   { label: "Gov", value: "GOV" },
 ];
+const executionFilterOptions: Array<{ label: string; value: boolean | null }> = [
+  { label: "Todos", value: null },
+  { label: "Innovatis", value: true },
+  { label: "Parceiro", value: false },
+];
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -52,41 +59,55 @@ const formatNumber = (value: number) =>
 
 const cardToneByStatus: Record<ProjectStatusEnum | "TOTAL", CardTone> = {
   PRE_PROJETO: {
+    accent: "bg-sky-500",
     iconBg: "bg-sky-100",
     iconColor: "text-sky-700",
     valueColor: "text-sky-800",
+    border: "border-sky-100 hover:border-sky-200",
   },
   PLANEJAMENTO: {
+    accent: "bg-amber-500",
     iconBg: "bg-amber-100",
     iconColor: "text-amber-700",
     valueColor: "text-amber-800",
+    border: "border-amber-100 hover:border-amber-200",
   },
   EXECUCAO: {
+    accent: "bg-orange-500",
     iconBg: "bg-orange-100",
     iconColor: "text-orange-700",
     valueColor: "text-orange-800",
+    border: "border-orange-100 hover:border-orange-200",
   },
   FINALIZADO: {
+    accent: "bg-emerald-500",
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-700",
     valueColor: "text-emerald-800",
+    border: "border-emerald-100 hover:border-emerald-200",
   },
   SUSPENSO: {
+    accent: "bg-rose-500",
     iconBg: "bg-rose-100",
     iconColor: "text-rose-700",
     valueColor: "text-rose-800",
+    border: "border-rose-100 hover:border-rose-200",
   },
   TOTAL: {
+    accent: "bg-zinc-500",
     iconBg: "bg-zinc-100",
     iconColor: "text-zinc-700",
     valueColor: "text-zinc-800",
+    border: "border-zinc-200 hover:border-zinc-300",
   },
 };
 
 const neutralTone: CardTone = {
+  accent: "bg-zinc-400",
   iconBg: "bg-zinc-100",
   iconColor: "text-zinc-500",
   valueColor: "text-zinc-600",
+  border: "border-zinc-200 hover:border-zinc-300",
 };
 
 function getErrorMessage(error: unknown): string {
@@ -107,6 +128,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedGovIf, setSelectedGovIf] = useState<ProjectGovIfEnum | null>(null);
+  const [selectedExecution, setSelectedExecution] = useState<boolean | null>(null);
   const [yearOptions, setYearOptions] = useState<number[]>([]);
 
   const loadDashboard = useCallback(async () => {
@@ -116,6 +138,7 @@ export default function HomePage() {
       const response = await getProjectDashboard({
         year: selectedYear ?? undefined,
         projectGovIf: selectedGovIf ?? undefined,
+        executedByInnovatis: selectedExecution ?? undefined,
       });
       setDashboard(response);
       const availableYears = (response.availableYears ?? [])
@@ -131,19 +154,23 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, selectedGovIf]);
+  }, [selectedExecution, selectedGovIf, selectedYear]);
 
   const loadExpiringContracts = useCallback(async () => {
     setExpiringLoading(true);
     try {
-      const response = await getProjectDashboard();
-      setExpiringContracts(response.expiringContracts ?? null);
+      const filteredResponse = await getProjectDashboard({
+        year: selectedYear ?? undefined,
+        projectGovIf: selectedGovIf ?? undefined,
+        executedByInnovatis: selectedExecution ?? undefined,
+      });
+      setExpiringContracts(filteredResponse.expiringContracts ?? null);
     } catch {
       setExpiringContracts(null);
     } finally {
       setExpiringLoading(false);
     }
-  }, []);
+  }, [selectedExecution, selectedGovIf, selectedYear]);
 
   useEffect(() => {
     void loadDashboard();
@@ -303,7 +330,7 @@ export default function HomePage() {
           )}
 
           <div
-            className="grid grid-cols-6 auto-rows-fr gap-4 lg:gap-5"
+            className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-6 lg:gap-4"
             aria-busy={loading}
           >
             {cards.map((card) => {
@@ -311,36 +338,40 @@ export default function HomePage() {
               const tone = isEmpty ? neutralTone : cardToneByStatus[card.key];
               return (
                 <article
-                  key={card.title}
+                  key={card.key}
                   aria-labelledby={`summary-card-title-${card.key}`}
-                  className="h-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  className={`group relative h-full overflow-hidden rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 lg:p-5 ${tone.border}`}
                 >
+                  <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${tone.accent}`} />
                   <div className="flex h-full flex-col">
-                    <header className="flex items-center gap-3">
+                    <header className="flex items-start gap-3">
                       <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone.iconBg}`}>
                         <card.icon className={`h-5 w-5 ${tone.iconColor}`} />
                       </span>
-                      <h2 id={`summary-card-title-${card.key}`} className="text-sm font-medium leading-5 text-zinc-700">
+                      <h2
+                        id={`summary-card-title-${card.key}`}
+                        className="line-clamp-2 min-h-10 text-sm font-medium leading-5 text-zinc-700"
+                      >
                         {card.title}
                       </h2>
                     </header>
 
-                    <div className="mt-4 flex items-baseline gap-2">
+                    <div className="mt-4 flex flex-wrap items-end gap-2">
                       {loading ? (
-                        <span className="inline-block h-10 w-20 animate-pulse rounded bg-zinc-200" aria-hidden />
+                        <span className="inline-block h-9 w-16 animate-pulse rounded bg-zinc-200 sm:h-10 sm:w-20" aria-hidden />
                       ) : (
-                        <span className={`text-3xl font-bold leading-none tabular-nums tracking-tight ${isEmpty ? "text-zinc-500" : "text-zinc-900"}`}>
+                        <span className={`text-2xl font-bold leading-none tabular-nums tracking-tight sm:text-3xl ${isEmpty ? "text-zinc-500" : "text-zinc-900"}`}>
                           {formatNumber(card.contracts)}
                         </span>
                       )}
-                      <span className="text-xs font-normal leading-none text-zinc-500">
+                      <span className="pb-0.5 text-xs font-normal leading-none text-zinc-500">
                         contratos
                       </span>
                     </div>
 
-                    <p className={`mt-3 text-sm font-semibold leading-tight break-words ${tone.valueColor}`}>
+                    <p className={`mt-3 text-sm font-semibold leading-tight break-words sm:text-base ${tone.valueColor}`}>
                       {loading ? (
-                        <span className="inline-block h-5 w-36 animate-pulse rounded bg-zinc-200" aria-hidden />
+                        <span className="inline-block h-5 w-28 animate-pulse rounded bg-zinc-200 sm:w-36" aria-hidden />
                       ) : (
                         formatCurrency(card.totalValue)
                       )}
@@ -388,6 +419,29 @@ export default function HomePage() {
                       type="button"
                       aria-pressed={isActive}
                       onClick={() => setSelectedGovIf(option.value)}
+                      className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#004225] text-white"
+                          : "text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-zinc-600">Execução</p>
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+                {executionFilterOptions.map((option) => {
+                  const isActive = selectedExecution === option.value;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedExecution(option.value)}
                       className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                         isActive
                           ? "bg-[#004225] text-white"

@@ -7,6 +7,11 @@ node_modules
 .next
 out
 coverage
+.turbo
+.vercel
+.cache
+next-build
+dist
 
 npm-debug.log*
 yarn-debug.log*
@@ -23,3 +28,5 @@ docker-compose*.yml
 docker-compose*.yaml
 
 *.tsbuildinfo
+*.dump
+.eslintcache

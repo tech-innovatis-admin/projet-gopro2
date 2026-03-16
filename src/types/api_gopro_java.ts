@@ -83,6 +83,7 @@ export interface Project {
   endDate?: string;
   openingDate?: string;
   executionLocation?: string;
+  executedByInnovatis?: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: number;

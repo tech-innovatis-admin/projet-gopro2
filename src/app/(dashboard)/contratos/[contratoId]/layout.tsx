@@ -107,6 +107,7 @@ const EMPTY_CONTRATO: ContratoView = {
   orgaoFinanciador: NO_INFO_LABEL,
   segmentos: [],
   localidade: NO_INFO_LABEL,
+  executedByInnovatis: null,
   dataInicio: "",
   dataFim: "",
   valorTotal: 0,
@@ -170,6 +171,7 @@ function mapProjectToContrato(
     valorExecutado: normalizeMoneyValue(project.totalReceived),
     descricao: project.object || "",
     unidade: project.projectGovIf ?? undefined,
+    executedByInnovatis: project.executedByInnovatis === true,
   };
 }
 
@@ -245,6 +247,7 @@ export default function ContratoLayout({
   const [loadContratoError, setLoadContratoError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [showEditPopup, setShowEditPopup] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -495,13 +498,13 @@ export default function ContratoLayout({
   };
 
   const currentContrato = isEditing ? editContrato : contrato;
+  const editPopupUrl = useMemo(
+    () => `/contratos/novo-contrato?popup=1&editContractId=${contratoId}`,
+    [contratoId]
+  );
   const currentProjectStatus = (
     isEditing ? editContrato.status : contratoBase.status
   ) as ProjectStatusEnum;
-  const percentualExecutado =
-    currentContrato.valorTotal > 0
-      ? Math.round(((currentContrato.valorExecutado ?? 0) / currentContrato.valorTotal) * 100)
-      : 0;
   // const saldoTotal = (currentContrato.valorTotal || 0) - (currentContrato.valorExecutado || 0);
   const canEditContrato = !isLoadingContrato && !loadContratoError && !!projectSnapshot;
 
@@ -517,10 +520,9 @@ export default function ContratoLayout({
   const handleEdit = useCallback(() => {
     setSaveError(null);
     setSavedMessage(false);
-    setEditContrato({ ...contratoBase });
-    setEditRelations(toEditRelations(projectSnapshot));
-    setIsEditing(true);
-  }, [contratoBase, projectSnapshot]);
+    setIsEditing(false);
+    setShowEditPopup(true);
+  }, []);
 
   useEffect(() => {
     if (!autoEditRequested || autoEditAppliedRef.current) {
@@ -532,6 +534,48 @@ export default function ContratoLayout({
       autoEditAppliedRef.current = true;
     }
   }, [autoEditRequested, canEditContrato, isEditing, handleEdit]);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      const payload = event.data as
+        | {
+            source?: string;
+            type?: string;
+            contractId?: string | number;
+          }
+        | undefined;
+
+      if (!payload || payload.source !== "contract-form") {
+        return;
+      }
+
+      if (payload.type === "contract-edit-closed") {
+        setShowEditPopup(false);
+        return;
+      }
+
+      if (
+        payload.type === "contract-edit-saved" &&
+        String(payload.contractId ?? "") === String(contratoId)
+      ) {
+        setShowEditPopup(false);
+        setSaveError(null);
+        void loadContrato().then(() => {
+          setSavedMessage(true);
+          setTimeout(() => setSavedMessage(false), 3000);
+        });
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [contratoId, loadContrato]);
 
   const handleCancel = () => {
     setSaveError(null);
@@ -749,6 +793,11 @@ export default function ContratoLayout({
                       >
                         {String(currentContrato.unidade).toUpperCase()}
                       </span>
+                    )}
+                    {!isLoadingContrato && !loadContratoError && (
+                      <ExecutionModeBadge
+                        executedByInnovatis={currentContrato.executedByInnovatis === true}
+                      />
                     )}
                   </div>
                 )}
@@ -1374,6 +1423,41 @@ export default function ContratoLayout({
           {/* Conteúdo da aba */}
           <div className="p-6">{children}</div>
         </div>
+
+        {showEditPopup && (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+            onClick={() => setShowEditPopup(false)}
+          >
+            <div
+              className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Editar Contrato</h2>
+                  <p className="text-sm text-gray-500">
+                    Atualize as informacoes principais usando o mesmo formulario de cadastro.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPopup(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                  aria-label="Fechar edicao do contrato"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <iframe
+                key={editPopupUrl}
+                src={editPopupUrl}
+                title={`Editar contrato ${contratoId}`}
+                className="h-full w-full border-0 bg-white"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1394,6 +1478,24 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}>
       {label}
+    </span>
+  );
+}
+
+function ExecutionModeBadge({
+  executedByInnovatis,
+}: {
+  executedByInnovatis: boolean;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${
+        executedByInnovatis
+          ? "border-violet-200 bg-violet-50 text-violet-700"
+          : "border-orange-200 bg-orange-50 text-orange-700"
+      }`}
+    >
+      {executedByInnovatis ? "INNOVATIS" : "PARCEIRO"}
     </span>
   );
 }

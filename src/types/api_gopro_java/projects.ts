@@ -51,6 +51,7 @@ export interface Project extends AuditFields {
   endDate?: string;
   openingDate?: string;
   executionLocation?: string;
+  executedByInnovatis?: boolean;
   totalReceived: number;
   totalExpenses: number;
   saldo: number;
@@ -78,6 +79,7 @@ export interface CreateProject {
   endDate?: string;
   openingDate?: string;
   executionLocation?: string;
+  executedByInnovatis?: boolean;
 }
 
 export interface UpdateProject extends Partial<CreateProject> {}

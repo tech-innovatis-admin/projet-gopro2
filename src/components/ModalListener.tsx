@@ -108,6 +108,7 @@ export function ModalListener() {
       city,
       state,
       executionLocation: data.localidade.trim() || undefined,
+      executedByInnovatis: false,
     };
 
     const createdProject = await createProject(payload);

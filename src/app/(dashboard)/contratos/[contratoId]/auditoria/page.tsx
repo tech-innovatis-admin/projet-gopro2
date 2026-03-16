@@ -357,12 +357,13 @@ export default function ContractAuditPage() {
       return;
     }
 
+    const resolvedContractId = contractId;
     let cancelled = false;
 
     async function loadContractName() {
       setLoadingContractName(true);
       try {
-        const project = await getProjectById(contractId);
+        const project = await getProjectById(resolvedContractId);
         if (!cancelled) {
           setContractName(project.name?.trim() || null);
         }
@@ -389,6 +390,7 @@ export default function ContractAuditPage() {
       return;
     }
 
+    const resolvedContractId = contractId;
     let cancelled = false;
 
     async function loadBudgetCategories() {
@@ -398,7 +400,7 @@ export default function ContractAuditPage() {
 
       try {
         while (true) {
-          const response = await listBudgetCategories({ projectId: contractId, page, size });
+          const response = await listBudgetCategories({ projectId: resolvedContractId, page, size });
 
           for (const category of response.content) {
             labels[category.id] = buildBudgetCategoryReferenceLabel(category);
@@ -434,6 +436,7 @@ export default function ContractAuditPage() {
       return;
     }
 
+    const resolvedContractId = contractId;
     let cancelled = false;
 
     async function loadBudgetItems() {
@@ -444,7 +447,7 @@ export default function ContractAuditPage() {
 
       try {
         while (true) {
-          const response = await listBudgetItems({ projectId: contractId, page, size });
+          const response = await listBudgetItems({ projectId: resolvedContractId, page, size });
 
           for (const item of response.content) {
             labels[item.id] = buildBudgetItemReferenceLabel(item);

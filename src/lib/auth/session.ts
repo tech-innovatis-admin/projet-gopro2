@@ -14,6 +14,45 @@ interface AuthMeResponse {
   user?: SessionUser;
 }
 
+let redirectingToLogin = false;
+
+function getCurrentPathWithQuery(): string {
+  if (typeof window === "undefined") {
+    return "/";
+  }
+
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+export async function redirectToLogin(nextPath?: string | null): Promise<void> {
+  if (typeof window === "undefined" || redirectingToLogin) {
+    return;
+  }
+
+  const currentPath = nextPath || getCurrentPathWithQuery();
+  if (currentPath === "/login" || currentPath.startsWith("/login?")) {
+    return;
+  }
+
+  redirectingToLogin = true;
+
+  try {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // Ignore logout cleanup failures and continue redirecting.
+  }
+
+  const loginUrl = new URL("/login", window.location.origin);
+  if (currentPath.startsWith("/")) {
+    loginUrl.searchParams.set("next", currentPath);
+  }
+
+  window.location.replace(loginUrl.toString());
+}
+
 export async function fetchCurrentUser(): Promise<SessionUser | null> {
   const response = await fetch("/api/auth/me", {
     method: "GET",
@@ -21,11 +60,15 @@ export async function fetchCurrentUser(): Promise<SessionUser | null> {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      await redirectToLogin();
+    }
     return null;
   }
 
   const payload = (await response.json()) as AuthMeResponse;
   if (!payload.isAuthenticated || !payload.user) {
+    await redirectToLogin();
     return null;
   }
 

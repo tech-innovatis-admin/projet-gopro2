@@ -521,7 +521,8 @@ export function buildBudgetCategoryReferenceLabel(
 }
 
 export function buildBudgetItemReferencePresentation(
-  item: Pick<BudgetItemResponseDTO, "id" | "categoryId" | "description" | "plannedAmount">,
+  item: Pick<BudgetItemResponseDTO, "id" | "description" | "plannedAmount"> &
+    Partial<Pick<BudgetItemResponseDTO, "categoryId">>,
   categoryLabel: string | null = null
 ): BudgetItemReferencePresentation {
   const description = item.description?.trim() || `Item #${item.id}`;

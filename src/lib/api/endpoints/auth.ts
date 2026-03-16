@@ -126,6 +126,24 @@ export function listAuditLogs(params: ListAuditParams = {}) {
   });
 }
 
+export function listContractAuditLogs(params: ListAuditParams = {}) {
+  return http.get<PageResponseDTO<AuditLogResponseDTO>>('/audit-log', {
+    query: {
+      scope: params.scope,
+      action: params.action,
+      entityType: params.entityType,
+      actorUserId: params.actorUserId,
+      actorName: params.actorName,
+      search: params.search,
+      contractId: params.contractId,
+      from: params.from,
+      to: params.to,
+      page: params.page ?? 0,
+      size: params.size ?? 10,
+    },
+  });
+}
+
 export function listMyAuditLogs(params: ListMyAuditParams = {}) {
   return http.get<PageResponseDTO<AuditLogResponseDTO>>('/auth/me/audit', {
     query: {

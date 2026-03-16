@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   FileText,
@@ -25,8 +25,10 @@ import {
   Eye,
 } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { Label } from "@/components/ui/label";
 import { ProjectCreatedModal } from "./_components/ProjectCreatedModal";
 import {
   createPartner,
@@ -38,10 +40,12 @@ import {
   createPhase,
   createProject,
   createStage,
+  getProjectById,
   listPartners,
   listPeople,
   listAllPublicAgencies,
   listAllSecretaries,
+  updateProject,
   uploadDocument,
 } from "@/src/lib/api/endpoints";
 import {
@@ -56,8 +60,10 @@ import {
   type PublicAgencyTypeEnum,
   type ProjectGovIfEnum,
   type ProjectRequestDTO,
+  type ProjectResponseDTO,
   type ProjectStatusEnum,
   type ProjectTypeEnum,
+  type ProjectUpdateDTO,
   type SecretaryRequestDTO,
   type StageRequestDTO,
   type StatusDisbursementScheduleEnum,
@@ -127,6 +133,7 @@ type NovoContratoForm = {
   coordenador: string;
   parceiroId: string;
   parceiroSecundarioId: string;
+  executedByInnovatis: boolean;
   clientePrimarioId: string;
   clienteSecundarioId: string;
   segmentos: string[];
@@ -280,6 +287,7 @@ const initialFormState: NovoContratoForm = {
   coordenador: "",
   parceiroId: "",
   parceiroSecundarioId: "",
+  executedByInnovatis: false,
   clientePrimarioId: "",
   clienteSecundarioId: "",
   segmentos: [],
@@ -346,6 +354,81 @@ const initialSecretaryCreateFormState: SecretaryCreateForm = {
 };
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
+
+function normalizeSegments(value: string | null): string[] {
+  if (!value || !value.trim()) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function splitExecutionLocation(
+  executionLocation: string | null
+): { city: string; state: string } {
+  if (!executionLocation) {
+    return { city: "", state: "" };
+  }
+
+  const parts = executionLocation
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length < 2) {
+    return { city: executionLocation.trim(), state: "" };
+  }
+
+  return {
+    city: parts.slice(0, -1).join(" - "),
+    state: parts[parts.length - 1].toUpperCase(),
+  };
+}
+
+function formatCurrencyInputValue(value: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function mapProjectToForm(project: ProjectResponseDTO): NovoContratoForm {
+  const fallbackLocation = splitExecutionLocation(project.executionLocation);
+
+  return {
+    ...initialFormState,
+    titulo: project.name ?? "",
+    govIf: project.projectGovIf ?? "",
+    status: project.projectStatus ?? "",
+    coordenador: project.cordinatorId ? String(project.cordinatorId) : "",
+    parceiroId: project.primaryPartnerId ? String(project.primaryPartnerId) : "",
+    parceiroSecundarioId: project.secundaryPartnerId
+      ? String(project.secundaryPartnerId)
+      : "",
+    executedByInnovatis: project.executedByInnovatis === true,
+    clientePrimarioId: project.primaryClientId ? String(project.primaryClientId) : "",
+    clienteSecundarioId: project.secundaryClientId
+      ? String(project.secundaryClientId)
+      : "",
+    segmentos: normalizeSegments(project.areaSegmento),
+    tipo: project.projectType ?? "",
+    dataInicio: project.startDate ?? "",
+    dataFim: project.endDate ?? "",
+    dataInicioEfetivo: project.openingDate ?? "",
+    dataFimEfetivo: project.closingDate ?? "",
+    uf: (project.state ?? fallbackLocation.state ?? "").toUpperCase(),
+    cidade: project.city ?? fallbackLocation.city ?? "",
+    scope: project.object ?? "",
+    contract_value: formatCurrencyInputValue(project.contractValue),
+  };
+}
 
 const formatCpfInput = (value: string) => {
   const digits = onlyDigits(value).slice(0, 11);
@@ -414,11 +497,21 @@ async function fetchCitiesByState(uf: string) {
     }));
 }
 
-export default function NovoContratoPage() {
+function NovoContratoPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isPopupMode = searchParams.get("popup") === "1";
+  const editContractId = searchParams.get("editContractId");
+  const isEditMode = Boolean(editContractId);
+  const hideAdvancedSections = isPopupMode && isEditMode;
+  const pageTitle = isEditMode ? "Editar Contrato" : "Novo Contrato";
+  const pageDescription = isEditMode
+    ? "Atualize as informacoes principais do contrato."
+    : "Preencha as informacoes do contrato";
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingEditProject, setIsLoadingEditProject] = useState(false);
   const [, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
   const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
   const [cidadeOptions, setCidadeOptions] = useState<DropdownOption[]>([]);
@@ -460,6 +553,9 @@ export default function NovoContratoPage() {
     initialPartnerCreateFormState
   );
   const [partnerFormError, setPartnerFormError] = useState<string | null>(null);
+  const [partnerCityOptions, setPartnerCityOptions] = useState<DropdownOption[]>([]);
+  const [isPartnerCityLoading, setIsPartnerCityLoading] = useState(false);
+  const [partnerCityLookupError, setPartnerCityLookupError] = useState<string | null>(null);
   const [showClientModal, setShowClientModal] = useState(false);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [clientForm, setClientForm] = useState<ClientCreateForm>(initialClientCreateFormState);
@@ -492,10 +588,10 @@ export default function NovoContratoPage() {
 
     try {
       const [partnersPage, publicAgencies, secretaries, peoplePage] = await Promise.all([
-        listPartners({ page: 0, size: 20 }),
+        listPartners({ page: 0, size: 100 }),
         listAllPublicAgencies(100),
         listAllSecretaries(100),
-        listPeople({ page: 0, size: 20 }),
+        listPeople({ page: 0, size: 100 }),
       ]);
 
       setOrganizacoesParceiras(
@@ -568,6 +664,8 @@ export default function NovoContratoPage() {
     () => coordinatorCityOptions,
     [coordinatorCityOptions]
   );
+  const partnerUfDropdownOptions = useMemo(() => ufOptions, [ufOptions]);
+  const partnerCityDropdownOptions = useMemo(() => partnerCityOptions, [partnerCityOptions]);
 
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => 
     tipoOptions.map(opt => ({ value: opt.value, label: opt.label })),
@@ -640,6 +738,64 @@ export default function NovoContratoPage() {
   useEffect(() => {
     void loadOrganizations();
   }, [loadOrganizations]);
+
+  const loadEditProject = useCallback(async (signal?: AbortSignal) => {
+    if (!isEditMode || !editContractId) {
+      return;
+    }
+
+    setIsLoadingEditProject(true);
+    setLoadError(null);
+    setSubmitError(null);
+
+    try {
+      const project = await getProjectById(editContractId);
+      if (signal?.aborted) {
+        return;
+      }
+      setForm(mapProjectToForm(project));
+      setErrors({});
+      setTouched(new Set());
+      setShowMetasSection(false);
+      setExpandedMetas(new Set());
+      setExpandedEtapas(new Set());
+      setShowParcelasSection(false);
+      setIsAddingParcela(false);
+      setNewParcela({
+        dataPrevista: "",
+        valorPrevisto: 0,
+        status: "PREVISTO",
+        observacao: "",
+      });
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      const message =
+        error instanceof HttpError
+          ? error.message
+          : "Nao foi possivel carregar os dados atuais do contrato.";
+      setLoadError(message);
+    } finally {
+      if (signal?.aborted) {
+        return;
+      }
+      setIsLoadingEditProject(false);
+    }
+  }, [editContractId, isEditMode]);
+
+  useEffect(() => {
+    if (!isEditMode || !editContractId) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadEditProject(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [editContractId, isEditMode, loadEditProject]);
 
   useEffect(() => {
     let isMounted = true;
@@ -732,10 +888,43 @@ export default function NovoContratoPage() {
     };
   }, [coordinatorForm.state]);
 
+  useEffect(() => {
+    const selectedUf = partnerForm.state.trim().toUpperCase();
+    if (!selectedUf) {
+      setPartnerCityOptions([]);
+      setPartnerCityLookupError(null);
+      setIsPartnerCityLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsPartnerCityLoading(true);
+    setPartnerCityLookupError(null);
+
+    void fetchCitiesByState(selectedUf)
+      .then((options) => {
+        if (!isMounted) return;
+        setPartnerCityOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setPartnerCityOptions([]);
+        setPartnerCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsPartnerCityLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [partnerForm.state]);
+
   // Validation
   const validateField = (
     name: keyof NovoContratoForm,
-    value: string | string[] | Meta[] | ParcelaDesembolso[]
+    value: string | boolean | string[] | Meta[] | ParcelaDesembolso[]
   ): string => {
     switch (name) {
       case "titulo":
@@ -759,6 +948,8 @@ export default function NovoContratoPage() {
         return "";
       case "parceiroSecundarioId":
         // Opcional, sem validacao obrigatoria
+        return "";
+      case "executedByInnovatis":
         return "";
       case "clientePrimarioId":
         if (typeof value !== "string" || !value.trim()) return "Selecione um cliente primario";
@@ -989,6 +1180,15 @@ export default function NovoContratoPage() {
     }
   };
 
+  const handleExecutionModeChange = (checked: boolean) => {
+    setForm((prev) => ({ ...prev, executedByInnovatis: checked }));
+
+    const error = validateField("executedByInnovatis", checked);
+    setErrors((prev) => ({ ...prev, executedByInnovatis: error || undefined }));
+
+    setTouched((prev) => new Set(prev).add("executedByInnovatis"));
+  };
+
   const handleSegmentToggle = (segmento: string) => {
     setForm((prev) => {
       const exists = prev.segmentos.includes(segmento);
@@ -1021,12 +1221,18 @@ export default function NovoContratoPage() {
     setShowPartnerModal(false);
     setPartnerForm(initialPartnerCreateFormState);
     setPartnerFormError(null);
+    setPartnerCityOptions([]);
+    setPartnerCityLookupError(null);
+    setIsPartnerCityLoading(false);
   };
 
   const openPartnerModal = (targetField: PartnerTargetField) => {
     setPartnerTargetField(targetField);
     setPartnerForm(initialPartnerCreateFormState);
     setPartnerFormError(null);
+    setPartnerCityOptions([]);
+    setPartnerCityLookupError(null);
+    setIsPartnerCityLoading(false);
     setShowPartnerModal(true);
   };
 
@@ -1042,8 +1248,10 @@ export default function NovoContratoPage() {
     const state = partnerForm.state.trim();
     const cnpjDigits = onlyDigits(partnerForm.cnpj);
 
-    if (!name || !tradeName || !phone || !address || !city || !state) {
-      setPartnerFormError("Preencha os campos obrigatorios: nome, nome fantasia, telefone, endereco, cidade e estado.");
+    if (!name || !tradeName || !city || !state) {
+      setPartnerFormError(
+        "Preencha os campos obrigatorios: nome, nome fantasia, cidade e estado."
+      );
       return;
     }
 
@@ -1061,8 +1269,8 @@ export default function NovoContratoPage() {
         partnersType: partnerForm.partnersType,
         cnpj: cnpjDigits,
         email: optionalInputValue(partnerForm.email),
-        phone,
-        address,
+        phone: optionalInputValue(phone),
+        address: optionalInputValue(address),
         site: optionalInputValue(partnerForm.site),
         city,
         state,
@@ -1604,7 +1812,14 @@ export default function NovoContratoPage() {
       city,
       state,
       executionLocation,
+      executedByInnovatis: formData.executedByInnovatis,
     };
+  };
+
+  const transformFormToUpdateBackend = (formData: NovoContratoForm): ProjectUpdateDTO => {
+    return Object.fromEntries(
+      Object.entries(transformFormToBackend(formData)).filter(([key]) => key !== "code")
+    ) as ProjectUpdateDTO;
   };
 
   const normalizeOptionalText = (value?: string) => {
@@ -1731,6 +1946,24 @@ export default function NovoContratoPage() {
     return { uploadedCount, failedUploads };
   };
 
+  const notifyParentPopup = useCallback(
+    (type: "contract-edit-saved" | "contract-edit-closed", payload?: Record<string, unknown>) => {
+      if (!isPopupMode || typeof window === "undefined" || window.parent === window) {
+        return;
+      }
+
+      window.parent.postMessage(
+        {
+          source: "contract-form",
+          type,
+          ...payload,
+        },
+        window.location.origin
+      );
+    },
+    [isPopupMode]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -1739,16 +1972,31 @@ export default function NovoContratoPage() {
 
     if (!validateForm()) return;
 
-    const hierarchyError = validateHierarchyBeforeSubmit(form);
-    if (hierarchyError) {
-      setSubmitError(hierarchyError);
-      return;
+    if (!isEditMode) {
+      const hierarchyError = validateHierarchyBeforeSubmit(form);
+      if (hierarchyError) {
+        setSubmitError(hierarchyError);
+        return;
+      }
     }
 
     setIsSubmitting(true);
     let createdProjectId: number | null = null;
 
     try {
+      if (isEditMode && editContractId) {
+        const updatePayload = transformFormToUpdateBackend(form);
+        await updateProject(editContractId, updatePayload);
+
+        if (isPopupMode) {
+          notifyParentPopup("contract-edit-saved", { contractId: editContractId });
+          return;
+        }
+
+        router.push(`/contratos/${editContractId}`);
+        return;
+      }
+
       const transformedData = transformFormToBackend(form);
       const createdProject = await createProject(transformedData);
       createdProjectId = createdProject.id;
@@ -1779,7 +2027,9 @@ export default function NovoContratoPage() {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Nao foi possivel concluir o cadastro do contrato.";
+            : isEditMode
+              ? "Nao foi possivel atualizar o contrato."
+              : "Nao foi possivel concluir o cadastro do contrato.";
 
       const message = createdProjectId
         ? `${rootMessage} Projeto ${createdProjectId} foi criado, mas ocorreu erro ao salvar cronograma/metas.`
@@ -1791,6 +2041,11 @@ export default function NovoContratoPage() {
   };
 
   const handleCancel = () => {
+    if (isPopupMode) {
+      notifyParentPopup("contract-edit-closed", { contractId: editContractId });
+      return;
+    }
+
     router.back();
   };
 
@@ -1811,33 +2066,42 @@ export default function NovoContratoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8]">
-      <NavBar />
+    <div className={isPopupMode ? "min-h-screen bg-white" : "min-h-screen bg-[#F5F6F8]"}>
+      {!isPopupMode && <NavBar />}
 
-      <ProjectCreatedModal
-        open={showSuccessModal}
-        createdProjectId={lastCreatedProjectId}
-        message={postSubmitMessage}
-        pendingAction={postSubmitActionLoading}
-        onClose={() => setShowSuccessModal(false)}
-        onViewCreated={handleViewCreatedProject}
-        onCreateAnother={handleCreateAnotherProject}
-      />
+      {!isEditMode && (
+        <ProjectCreatedModal
+          open={showSuccessModal}
+          createdProjectId={lastCreatedProjectId}
+          message={postSubmitMessage}
+          pendingAction={postSubmitActionLoading}
+          onClose={() => setShowSuccessModal(false)}
+          onViewCreated={handleViewCreatedProject}
+          onCreateAnother={handleCreateAnotherProject}
+        />
+      )}
 
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <Link href="/home" className="hover:text-gray-700 flex items-center gap-1">
-            <Home className="h-4 w-4" />
-            Home
-          </Link>
-          <ChevronRight className="h-4 w-4" />
-          <Link href="/contratos" className="hover:text-gray-700">
-            Contratos
-          </Link>
-          <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-900 font-medium">Novo Contrato</span>
-        </nav>
+      <div
+        className={
+          isPopupMode
+            ? "mx-auto w-full max-w-5xl px-4 py-4"
+            : "mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6"
+        }
+      >
+        {!isPopupMode && (
+          <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+            <Link href="/home" className="hover:text-gray-700 flex items-center gap-1">
+              <Home className="h-4 w-4" />
+              Home
+            </Link>
+            <ChevronRight className="h-4 w-4" />
+            <Link href="/contratos" className="hover:text-gray-700">
+              Contratos
+            </Link>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-gray-900 font-medium">{pageTitle}</span>
+          </nav>
+        )}
 
         {/* Header */}
         <div className="mb-6">
@@ -1846,8 +2110,8 @@ export default function NovoContratoPage() {
               <FileText className="h-5 w-5 text-[#004225]" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Novo Contrato</h1>
-              <p className="text-sm text-gray-500">Preencha as informações do contrato</p>
+              <h1 className="text-2xl font-semibold text-gray-900">{pageTitle}</h1>
+              <p className="text-sm text-gray-500">{pageDescription}</p>
             </div>
           </div>
         </div>
@@ -1858,7 +2122,10 @@ export default function NovoContratoPage() {
               <span>{loadError}</span>
               <button
                 type="button"
-                onClick={() => void loadOrganizations()}
+                onClick={() => {
+                  void loadOrganizations();
+                  void loadEditProject();
+                }}
                 className="font-medium underline underline-offset-2"
               >
                 Recarregar
@@ -1870,6 +2137,12 @@ export default function NovoContratoPage() {
         {submitError && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {submitError}
+          </div>
+        )}
+
+        {isLoadingEditProject && (
+          <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
+            Carregando dados atuais do contrato...
           </div>
         )}
 
@@ -2047,6 +2320,37 @@ export default function NovoContratoPage() {
                   </div>
                 </div>
               </FormField>
+
+              <div className="md:col-span-2">
+                <FormField
+                  label="Execução do projeto"
+                  required
+                  error={errors.executedByInnovatis}
+                  icon={<Flag className="h-4 w-4" />}
+                >
+                  <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="executedByInnovatis"
+                        checked={form.executedByInnovatis}
+                        onCheckedChange={(checked) => handleExecutionModeChange(checked === true)}
+                        className="mt-0.5 border-gray-300 data-[state=checked]:bg-[#004225] data-[state=checked]:border-[#004225]"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="executedByInnovatis"
+                          className="cursor-pointer text-sm font-medium text-gray-700"
+                        >
+                          Projeto executado pela Innovatis
+                        </Label>
+                        <p className="text-xs text-gray-500">
+                          Se não marcar, o projeto sera executado pelo parceiro.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </FormField>
+              </div>
 
               {/* Cliente Primario */}
               <FormField
@@ -2321,7 +2625,10 @@ export default function NovoContratoPage() {
               </FormField>
 
               {/* Documentos */}
-              <div className="border-t border-gray-200 pt-5 mt-2 space-y-3">
+              <div
+                className="border-t border-gray-200 pt-5 mt-2 space-y-3"
+                hidden={hideAdvancedSections}
+              >
                 <div className="flex items-center gap-2">
                   <FileText className="h-4.5 w-4.5 text-[#004225]" />
                   <h3 className="text-sm font-semibold text-gray-900">Documentos do Projeto</h3>
@@ -2356,7 +2663,10 @@ export default function NovoContratoPage() {
               {/* ================================================================ */}
               {/* Secao de Cronograma de Desembolso (Opcional) */}
               {/* ================================================================ */}
-              <div className="border-t border-gray-200 pt-5 mt-2">
+              <div
+                className="border-t border-gray-200 pt-5 mt-2"
+                hidden={hideAdvancedSections}
+              >
                 <button
                   type="button"
                   onClick={() => setShowParcelasSection(!showParcelasSection)}
@@ -2639,7 +2949,10 @@ export default function NovoContratoPage() {
               {/* ================================================================ */}
               {/* Secao de Metas, Etapas e Fases (Opcional) */}
               {/* ================================================================ */}
-              <div className="border-t border-gray-200 pt-5 mt-2">
+              <div
+                className="border-t border-gray-200 pt-5 mt-2"
+                hidden={hideAdvancedSections}
+              >
                 <button
                   type="button"
                   onClick={() => setShowMetasSection(!showMetasSection)}
@@ -2979,7 +3292,7 @@ export default function NovoContratoPage() {
               <button
                 type="button"
                 onClick={handleCancel}
-                disabled={isSubmitting || showSuccessModal}
+                disabled={isSubmitting || showSuccessModal || isLoadingEditProject}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -2987,7 +3300,7 @@ export default function NovoContratoPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || showSuccessModal}
+                disabled={isSubmitting || showSuccessModal || isLoadingEditProject}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] focus:outline-none focus:ring-2 focus:ring-[#004225]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -2996,9 +3309,7 @@ export default function NovoContratoPage() {
                     Salvando...
                   </>
                 ) : (
-                  <>
-                    Criar Contrato
-                  </>
+                  <>{isEditMode ? "Salvar Alteracoes" : "Criar Contrato"}</>
                 )}
               </button>
             </div>
@@ -3123,7 +3434,7 @@ export default function NovoContratoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Telefone <span className="text-red-500">*</span>
+                    Telefone
                   </label>
                   <input
                     type="text"
@@ -3156,7 +3467,7 @@ export default function NovoContratoPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Endereco <span className="text-red-500">*</span>
+                  Endereco
                 </label>
                 <input
                   type="text"
@@ -3172,36 +3483,57 @@ export default function NovoContratoPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Cidade <span className="text-red-500">*</span>
+                    Estado <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={partnerForm.city}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({ ...prev, city: event.target.value }))
-                    }
-                    placeholder="Cidade"
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  <Dropdown
+                    options={partnerUfDropdownOptions}
+                    value={partnerForm.state || undefined}
+                    onChange={(value) => {
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        state: (value || "").toUpperCase(),
+                        city: "",
+                      }));
+                      setPartnerCityLookupError(null);
+                    }}
+                    placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                    disabled={isUfLoading || partnerUfDropdownOptions.length === 0}
+                    searchable
+                    className="h-10"
                   />
+                  {ufLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{ufLookupError}</p>
+                  ) : null}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Estado <span className="text-red-500">*</span>
+                    Cidade <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={partnerForm.state}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        state: event.target.value.toUpperCase().slice(0, 2),
-                      }))
+                  <Dropdown
+                    options={partnerCityDropdownOptions}
+                    value={partnerForm.city || undefined}
+                    onChange={(value) =>
+                      setPartnerForm((prev) => ({ ...prev, city: value || "" }))
                     }
-                    placeholder="UF"
-                    maxLength={2}
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    placeholder={
+                      !partnerForm.state
+                        ? "Selecione a UF primeiro"
+                        : isPartnerCityLoading
+                          ? "Carregando cidades..."
+                          : "Selecione a cidade"
+                    }
+                    disabled={
+                      !partnerForm.state ||
+                      isPartnerCityLoading ||
+                      partnerCityDropdownOptions.length === 0
+                    }
+                    searchable
+                    className="h-10"
                   />
+                  {partnerCityLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{partnerCityLookupError}</p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -3874,6 +4206,14 @@ export default function NovoContratoPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function NovoContratoPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F5F6F8]" />}>
+      <NovoContratoPageContent />
+    </Suspense>
   );
 }
 

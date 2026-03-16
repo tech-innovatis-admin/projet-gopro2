@@ -1,5 +1,6 @@
 import type { BackendErrorResponse, BackendFieldError, BffErrorEnvelope } from './types';
 import { HttpError } from './types';
+import { redirectToLogin } from '../auth/session';
 
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -177,6 +178,10 @@ async function request<T>(method: string, path: string, options: RequestOptions 
 
   const payload = await parseResponsePayload(response);
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      await redirectToLogin();
+    }
+
     const normalized = normalizeErrorPayload(payload, response.status);
     throw new HttpError(normalized.message, response.status, normalized.details, {
       code: normalized.code,

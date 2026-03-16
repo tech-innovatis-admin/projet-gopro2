@@ -27,6 +27,7 @@ export interface ProjectDashboardFilters {
   projectStatus?: ProjectStatusEnum;
   projectType?: ProjectTypeEnum;
   projectGovIf?: ProjectGovIfEnum;
+  executedByInnovatis?: boolean;
   month?: number;
   year?: number;
   location?: string;
@@ -77,6 +78,7 @@ export function getProjectDashboard(filters: ProjectDashboardFilters = {}) {
       projectStatus: filters.projectStatus,
       projectType: filters.projectType,
       projectGovIf: filters.projectGovIf,
+      executedByInnovatis: filters.executedByInnovatis,
       month: filters.month,
       year: filters.year,
       location: filters.location,

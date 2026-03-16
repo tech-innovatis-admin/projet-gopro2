@@ -495,9 +495,9 @@ export default function PreProjetosPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pre-Contratos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Pré-Contratos</h1>
             <p className="text-sm text-gray-500">
-              Gerenciamento de propostas antes da formalizacao
+              Gerenciamento de propostas antes da formalização
             </p>
           </div>
           <button
@@ -505,13 +505,13 @@ export default function PreProjetosPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Novo Pre-Contrato
+            Novo Pré-Contrato
           </button>
         </div>
 
         {/* Cards de M?tricas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <MetricCard title="Total de Pre-Projetos" value={counts.total} icon={FolderOpen} color="#004225" />
+          <MetricCard title="Total de Pré-Projetos" value={counts.total} icon={FolderOpen} color="#004225" />
           <MetricCard title="Projetos" value={counts.projetos} icon={FileText} color="#0B7A4B" />
           <MetricCard title="Produtos" value={counts.produtos} icon={FileCheck} color="#00B894" />
           <MetricCard
@@ -531,7 +531,7 @@ export default function PreProjetosPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por titulo, parceiro ou localidade..."
+                placeholder="Buscar por título, parceiro ou localidade..."
                 className="w-full h-10 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-transparent"
                 value={filters.q}
                 onChange={(e) => {
@@ -657,7 +657,7 @@ export default function PreProjetosPage() {
             <thead className="bg-gray-50">
               <tr>
                 <Th onClick={() => handleSort("titulo")} sortable className="text-center">
-                  Titulo
+                  Título
                   <SortIcon column="titulo" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("govIf")} sortable className="text-center">
@@ -679,10 +679,10 @@ export default function PreProjetosPage() {
                 </Th>
                 <Th className="text-center">Documentos</Th>
                 <Th onClick={() => handleSort("dataCriacao")} sortable className="text-center">
-                  Data de Criacao
+                  Data de Criação
                   <SortIcon column="dataCriacao" sortConfig={sortConfig} />
                 </Th>
-                <Th className="text-center">Acoes</Th>
+                <Th className="text-center">Ações</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -691,7 +691,7 @@ export default function PreProjetosPage() {
                   <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                      <span className="text-sm text-gray-500">Carregando pre-contratos...</span>
+                      <span className="text-sm text-gray-500">Carregando pré-contratos...</span>
                     </div>
                   </td>
                 </tr>
@@ -701,7 +701,7 @@ export default function PreProjetosPage() {
                     <div className="flex flex-col items-center gap-3">
                       <X className="h-10 w-10 text-red-300" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">Falha ao carregar pre-contratos</p>
+                        <p className="text-sm font-medium text-gray-900">Falha ao carregar pré-contratos</p>
                         <p className="text-sm text-gray-500">{error}</p>
                       </div>
                       <button
@@ -720,10 +720,10 @@ export default function PreProjetosPage() {
                       <FolderOpen className="h-12 w-12 text-gray-300" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          Nenhum pre-contrato encontrado
+                          Nenhum pré-contrato encontrado
                         </p>
                         <p className="text-sm text-gray-500">
-                          Crie seu primeiro pre-contrato para comecar.
+                          Crie seu primeiro pré-contrato para comecar.
                         </p>
                       </div>
                       <div className="flex gap-2 mt-2">
@@ -739,7 +739,7 @@ export default function PreProjetosPage() {
                           onClick={handleOpenModal}
                           className="px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319]"
                         >
-                          Criar pre-contrato
+                          Criar pré-contrato
                         </button>
                       </div>
                     </div>

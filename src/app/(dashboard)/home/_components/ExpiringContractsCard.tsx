@@ -355,8 +355,8 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
 
   return (
     <>
-      <section className="h-full rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <section className="h-full rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+        <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600">
               <AlertTriangle className="h-5 w-5" />
@@ -367,7 +367,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 sm:w-auto sm:justify-start">
             <CalendarClock className="h-4 w-4" />
             <span>
               Referência:{" "}
@@ -378,56 +378,56 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
           </div>
         </div>
 
-        <div className="overflow-x-auto pb-1">
-          <div className="grid min-w-[720px] grid-cols-3 gap-4">
-            {isLoading
-              ? Array.from({ length: 3 }).map((_, index) => renderLoadingCard(index))
-              : metrics.map((metric) => (
-                  <button
-                    key={metric.key}
-                    type="button"
-                    onClick={() => setActiveWindow(metric.key)}
-                    className="group relative h-full overflow-hidden rounded-xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg"
-                  >
-                    <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${metric.accent}`} />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+          {isLoading
+            ? Array.from({ length: 3 }).map((_, index) => (
+                <div key={`loading-wrapper-${index}`}>{renderLoadingCard(index)}</div>
+              ))
+            : metrics.map((metric) => (
+                <button
+                  key={metric.key}
+                  type="button"
+                  onClick={() => setActiveWindow(metric.key)}
+                  className="group relative h-full overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg sm:p-5"
+                >
+                  <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${metric.accent}`} />
 
-                    <div className="flex items-center gap-3">
-                      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${metric.iconBg}`}>
-                        <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-zinc-700">{metric.title}</p>
-                        <p className="text-xs text-zinc-500">{metric.interval}</p>
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${metric.iconBg}`}>
+                      <metric.icon className={`h-5 w-5 ${metric.iconColor}`} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-zinc-700 sm:text-sm">{metric.title}</p>
+                      <p className="text-xs text-zinc-500">{metric.interval}</p>
                     </div>
+                  </div>
 
-                    <div className="mt-4 flex items-baseline gap-2">
-                      <span className="text-3xl font-bold leading-none tabular-nums tracking-tight text-zinc-900">
-                        {metric.count}
-                      </span>
-                      <span className="text-xs text-zinc-500">contratos</span>
-                    </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-bold leading-none tabular-nums tracking-tight text-zinc-900 sm:text-3xl">
+                      {metric.count}
+                    </span>
+                    <span className="text-xs text-zinc-500">contratos</span>
+                  </div>
 
-                    <p className="mt-3 text-xs text-zinc-500">Clique para ver lista completa</p>
-                  </button>
-                ))}
-          </div>
+                  <p className="mt-3 text-xs text-zinc-500">Clique para ver lista completa</p>
+                </button>
+              ))}
         </div>
       </section>
 
       {activeWindow && selectedMetric && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
           onClick={() => setActiveWindow(null)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="expiring-contracts-modal-title"
         >
           <div
-            className="w-full max-w-5xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl"
+            className="h-[92vh] w-full max-w-5xl overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <header className="flex items-start justify-between gap-3 border-b border-zinc-200 px-6 py-5">
+            <header className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4 sm:px-6 sm:py-5">
               <div>
                 <h4 id="expiring-contracts-modal-title" className="text-lg font-semibold text-zinc-900">
                   Contratos com vencimento {selectedMetric.interval}
@@ -446,7 +446,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
               </button>
             </header>
 
-            <div className="max-h-[70vh] overflow-y-auto p-6">
+            <div className="h-[calc(92vh-84px)] overflow-y-auto p-4 sm:h-auto sm:max-h-[70vh] sm:p-6">
               {selectedContracts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-8 text-center text-sm text-zinc-500">
                   Nenhum contrato encontrado para este período.
@@ -459,23 +459,23 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
                       href={`/contratos/${contract.projectId}`}
                       className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md"
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-zinc-900">
+                          <p className="line-clamp-2 text-sm font-semibold text-zinc-900 sm:truncate">
                             {contract.projectName}
                           </p>
-                          <p className="mt-1 truncate text-xs text-zinc-500">
+                          <p className="mt-1 line-clamp-2 text-xs text-zinc-500 sm:truncate">
                             Código: {contract.projectCode || "Nao informado"} | Cliente:{" "}
                             {contract.primaryClientName || "Nao informado"}
                           </p>
                         </div>
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-[#004225]">
+                        <span className="inline-flex items-center gap-1 self-start text-xs font-medium text-[#004225]">
                           Abrir contrato
                           <ExternalLink className="h-3.5 w-3.5" />
                         </span>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-zinc-600 sm:grid-cols-3">
+                      <div className="mt-3 hidden grid-cols-1 gap-2 text-xs text-zinc-600 lg:grid lg:grid-cols-3">
                         <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
                           <span className="block text-zinc-500">Valor</span>
                           <span className="font-semibold text-zinc-800">

@@ -462,7 +462,7 @@ export function NovoParceiroModal({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    EndereÃ§o Completo
+                    EndereÃ§o Completo <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <input
                     type="text"
@@ -498,7 +498,7 @@ export function NovoParceiroModal({
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <Phone className="h-4 w-4 text-gray-400" />
-                    Telefone
+                    Telefone <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <input
                     type="tel"

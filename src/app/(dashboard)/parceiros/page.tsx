@@ -123,12 +123,6 @@ export default function ParceirosPage() {
       if (cnpjDigits.length !== 14) {
         throw new Error("Informe um CNPJ valido com 14 digitos.");
       }
-      if (!data.telefone?.trim()) {
-        throw new Error("Telefone e obrigatorio para cadastro.");
-      }
-      if (!data.endereco?.trim()) {
-        throw new Error("Endereco e obrigatorio para cadastro.");
-      }
 
       try {
         const created = await createPartner(mapParceiroFormToPartnerRequestDTO(data));

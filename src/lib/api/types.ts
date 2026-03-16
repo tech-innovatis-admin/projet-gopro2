@@ -443,6 +443,7 @@ export interface ProjectResponseDTO {
   city: string | null;
   state: string | null;
   executionLocation: string | null;
+  executedByInnovatis: boolean | null;
   isActive: boolean;
   totalReceived: number | null;
   totalExpenses: number | null;
@@ -474,6 +475,7 @@ export interface ProjectRequestDTO {
   city?: string;
   state?: string;
   executionLocation?: string;
+  executedByInnovatis: boolean;
   createdBy?: number;
 }
 
@@ -492,6 +494,7 @@ export interface ProjectDashboardFiltersDTO {
   projectStatus: ProjectStatusEnum | null;
   projectType: ProjectTypeEnum | null;
   projectGovIf: ProjectGovIfEnum | null;
+  executedByInnovatis: boolean | null;
   month: number | null;
   year: number | null;
   location: string | null;

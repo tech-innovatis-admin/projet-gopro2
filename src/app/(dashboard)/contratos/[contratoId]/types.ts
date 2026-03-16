@@ -12,6 +12,7 @@ export type Contrato = {
   segmentos: string[];
   localidade: string;
   unidade?: string; // Unidade / IFES
+  executedByInnovatis?: boolean | null;
   dataInicio: string;
   dataFim: string; // Unificado: sempre "dataFim"
   dataRealInicio?: string; // Data que realmente iniciou o projeto
