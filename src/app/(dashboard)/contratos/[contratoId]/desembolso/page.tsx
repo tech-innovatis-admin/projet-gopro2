@@ -22,6 +22,7 @@ import {
   listDisbursementSchedules,
   updateDisbursementSchedule,
 } from "@/src/lib/api/endpoints";
+import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
 import { HttpError, type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
 
 type ParcelaPrevista = {
@@ -147,6 +148,30 @@ export default function DesembolsoPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -219,6 +244,7 @@ export default function DesembolsoPage() {
   }, [editParcelas, isEditing]);
 
   const handleEdit = () => {
+    if (!canManageChildren) return;
     setSaveError(null);
     setSavedMessage(false);
     setEditParcelas(copyParcelas(parcelas));
@@ -232,6 +258,7 @@ export default function DesembolsoPage() {
   };
 
   const handleNovaParcela = () => {
+    if (!canManageChildren) return;
     setSaveError(null);
     if (!isEditing) {
       setEditParcelas(copyParcelas(parcelas));
@@ -248,11 +275,13 @@ export default function DesembolsoPage() {
   };
 
   const handleRemove = (id: string) => {
+    if (!canManageChildren) return;
     if (!confirm("Deseja realmente remover esta parcela?")) return;
     setEditParcelas((prev) => sortAndRenumber(prev.filter((p) => p.id !== id)));
   };
 
   const handleSave = async () => {
+    if (!canManageChildren) return;
     if (!canSave) return;
 
     const projectId = Number.parseInt(contratoId, 10);
@@ -332,25 +361,27 @@ export default function DesembolsoPage() {
             </div>
           )}
 
-          <button
-            onClick={handleNovaParcela}
-            disabled={isLoading || isSaving}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Desembolso
-          </button>
+          {canManageChildren && (
+            <button
+              onClick={handleNovaParcela}
+              disabled={isLoading || isSaving || loadingAccess}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Desembolso
+            </button>
+          )}
 
-          {!isEditing ? (
+          {!isEditing && canManageChildren ? (
             <button
               onClick={handleEdit}
-              disabled={isLoading || !!loadError}
+              disabled={isLoading || !!loadError || loadingAccess}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50"
             >
               <Edit className="h-4 w-4" />
               Editar
             </button>
-          ) : (
+          ) : isEditing && canManageChildren ? (
             <>
               <button
                 onClick={handleCancel}
@@ -369,9 +400,15 @@ export default function DesembolsoPage() {
                 {isSaving ? "Salvando..." : "Salvar"}
               </button>
             </>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {!loadingAccess && !canManageChildren && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Perfil em modo leitura neste modulo. O estagiario pode consultar os desembolsos, mas nao pode criar ou alterar parcelas.
+        </div>
+      )}
 
       {loadError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -29,6 +29,10 @@ import {
   updateExpense,
   updateIncome,
 } from '@/src/lib/api/endpoints';
+import {
+  canManageContractChildren,
+  fetchCurrentUser,
+} from '@/src/lib/auth/session';
 import type {
   BudgetCategoryResponseDTO,
   BudgetItemResponseDTO,
@@ -111,6 +115,13 @@ function ordinal(n: number) {
   return `${n}º`;
 }
 
+const STICKY_ITEM_HEADER_CLASS =
+  '!sticky left-0 z-30 bg-white shadow-[6px_0_10px_-8px_rgba(15,23,42,0.25)]';
+const STICKY_ITEM_PARENT_CELL_CLASS =
+  'sticky left-0 z-20 bg-gray-50 shadow-[6px_0_10px_-8px_rgba(15,23,42,0.18)]';
+const STICKY_ITEM_SUBITEM_CELL_CLASS =
+  'sticky left-0 z-10 bg-white shadow-[6px_0_10px_-8px_rgba(15,23,42,0.12)] group-hover:bg-gray-50';
+
 function safeNumber(v: unknown) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -175,6 +186,8 @@ export default function PagamentosPlanilhaPage() {
   const [parcelas, setParcelas] = useState<Parcela[]>([]);
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [backendExpenses, setBackendExpenses] = useState<ExpenseResponseDTO[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPersisting, setIsPersisting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -201,6 +214,37 @@ export default function PagamentosPlanilhaPage() {
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
     setTimeout(() => setSavedMessage(null), 2500);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ensureCanManageChildren = () => {
+    if (canManageChildren) {
+      return true;
+    }
+
+    setActionError('Seu perfil pode apenas visualizar esta area do contrato.');
+    return false;
   };
 
   const loadData = useCallback(async () => {
@@ -478,6 +522,7 @@ export default function PagamentosPlanilhaPage() {
 
   // Ações: Parcelas
   const handleAddParcela = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!Number.isFinite(projectId)) {
       setActionError('ID do contrato inválido para criar parcela.');
       return;
@@ -508,6 +553,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleStartEditParcela = (p: Parcela) => {
+    if (!ensureCanManageChildren()) return;
     setEditingParcelaId(p.id);
     setEditParcelaForm({ ...p });
   };
@@ -518,6 +564,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleSaveEditParcela = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!editParcelaForm) return;
     if (!editParcelaForm.dataRecebimento) return;
     if (!editParcelaForm.valorRecebido || editParcelaForm.valorRecebido <= 0) return;
@@ -546,6 +593,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleRemoveParcela = async (parcelaId: ID) => {
+    if (!ensureCanManageChildren()) return;
     const alvo = parcelas.find(p => p.id === parcelaId);
     if (!alvo) return;
     if (!isPersistedId(parcelaId)) {
@@ -578,6 +626,7 @@ export default function PagamentosPlanilhaPage() {
 
   // Ações: Subitens
   const handleAddSubitem = (itemId: ID) => {
+    if (!ensureCanManageChildren()) return;
     if (!newSubitemEmpresa.trim()) return;
 
     const sub: Subitem = {
@@ -598,6 +647,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleRemoveSubitem = (itemId: ID, subitemId: ID) => {
+    if (!ensureCanManageChildren()) return;
     if (!confirm('Remover este subitem?')) return;
 
     setRubricas(prev =>
@@ -611,6 +661,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const updateSubitemEmpresa = (itemId: ID, subitemId: ID, empresaRh: string) => {
+    if (!canManageChildren) return;
     setRubricas(prev =>
       prev.map(r => ({
         ...r,
@@ -631,6 +682,7 @@ export default function PagamentosPlanilhaPage() {
     parcelaId: ID,
     patch: Partial<Lancamento>
   ) => {
+    if (!canManageChildren) return;
     setRubricas(prev =>
       prev.map(r => ({
         ...r,
@@ -664,6 +716,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleSaveSubitens = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!Number.isFinite(projectId)) {
       setActionError('ID do contrato inválido para salvar pagamentos.');
       return;
@@ -889,7 +942,7 @@ export default function PagamentosPlanilhaPage() {
             <h4 className="font-medium text-gray-900">Parcelas recebidas</h4>
           </div>
 
-          {!isAddingParcela && (
+          {!isAddingParcela && canManageChildren && (
             <div className="flex items-center gap-2">
               {isEditingSubitens && (
                 <button
@@ -941,7 +994,7 @@ export default function PagamentosPlanilhaPage() {
           )}
         </div>
 
-        {isAddingParcela && (
+        {canManageChildren && isAddingParcela && (
           <div className="border-t border-gray-200 p-4 bg-emerald-50">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
               <div>
@@ -1026,7 +1079,7 @@ export default function PagamentosPlanilhaPage() {
 
                     return (
                       <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
-                        {editingParcelaId === p.id && editParcelaForm ? (
+                        {canManageChildren && editingParcelaId === p.id && editParcelaForm ? (
                           <>
                             <td className="py-2 px-3 text-center font-medium text-gray-900">{ordinal(p.numero)}</td>
                             <td className="py-2 px-3">
@@ -1085,24 +1138,28 @@ export default function PagamentosPlanilhaPage() {
                               {formatCurrency(saldo)}
                             </td>
                             <td className="py-2 px-3">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => handleStartEditParcela(p)}
-                                  disabled={isPersisting}
-                                  className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                                  title="Editar"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleRemoveParcela(p.id)}
-                                  disabled={isPersisting}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                  title="Remover"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
+                              {canManageChildren ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => handleStartEditParcela(p)}
+                                    disabled={isPersisting}
+                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                                    title="Editar"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveParcela(p.id)}
+                                    disabled={isPersisting}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                    title="Remover"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="block text-center text-xs text-gray-400">Somente leitura</span>
+                              )}
                             </td>
                           </>
                         )}
@@ -1173,8 +1230,12 @@ export default function PagamentosPlanilhaPage() {
                       <thead>
                         {/* Header agrupado (colSpan) */}
                         <tr className="border-b border-gray-200">
-                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Código</th>
-                          <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Item</th>
+                          <th
+                            rowSpan={2}
+                            className={`text-center py-2 px-2 font-medium text-gray-600 ${STICKY_ITEM_HEADER_CLASS}`}
+                          >
+                            Item
+                          </th>
                           <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Qtd</th>
                           <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Meses</th>
                           <th rowSpan={2} className="text-center py-2 px-2 font-medium text-gray-600">Valor unit.</th>
@@ -1225,8 +1286,11 @@ export default function PagamentosPlanilhaPage() {
                               <Fragment key={it.id}>
                                 {/* Linha do ITEM (pai) */}
                                 <tr className="border-b border-gray-100 bg-gray-50">
-                                  <td className="py-2 px-2 text-center font-mono text-gray-700">{it.codigo}</td>
-                                  <td className="py-2 px-2 text-left font-medium text-gray-900">{it.descricao}</td>
+                                  <td
+                                    className={`py-2 px-2 text-left font-medium text-gray-900 ${STICKY_ITEM_PARENT_CELL_CLASS}`}
+                                  >
+                                    {it.descricao}
+                                  </td>
                                   <td className="py-2 px-2 text-center text-gray-700">{it.quantidade}</td>
                                   <td className="py-2 px-2 text-center text-gray-700">{it.meses}</td>
                                   <td className="py-2 px-2 text-center text-gray-700">{formatCurrency(it.valorUnitario)}</td>
@@ -1234,7 +1298,7 @@ export default function PagamentosPlanilhaPage() {
                                   <td className="py-2 px-2 text-gray-700">{it.meta || '-'}</td>
 
                                   <td className="py-2 px-2">
-                                    {addingToItemId !== it.id ? (
+                                    {canManageChildren && addingToItemId !== it.id ? (
                                       <button
                                         onClick={() => setAddingToItemId(it.id)}
                                         disabled={!isEditingSubitens || isPersisting}
@@ -1247,7 +1311,7 @@ export default function PagamentosPlanilhaPage() {
                                         <Plus className="w-4 h-4" />
                                         Novo subitem
                                       </button>
-                                    ) : (
+                                    ) : canManageChildren ? (
                                       <div className="flex items-center gap-2">
                                         <input
                                           type="text"
@@ -1277,6 +1341,8 @@ export default function PagamentosPlanilhaPage() {
                                           <X className="w-4 h-4" />
                                         </button>
                                       </div>
+                                    ) : (
+                                      <span className="text-xs text-gray-400">Somente leitura</span>
                                     )}
                                   </td>
 
@@ -1314,8 +1380,14 @@ export default function PagamentosPlanilhaPage() {
                                     const totalSub = calcularTotalPagoSubitem(sub);
 
                                     return (
-                                      <tr key={sub.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                        <td className="py-2 px-2 text-gray-400"> </td>
+                                      <tr key={sub.id} className="group border-b border-gray-100 hover:bg-gray-50">
+                                        <td
+                                          className={`py-2 px-2 text-left text-sm text-gray-600 ${STICKY_ITEM_SUBITEM_CELL_CLASS}`}
+                                        >
+                                          <span className="block truncate font-medium text-gray-700">
+                                            {it.descricao}
+                                          </span>
+                                        </td>
                                         <td className="py-2 px-2 text-gray-400"> </td>
                                         <td className="py-2 px-2 text-gray-400"> </td>
                                         <td className="py-2 px-2 text-gray-400"> </td>
@@ -1336,7 +1408,7 @@ export default function PagamentosPlanilhaPage() {
                                                   : 'bg-gray-50 cursor-not-allowed'
                                               }`}
                                             />
-                                            {isEditingSubitens && !isPersisting && (
+                                            {canManageChildren && isEditingSubitens && !isPersisting && (
                                               <button
                                                 onClick={() => handleRemoveSubitem(it.id, sub.id)}
                                                 className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -1359,7 +1431,7 @@ export default function PagamentosPlanilhaPage() {
 
                                             return [
                                               <td key={`${sub.id}-${p.id}-v`} className="py-2 px-2 text-center">
-                                                {isEditingSubitens ? (
+                                                {canManageChildren && isEditingSubitens ? (
                                                   <div className="flex justify-center">
                                                     <MoneyInput
                                                       valueCents={Math.round(cell.valor * 100)}
@@ -1377,7 +1449,7 @@ export default function PagamentosPlanilhaPage() {
                                                 )}
                                               </td>,
                                               <td key={`${sub.id}-${p.id}-d`} className="py-2 px-2 text-center">
-                                                {isEditingSubitens ? (
+                                                {canManageChildren && isEditingSubitens ? (
                                                   <div className="flex justify-center">
                                                     <input
                                                       type="date"

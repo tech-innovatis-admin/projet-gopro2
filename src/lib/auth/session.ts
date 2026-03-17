@@ -101,3 +101,31 @@ export function isSuperAdmin(user: SessionUser | null): boolean {
 export function isAdmin(user: SessionUser | null): boolean {
   return user?.role === "superadmin" || user?.role === "admin";
 }
+
+export function isIntern(user: SessionUser | null): boolean {
+  return user?.role === "estagiario";
+}
+
+export function canManageAdminArea(user: SessionUser | null): boolean {
+  return isAdmin(user);
+}
+
+export function canManageInvites(user: SessionUser | null): boolean {
+  return isAdmin(user);
+}
+
+export function canManageAdminAudit(user: SessionUser | null): boolean {
+  return isAdmin(user);
+}
+
+export function canViewContractAudit(user: SessionUser | null): boolean {
+  return Boolean(user) && !isIntern(user);
+}
+
+export function canEditContractCore(user: SessionUser | null): boolean {
+  return Boolean(user);
+}
+
+export function canManageContractChildren(user: SessionUser | null): boolean {
+  return Boolean(user) && !isIntern(user);
+}

@@ -68,6 +68,10 @@ import {
   type StageRequestDTO,
   type StatusDisbursementScheduleEnum,
 } from "@/src/lib/api/types";
+import {
+  canManageContractChildren,
+  fetchCurrentUser,
+} from "@/src/lib/auth/session";
 
 // Tipos
 type ContratoStatus = ProjectStatusEnum;
@@ -504,6 +508,9 @@ function NovoContratoPageContent() {
   const editContractId = searchParams.get("editContractId");
   const isEditMode = Boolean(editContractId);
   const hideAdvancedSections = isPopupMode && isEditMode;
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
+  const hideChildSections = hideAdvancedSections || !canManageChildren;
   const pageTitle = isEditMode ? "Editar Contrato" : "Novo Contrato";
   const pageDescription = isEditMode
     ? "Atualize as informacoes principais do contrato."
@@ -738,6 +745,28 @@ function NovoContratoPageContent() {
   useEffect(() => {
     void loadOrganizations();
   }, [loadOrganizations]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadEditProject = useCallback(async (signal?: AbortSignal) => {
     if (!isEditMode || !editContractId) {
@@ -2001,8 +2030,12 @@ function NovoContratoPageContent() {
       const createdProject = await createProject(transformedData);
       createdProjectId = createdProject.id;
 
-      await persistProjectDetails(createdProject.id, form);
-      const uploadSummary = await uploadPendingDocuments(createdProject.id);
+      if (canManageChildren) {
+        await persistProjectDetails(createdProject.id, form);
+      }
+      const uploadSummary = canManageChildren
+        ? await uploadPendingDocuments(createdProject.id)
+        : { uploadedCount: 0, failedUploads: [] as TipoDocumento[] };
 
       setLastCreatedProjectId(createdProject.id);
       if (uploadSummary.failedUploads.length > 0) {
@@ -2148,6 +2181,11 @@ function NovoContratoPageContent() {
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
+          {!loadingAccess && !canManageChildren && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              Seu perfil pode criar e editar as informacoes principais do contrato, mas metas, desembolsos e documentos ficam apenas para consulta nesta tela.
+            </div>
+          )}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 space-y-5">
               {/* Título do Projeto */}
@@ -2627,7 +2665,7 @@ function NovoContratoPageContent() {
               {/* Documentos */}
               <div
                 className="border-t border-gray-200 pt-5 mt-2 space-y-3"
-                hidden={hideAdvancedSections}
+                hidden={hideChildSections}
               >
                 <div className="flex items-center gap-2">
                   <FileText className="h-4.5 w-4.5 text-[#004225]" />
@@ -2665,7 +2703,7 @@ function NovoContratoPageContent() {
               {/* ================================================================ */}
               <div
                 className="border-t border-gray-200 pt-5 mt-2"
-                hidden={hideAdvancedSections}
+                hidden={hideChildSections}
               >
                 <button
                   type="button"
@@ -2951,7 +2989,7 @@ function NovoContratoPageContent() {
               {/* ================================================================ */}
               <div
                 className="border-t border-gray-200 pt-5 mt-2"
-                hidden={hideAdvancedSections}
+                hidden={hideChildSections}
               >
                 <button
                   type="button"

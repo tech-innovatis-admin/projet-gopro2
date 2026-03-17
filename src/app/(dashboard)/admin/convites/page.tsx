@@ -13,7 +13,7 @@ import {
   reissueAllowedRegistration,
 } from "@/src/lib/api/endpoints/auth";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
-import { fetchCurrentUser, isSuperAdmin } from "@/src/lib/auth/session";
+import { canManageInvites, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
   AllowedRegistrationResponseDTO,
   AllowedRegistrationStatusEnum,
@@ -140,7 +140,7 @@ export default function AdminConvitesPage() {
       try {
         const user = await fetchCurrentUser();
         if (!cancelled) {
-          setCanManage(isSuperAdmin(user));
+          setCanManage(canManageInvites(user));
         }
       } finally {
         if (!cancelled) {
@@ -274,7 +274,7 @@ export default function AdminConvitesPage() {
         <header>
           <h1 className="text-2xl font-bold text-zinc-900">Gestao de convites</h1>
           <p className="text-sm text-zinc-600">
-            Somente superadmin pode liberar novos cadastros por e-mail.
+            Admin e superadmin podem liberar novos cadastros por e-mail.
           </p>
         </header>
 
@@ -286,7 +286,7 @@ export default function AdminConvitesPage() {
 
         {!loadingAccess && !canManage && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Acesso permitido apenas para superadmin.
+            Acesso permitido apenas para admin e superadmin.
           </div>
         )}
 
@@ -412,7 +412,7 @@ export default function AdminConvitesPage() {
                         <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Expira em</th>
                         <th className="px-3 py-2">Usado em</th>
-                        <th className="px-3 py-2">Acoes</th>
+                        <th className="px-3 py-2">Edição</th>
                       </tr>
                     </thead>
                     <tbody>

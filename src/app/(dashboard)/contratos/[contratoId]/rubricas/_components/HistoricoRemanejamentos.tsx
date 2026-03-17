@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { X, FileText, Calendar, User, ArrowRight, Search } from 'lucide-react';
-
-type ID = string;
+import { useMemo, useState } from 'react';
+import { X, FileText, Calendar, User, ArrowRight, Search, RotateCcw } from 'lucide-react';
+import { ComebackConfirmationModal } from '@/src/components/budget-transfers/ComebackConfirmationModal';
+import { parseBudgetTransferComeback } from '@/src/lib/budget-transfers/comeback';
 
 interface Remanejamento {
   id: string;
@@ -36,18 +36,28 @@ interface HistoricoRemanejamentosProps {
   onClose: () => void;
   remanejamentos: Remanejamento[];
   contratoId: string;
+  canManageChildren?: boolean;
+  isSubmitting?: boolean;
+  onComeback?: (remanejamentoId: string) => Promise<void> | void;
 }
 
 export function HistoricoRemanejamentos({
   isOpen,
   onClose,
   remanejamentos,
-  contratoId,
+  canManageChildren = false,
+  isSubmitting = false,
+  onComeback,
 }: HistoricoRemanejamentosProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRubrica, setFilterRubrica] = useState<string>('');
+  const [pendingComeback, setPendingComeback] = useState<Remanejamento | null>(null);
 
-  if (!isOpen) return null;
+  const parseTimestamp = (value: string | undefined) => {
+    if (!value) return 0;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -71,14 +81,34 @@ export function HistoricoRemanejamentos({
     }
   };
 
+  const remanejamentosOrdenados = useMemo(
+    () =>
+      [...remanejamentos].sort((a, b) => {
+        const timestampA = parseTimestamp(a.createdAt) || parseTimestamp(a.data);
+        const timestampB = parseTimestamp(b.createdAt) || parseTimestamp(b.data);
+
+        if (timestampA !== timestampB) {
+          return timestampB - timestampA;
+        }
+
+        return Number.parseInt(b.id, 10) - Number.parseInt(a.id, 10);
+      }),
+    [remanejamentos]
+  );
+
   // Filtrar remanejamentos
-  const remanejamentosFiltrados = remanejamentos.filter(rem => {
-    const matchSearch = 
-      rem.itemOrigem?.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rem.itemDestino?.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rem.motivo.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchRubrica = !filterRubrica || 
+  const remanejamentosFiltrados = remanejamentosOrdenados.filter((rem) => {
+    const originDescription = rem.itemOrigem?.descricao?.toLowerCase() || '';
+    const destinationDescription = rem.itemDestino?.descricao?.toLowerCase() || '';
+    const reason = rem.motivo.toLowerCase();
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchSearch =
+      originDescription.includes(normalizedSearch) ||
+      destinationDescription.includes(normalizedSearch) ||
+      reason.includes(normalizedSearch);
+
+    const matchRubrica =
+      !filterRubrica ||
       rem.itemOrigem?.rubricaCodigo === filterRubrica ||
       rem.itemDestino?.rubricaCodigo === filterRubrica;
 
@@ -96,6 +126,27 @@ export function HistoricoRemanejamentos({
   );
 
   const totalRemanejado = remanejamentosFiltrados.reduce((acc, rem) => acc + rem.valor, 0);
+  const remanejamentosComComeback = new Set(
+    remanejamentos
+      .map((remanejamento) => parseBudgetTransferComeback(remanejamento.motivo).originalTransferId)
+      .filter((transferId): transferId is number => transferId !== null)
+  );
+
+  if (!isOpen) return null;
+
+  const handleOpenComeback = (remanejamento: Remanejamento) => {
+    setPendingComeback(remanejamento);
+  };
+
+  const handleConfirmComeback = async () => {
+    if (!pendingComeback || !onComeback) {
+      return;
+    }
+
+    const remanejamentoId = pendingComeback.id;
+    setPendingComeback(null);
+    await onComeback(remanejamentoId);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -170,12 +221,47 @@ export function HistoricoRemanejamentos({
             </div>
           ) : (
             <div className="space-y-4">
-              {remanejamentosFiltrados.map((rem) => (
-                <div
-                  key={rem.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {remanejamentosFiltrados.map((rem) => {
+                const comebackInfo = parseBudgetTransferComeback(rem.motivo);
+                const alreadyReverted =
+                  !comebackInfo.isComeback && remanejamentosComComeback.has(Number.parseInt(rem.id, 10));
+
+                return (
+                  <div
+                    key={rem.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                          ID #{rem.id}
+                        </span>
+                        {comebackInfo.isComeback && (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                            Comeback
+                          </span>
+                        )}
+                        {alreadyReverted && (
+                          <span className="inline-flex rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800">
+                            Comeback registrado
+                          </span>
+                        )}
+                      </div>
+
+                      {canManageChildren && onComeback && !comebackInfo.isComeback && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenComeback(rem)}
+                          disabled={isSubmitting || alreadyReverted}
+                          className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          {alreadyReverted ? 'Comeback ja registrado' : 'Registrar comeback'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     {/* Origem */}
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
@@ -218,39 +304,42 @@ export function HistoricoRemanejamentos({
                         Rubrica: {rem.itemDestino?.rubricaCodigo} - {rem.itemDestino?.rubricaNome}
                       </p>
                     </div>
-                  </div>
+                    </div>
 
-                  {/* Motivo e Metadados */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-start gap-2 mb-2">
-                      <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-700 mb-1">Motivo:</p>
-                        <p className="text-sm text-gray-600">{rem.motivo}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 mt-3">
-                      <div className="flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        <span>{rem.createdBy}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>Criado em: {formatDate(rem.createdAt)}</span>
-                      </div>
-                      {rem.status && (
-                        <div className={`px-2 py-1 rounded ${
-                          rem.status === 'APROVADO' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {rem.status}
+                    {/* Motivo e Metadados */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex items-start gap-2 mb-2">
+                        <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 mb-1">Motivo:</p>
+                          <p className="text-sm text-gray-600">
+                            {rem.motivo || 'Sem motivo informado.'}
+                          </p>
                         </div>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-3">
+                        <div className="flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          <span>{rem.createdBy}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          <span>Criado em: {formatDate(rem.createdAt)}</span>
+                        </div>
+                        {rem.status && (
+                          <div className={`px-2 py-1 rounded ${
+                            rem.status === 'APROVADO' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {rem.status}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -270,6 +359,23 @@ export function HistoricoRemanejamentos({
           </div>
         </div>
       </div>
+
+      <ComebackConfirmationModal
+        isOpen={Boolean(pendingComeback)}
+        transferId={pendingComeback?.id ?? null}
+        amountLabel={formatCurrency(pendingComeback?.valor ?? 0)}
+        returnFromLabel={
+          pendingComeback?.itemDestino?.descricao || `Item #${pendingComeback?.itemDestinoId ?? "-"}`
+        }
+        returnToLabel={
+          pendingComeback?.itemOrigem?.descricao || `Item #${pendingComeback?.itemOrigemId ?? "-"}`
+        }
+        isSubmitting={isSubmitting}
+        onClose={() => setPendingComeback(null)}
+        onConfirm={() => {
+          void handleConfirmComeback();
+        }}
+      />
     </div>
   );
 }

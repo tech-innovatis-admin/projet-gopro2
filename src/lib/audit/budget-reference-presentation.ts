@@ -4,6 +4,7 @@ import type {
   BudgetItemResponseDTO,
 } from "../api/types";
 import type { AuditChange } from "./presentation";
+import { parseBudgetTransferComeback } from "../budget-transfers/comeback";
 
 export type BudgetItemReferencePresentation = {
   id: number;
@@ -16,12 +17,17 @@ export type BudgetItemReferencePresentation = {
 };
 
 export type BudgetTransferReference = {
+  id: number | null;
   fromItemId: number | null;
   toItemId: number | null;
   amount: number | null;
+  reason: string | null;
+  isComeback?: boolean;
+  originalTransferId?: number | null;
 };
 
 export type BudgetTransferBusinessSummary = {
+  transferId?: number | null;
   sourceLabel: string;
   destinationLabel: string;
   sourceInitialTotal: string;
@@ -29,6 +35,9 @@ export type BudgetTransferBusinessSummary = {
   transferredAmount: string;
   sourceFinalTotal: string;
   destinationFinalTotal: string;
+  isComeback?: boolean;
+  comebackOfTransferId?: number | null;
+  reason?: string | null;
 };
 
 type BudgetReferenceCatalog = {
@@ -44,9 +53,11 @@ type BudgetReferenceIds = {
 
 type BudgetResourceKind = "budget-categories" | "budget-items" | "budget-transfers" | null;
 type RecordValue = Record<string, unknown>;
+const TRANSFER_ID_KEYS = ["id", "budgetTransferId", "transferId"] as const;
 const FROM_ITEM_KEYS = ["fromItemId", "fromItem", "itemOrigemId"] as const;
 const TO_ITEM_KEYS = ["toItemId", "toItem", "itemDestinoId"] as const;
 const AMOUNT_KEYS = ["amount", "valor", "transferAmount", "valorRemanejado"] as const;
+const REASON_KEYS = ["reason", "motivo"] as const;
 
 function normalizeToken(value: string | null | undefined): string {
   return (value || "")
@@ -623,6 +634,11 @@ export function resolveBudgetTransferReference(
     return null;
   }
 
+  const id =
+    getReferenceId(after, TRANSFER_ID_KEYS, null) ??
+    getReferenceId(before, TRANSFER_ID_KEYS, null) ??
+    getReferenceId(technical, TRANSFER_ID_KEYS, null);
+
   const fromItemId =
     getReferenceId(after, FROM_ITEM_KEYS, null) ??
     getReferenceId(before, FROM_ITEM_KEYS, null) ??
@@ -640,12 +656,25 @@ export function resolveBudgetTransferReference(
     getNumericValue(before, AMOUNT_KEYS) ??
     getNumericValue(technical, AMOUNT_KEYS) ??
     getDecimalValueFromChanges(changes, ["amount", "valor", "transferamount", "valorremanejado"]);
+  const reason =
+    getTrimmedString(after, REASON_KEYS) ??
+    getTrimmedString(before, REASON_KEYS) ??
+    getTrimmedString(technical, REASON_KEYS);
+  const comebackInfo = parseBudgetTransferComeback(reason);
 
-  if (fromItemId === null && toItemId === null && amount === null) {
+  if (id === null && fromItemId === null && toItemId === null && amount === null) {
     return null;
   }
 
-  return { fromItemId, toItemId, amount };
+  return {
+    id,
+    fromItemId,
+    toItemId,
+    amount,
+    reason,
+    isComeback: comebackInfo.isComeback,
+    originalTransferId: comebackInfo.originalTransferId,
+  };
 }
 
 export function buildBudgetTransferBusinessSummary(
@@ -672,8 +701,10 @@ export function buildBudgetTransferBusinessSummary(
   const destinationItem = resolveBudgetItemPresentation(transfer.toItemId, catalog);
   const sourceInitialAmount = sourceItem?.plannedAmount ?? null;
   const destinationInitialAmount = destinationItem?.plannedAmount ?? null;
+  const reason = transfer.reason ?? null;
 
   return {
+    transferId: transfer.id,
     sourceLabel:
       sourceItem?.transferLabel ||
       (transfer.fromItemId !== null ? `Item #${transfer.fromItemId}` : "NÃ£o informado"),
@@ -689,6 +720,9 @@ export function buildBudgetTransferBusinessSummary(
     destinationFinalTotal: formatCurrencyBRL(
       calculateTransferFinalAmount(destinationInitialAmount, transfer.amount, "destination")
     ),
+    isComeback: transfer.isComeback,
+    comebackOfTransferId: transfer.originalTransferId ?? null,
+    reason,
   };
 }
 

@@ -146,6 +146,7 @@ const tests: Array<{ name: string; run: () => void }> = [
       );
 
       assert.deepEqual(summary, {
+        transferId: 44,
         sourceLabel: "RUB-11 - Pessoal • Bolsa de pesquisa",
         destinationLabel: "RUB-12 - Operacional • Consultoria especializada",
         sourceInitialTotal: "R$ 5.201,42",
@@ -153,7 +154,63 @@ const tests: Array<{ name: string; run: () => void }> = [
         transferredAmount: "R$ 1.000,00",
         sourceFinalTotal: "R$ 4.201,42",
         destinationFinalTotal: "R$ 7.000,00",
+        isComeback: false,
+        comebackOfTransferId: null,
+        reason: null,
       });
+    },
+  },
+  {
+    name: "identifica comeback no resumo de remanejamento",
+    run: () => {
+      const summary = buildBudgetTransferBusinessSummary(
+        createLog({
+          entityType: "contracts:budget-transfers",
+          entityId: "9",
+          contractId: 9,
+          afterJson: JSON.stringify({
+            id: 45,
+            fromItem: 22,
+            toItem: 21,
+            amount: 1000,
+            reason: "Comeback do remanejamento #44. Motivo original: cadastro incorreto",
+          }),
+        }),
+        {
+          categoryLabelsById: {
+            11: "RUB-11 - Pessoal",
+            12: "RUB-12 - Operacional",
+          },
+          itemPresentationsById: {
+            21: buildBudgetItemReferencePresentation(
+              {
+                id: 21,
+                categoryId: 11,
+                description: "Bolsa de pesquisa",
+                plannedAmount: 5201.42,
+              },
+              "RUB-11 - Pessoal"
+            ),
+            22: buildBudgetItemReferencePresentation(
+              {
+                id: 22,
+                categoryId: 12,
+                description: "Consultoria especializada",
+                plannedAmount: 6000,
+              },
+              "RUB-12 - Operacional"
+            ),
+          },
+        }
+      );
+
+      assert.equal(summary?.isComeback, true);
+      assert.equal(summary?.transferId, 45);
+      assert.equal(summary?.comebackOfTransferId, 44);
+      assert.equal(
+        summary?.reason,
+        "Comeback do remanejamento #44. Motivo original: cadastro incorreto"
+      );
     },
   },
 ];

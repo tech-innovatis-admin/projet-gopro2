@@ -12,7 +12,11 @@ import {
   updateCompany,
   updateProjectCompany,
 } from "@/src/lib/api/endpoints";
-import { requireCurrentUserId } from "@/src/lib/auth/session";
+import {
+  canManageContractChildren,
+  fetchCurrentUser,
+  requireCurrentUserId,
+} from "@/src/lib/auth/session";
 import { HttpError, type CompanyResponseDTO } from "@/src/lib/api/types";
 
 const BriefcaseBusinessIcon = () => (
@@ -179,6 +183,8 @@ export default function EmpresasPage() {
 
   const [empresas, setEmpresas] = useState<EmpresaProjeto[]>([]);
   const [allCompanies, setAllCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -207,6 +213,37 @@ export default function EmpresasPage() {
   );
 
   const totalValor = empresas.reduce((acc, empresa) => acc + (empresa.valorContrato || 0), 0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ensureCanManageChildren = () => {
+    if (canManageChildren) {
+      return true;
+    }
+
+    setActionError("Seu perfil pode apenas visualizar esta area do contrato.");
+    return false;
+  };
 
   const loadProjectCompanies = async () => {
     if (!projectId) {
@@ -267,6 +304,7 @@ export default function EmpresasPage() {
   }, [projectId]);
 
   const openNewModal = () => {
+    if (!ensureCanManageChildren()) return;
     setActionError(null);
     setEditingEmpresa(null);
     setFormData({
@@ -290,6 +328,7 @@ export default function EmpresasPage() {
   };
 
   const openEditModal = (empresa: EmpresaProjeto) => {
+    if (!ensureCanManageChildren()) return;
     setActionError(null);
     setEditingEmpresa(empresa);
     setFormData({ ...empresa });
@@ -297,6 +336,7 @@ export default function EmpresasPage() {
   };
 
   const openLinkModal = async () => {
+    if (!ensureCanManageChildren()) return;
     try {
       setActionError(null);
       let currentCompanies = allCompanies;
@@ -316,6 +356,7 @@ export default function EmpresasPage() {
   };
 
   const saveEmpresa = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!projectId) {
       setActionError("ID do contrato invalido.");
       return;
@@ -387,6 +428,7 @@ export default function EmpresasPage() {
   };
 
   const removeEmpresa = async (empresaId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!confirm("Deseja realmente excluir este vinculo da empresa com o projeto?")) return;
     try {
       setActionError(null);
@@ -400,6 +442,7 @@ export default function EmpresasPage() {
   };
 
   const linkExistingCompany = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!projectId) {
       setActionError("ID do contrato invalido.");
       return;
@@ -445,19 +488,28 @@ export default function EmpresasPage() {
               Salvo com sucesso!
             </div>
           )}
-          <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors">
-            <Link2 className="h-4 w-4" />
-            Vincular Existente
-          </button>
-          <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors">
-            <Plus className="h-4 w-4" />
-            Nova Empresa
-          </button>
+          {canManageChildren && (
+            <>
+              <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors">
+                <Link2 className="h-4 w-4" />
+                Vincular Existente
+              </button>
+              <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors">
+                <Plus className="h-4 w-4" />
+                Nova Empresa
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {loadError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>}
       {actionError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>}
+      {!loadingAccess && !canManageChildren && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Seu perfil pode consultar as empresas vinculadas, mas nao pode criar, vincular, editar ou remover empresas.
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-12 text-center"><p className="text-sm text-gray-500">Carregando empresas do projeto...</p></div>
@@ -466,10 +518,12 @@ export default function EmpresasPage() {
           <div className="p-4 bg-gray-100 rounded-full mb-4"><div className="h-8 w-8 text-gray-400"><BriefcaseBusinessIcon /></div></div>
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Nenhuma empresa vinculada</h3>
           <p className="text-sm text-gray-500 mb-4">Vincule uma empresa existente ou cadastre uma nova.</p>
-          <div className="flex items-center gap-3">
-            <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors"><Link2 className="h-4 w-4" />Vincular Existente</button>
-            <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"><Plus className="h-4 w-4" />Nova Empresa</button>
-          </div>
+          {canManageChildren && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => { void openLinkModal(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#004225] bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors"><Link2 className="h-4 w-4" />Vincular Existente</button>
+              <button onClick={openNewModal} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"><Plus className="h-4 w-4" />Nova Empresa</button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -485,9 +539,13 @@ export default function EmpresasPage() {
                     <p className="text-xs text-gray-400">Contrato: {empresa.contractNumber || "—"}</p>
                   </div>
                 </div>
-                <button onClick={() => openEditModal(empresa)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#004225] border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors" title="Editar">
-                  <Edit2 className="h-4 w-4" />Editar
-                </button>
+                {canManageChildren ? (
+                  <button onClick={() => openEditModal(empresa)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#004225] border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors" title="Editar">
+                    <Edit2 className="h-4 w-4" />Editar
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-400">Somente leitura</span>
+                )}
               </div>
 
               <div className="space-y-2 text-sm">
@@ -517,7 +575,7 @@ export default function EmpresasPage() {
         </div>
       )}
 
-      {isFormModalOpen && (
+      {canManageChildren && isFormModalOpen && (
         <CompanyFormModal
           formData={formData}
           setFormData={setFormData}
@@ -529,7 +587,7 @@ export default function EmpresasPage() {
         />
       )}
 
-      {isLinkModalOpen && (
+      {canManageChildren && isLinkModalOpen && (
         <LinkExistingCompanyModal
           companies={availableCompanies}
           selectedCompanyId={selectedCompanyId}

@@ -16,6 +16,7 @@ import {
   listPeople,
   updateProject,
 } from "@/src/lib/api/endpoints";
+import { canViewContractAudit, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
   HttpError,
   type ProjectGovIfEnum,
@@ -251,10 +252,33 @@ export default function ContratoLayout({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [canViewAuditTab, setCanViewAuditTab] = useState(false);
 
   // Garantir que o componente está montado no cliente para evitar problemas de hidratação
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAuditAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanViewAuditTab(canViewContractAudit(user));
+        }
+      } catch {
+        if (!cancelled) {
+          setCanViewAuditTab(false);
+        }
+      }
+    }
+
+    void loadAuditAccess();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -478,11 +502,15 @@ export default function ContratoLayout({
       href: `/contratos/${contratoId}/empresas`,
       description: "Empresas vinculadas",
     },
-    {
-      label: "Auditoria",
-      href: `/contratos/${contratoId}/auditoria`,
-      description: "Trilha de alteracoes do contrato",
-    },
+    ...(canViewAuditTab
+      ? [
+          {
+            label: "Auditoria",
+            href: `/contratos/${contratoId}/auditoria`,
+            description: "Trilha de alteracoes do contrato",
+          },
+        ]
+      : []),
     {
       label: "Arquivos",
       href: `/contratos/${contratoId}/arquivos`,
@@ -1353,7 +1381,7 @@ export default function ContratoLayout({
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <div className="flex items-start gap-3 group">
                     <FileText className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1 w-full">
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-2 group-hover:text-[#003319] transition-colors cursor-default">Objeto</p>
                       {isEditing ? (
                         <textarea
@@ -1365,7 +1393,7 @@ export default function ContratoLayout({
                         />
                       ) : contrato.descricao ? (
                         <>
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                          <p className="w-full text-sm text-gray-900 whitespace-pre-wrap break-words">
                             {isDescricaoExpanded ? contrato.descricao : descricaoPreview}
                           </p>
                           {contrato.descricao.length > 150 && (
@@ -1489,11 +1517,11 @@ function ExecutionModeBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${
-        executedByInnovatis
-          ? "border-violet-200 bg-violet-50 text-violet-700"
-          : "border-orange-200 bg-orange-50 text-orange-700"
-      }`}
+        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${
+          executedByInnovatis
+            ? "border-[#004225] bg-[#004225] text-white"
+            : "border-orange-200 bg-orange-50 text-orange-700"
+        }`}
     >
       {executedByInnovatis ? "INNOVATIS" : "PARCEIRO"}
     </span>

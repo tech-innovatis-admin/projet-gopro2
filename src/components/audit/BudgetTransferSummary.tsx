@@ -7,6 +7,17 @@ type BudgetTransferSummaryProps = {
 export function BudgetTransferSummary({ summary }: BudgetTransferSummaryProps) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-700">
+      {summary.isComeback && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+          <p className="text-xs font-semibold uppercase tracking-wide">Comeback registrado</p>
+          <p className="mt-1 text-sm">
+            {summary.comebackOfTransferId
+              ? `Esse lancamento desfaz o remanejamento #${summary.comebackOfTransferId}.`
+              : "Esse lancamento desfaz um remanejamento anterior."}
+          </p>
+        </div>
+      )}
+
       <div className="space-y-2">
         <p>
           <span className="font-semibold text-zinc-900">Origem:</span> {summary.sourceLabel}, que tinha

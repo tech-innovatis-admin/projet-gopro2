@@ -30,7 +30,16 @@ import {
   updateBudgetItem,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
-import { requireCurrentUserId } from '@/src/lib/auth/session';
+import {
+  canManageAdminArea,
+  canManageContractChildren,
+  fetchCurrentUser,
+  requireCurrentUserId,
+} from '@/src/lib/auth/session';
+import {
+  buildBudgetTransferComebackReason,
+  parseBudgetTransferComeback,
+} from '@/src/lib/budget-transfers/comeback';
 import {
   HttpError,
   type BudgetTransferRequestDTO,
@@ -126,6 +135,13 @@ const toMoneyValue = (value: number | undefined): number => {
   return Number(parsed.toFixed(2));
 };
 
+const toInputDateValue = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof HttpError ? error.message : fallback;
 
@@ -175,6 +191,9 @@ export default function RubricasPage() {
   const [remanejamentoModalOpen, setRemanejamentoModalOpen] = useState(false);
   const [itemParaRemanejamento, setItemParaRemanejamento] = useState<ItemRubrica | null>(null);
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
+  const [canOpenTransferHistory, setCanOpenTransferHistory] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -185,6 +204,38 @@ export default function RubricasPage() {
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
     setTimeout(() => setSavedMessage(null), 2500);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+          setCanOpenTransferHistory(canManageAdminArea(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ensureCanManageChildren = () => {
+    if (canManageChildren) {
+      return true;
+    }
+
+    setActionError('Seu perfil pode apenas visualizar esta area do contrato.');
+    return false;
   };
 
   const loadData = useCallback(async () => {
@@ -316,12 +367,29 @@ export default function RubricasPage() {
     void loadData();
   }, [loadData]);
 
+  const remanejamentosEfetivosTabela = useMemo(() => {
+    const remanejamentosComComeback = new Set(
+      remanejamentos
+        .map((remanejamento) => parseBudgetTransferComeback(remanejamento.motivo).originalTransferId)
+        .filter((transferId): transferId is number => transferId !== null)
+    );
+
+    return remanejamentos.filter((remanejamento) => {
+      const comebackInfo = parseBudgetTransferComeback(remanejamento.motivo);
+      if (comebackInfo.isComeback) {
+        return false;
+      }
+
+      return !remanejamentosComComeback.has(Number.parseInt(remanejamento.id, 10));
+    });
+  }, [remanejamentos]);
+
   const calcularRemanejamentosItem = (itemId: string) => {
-    const debito = remanejamentos
+    const debito = remanejamentosEfetivosTabela
       .filter((rem) => rem.itemOrigemId === itemId)
       .reduce((acc, rem) => acc + rem.valor, 0);
 
-    const credito = remanejamentos
+    const credito = remanejamentosEfetivosTabela
       .filter((rem) => rem.itemDestinoId === itemId)
       .reduce((acc, rem) => acc + rem.valor, 0);
 
@@ -348,6 +416,7 @@ export default function RubricasPage() {
   };
 
   const handleAddItem = async (rubricaId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!newItem.descricao?.trim()) return;
     if (!isPersistedId(rubricaId)) {
       setActionError('Rubrica invalida para adicionar item.');
@@ -397,11 +466,13 @@ export default function RubricasPage() {
   };
 
   const handleStartEdit = (item: ItemRubrica) => {
+    if (!ensureCanManageChildren()) return;
     setEditingItem(item.id);
     setEditForm({ ...item });
   };
 
   const handleSaveEdit = async (rubricaId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!editForm || !editingItem) return;
     if (!isPersistedId(editingItem) || !isPersistedId(rubricaId)) {
       setActionError('Item ou rubrica invalida para atualizar.');
@@ -449,6 +520,7 @@ export default function RubricasPage() {
   };
 
   const handleRemoveItem = async (rubricaId: string, itemId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!confirm('Tem certeza que deseja remover este item?')) return;
     if (!isPersistedId(rubricaId) || !isPersistedId(itemId)) {
       setActionError('Item invalido para remocao.');
@@ -471,6 +543,7 @@ export default function RubricasPage() {
   };
 
   const handleAddRubrica = async () => {
+    if (!ensureCanManageChildren()) return;
     if (!newRubrica.nome.trim()) return;
     if (!Number.isFinite(projectId)) {
       setActionError('ID do contrato invalido para criar rubrica.');
@@ -504,6 +577,7 @@ export default function RubricasPage() {
   };
 
   const handleStartEditRubrica = (rubrica: Rubrica) => {
+    if (!ensureCanManageChildren()) return;
     setEditingRubrica(rubrica.id);
     setEditRubricaForm({ nome: rubrica.nome });
     setEditingItem(null);
@@ -512,6 +586,7 @@ export default function RubricasPage() {
   };
 
   const handleSaveRubricaEdit = async (rubricaId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!editRubricaForm?.nome.trim()) {
       setActionError('Informe o nome da rubrica.');
       return;
@@ -555,6 +630,7 @@ export default function RubricasPage() {
   };
 
   const handleRemoveRubrica = async (rubricaId: string) => {
+    if (!ensureCanManageChildren()) return;
     if (!confirm('Tem certeza que deseja remover esta rubrica? Todos os itens serao removidos.')) {
       return;
     }
@@ -580,6 +656,7 @@ export default function RubricasPage() {
   };
 
   const handleAbrirRemanejamento = (item: ItemRubrica) => {
+    if (!ensureCanManageChildren()) return;
     setItemParaRemanejamento(item);
     setRemanejamentoModalOpen(true);
   };
@@ -591,6 +668,7 @@ export default function RubricasPage() {
     data: string;
     motivo: string;
   }) => {
+    if (!ensureCanManageChildren()) return;
     if (!Number.isFinite(projectId)) {
       setActionError('ID do contrato invalido para remanejamento.');
       return;
@@ -641,6 +719,83 @@ export default function RubricasPage() {
     }
   };
 
+  const handleComebackRemanejamento = async (remanejamentoId: string) => {
+    if (!ensureCanManageChildren()) return;
+    if (!Number.isFinite(projectId)) {
+      setActionError('ID do contrato invalido para registrar o comeback.');
+      return;
+    }
+
+    const remanejamento = remanejamentos.find((current) => current.id === remanejamentoId);
+    if (!remanejamento) {
+      setActionError('Remanejamento nao encontrado para registrar o comeback.');
+      return;
+    }
+
+    const comebackInfo = parseBudgetTransferComeback(remanejamento.motivo);
+    if (comebackInfo.isComeback) {
+      setActionError('Este remanejamento ja e um comeback e nao pode receber outro retorno.');
+      return;
+    }
+
+    const alreadyReverted = remanejamentos.some(
+      (current) =>
+        parseBudgetTransferComeback(current.motivo).originalTransferId ===
+        Number.parseInt(remanejamentoId, 10)
+    );
+    if (alreadyReverted) {
+      setActionError('Este remanejamento ja possui um comeback registrado.');
+      return;
+    }
+
+    if (
+      !isPersistedId(remanejamento.itemOrigemId) ||
+      !isPersistedId(remanejamento.itemDestinoId)
+    ) {
+      setActionError('Itens invalidos para registrar o comeback.');
+      return;
+    }
+
+    const itemRetornoAtual = rubricas
+      .flatMap((rubrica) => rubrica.itens)
+      .find((item) => item.id === remanejamento.itemDestinoId);
+    const saldoDisponivel = itemRetornoAtual ? calcularValorFinalItem(itemRetornoAtual) : 0;
+    const valorComeback = toMoneyValue(remanejamento.valor);
+
+    if (valorComeback > saldoDisponivel) {
+      setActionError(
+        `Nao ha saldo suficiente no item de retorno para desfazer o remanejamento (${formatCurrency(saldoDisponivel)} disponivel).`
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    setActionError(null);
+    setSavedMessage(null);
+
+    try {
+      const actorUserId = await requireCurrentUserId();
+      const payload: BudgetTransferRequestDTO = {
+        projectId,
+        fromItemId: toPersistedId(remanejamento.itemDestinoId),
+        toItemId: toPersistedId(remanejamento.itemOrigemId),
+        amount: valorComeback,
+        transferDate: toInputDateValue(),
+        status: 'APROVADO',
+        reason: buildBudgetTransferComebackReason(remanejamento.id, remanejamento.motivo),
+        createdBy: actorUserId,
+      };
+
+      await createBudgetTransfer(payload);
+      await loadData();
+      showSavedMessage(`Comeback do remanejamento #${remanejamento.id} registrado com sucesso.`);
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Nao foi possivel registrar o comeback.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const remanejamentosComDados = useMemo(() => {
     return remanejamentos.map((remanejamento) => {
       const itemOrigem = rubricas
@@ -685,13 +840,26 @@ export default function RubricasPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Rubricas Orcamentarias</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
           <p className="text-sm text-gray-500">
-            Gerencie os itens de despesa organizados por categoria orcamentaria
+            Gerencie os itens de despesa organizados por categoria orçamentária
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {!isAddingRubrica && (
+          {canOpenTransferHistory && (
+            <button
+              type="button"
+              onClick={() => setHistoricoModalOpen(true)}
+              disabled={loadingAccess || isLoading}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Historico de remanejamentos
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                {remanejamentos.length}
+              </span>
+            </button>
+          )}
+          {canManageChildren && !isAddingRubrica && (
             <button
               onClick={() => setIsAddingRubrica(true)}
               disabled={isSubmitting || isLoading}
@@ -735,7 +903,13 @@ export default function RubricasPage() {
         </div>
       )}
 
-      {isAddingRubrica && (
+      {!loadingAccess && !canManageChildren && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Seu perfil pode consultar as rubricas, mas nao pode criar, editar, remover ou remanejar itens.
+        </div>
+      )}
+
+      {canManageChildren && isAddingRubrica && (
         <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <Plus className="w-5 h-5 text-emerald-700" />
@@ -828,7 +1002,7 @@ export default function RubricasPage() {
                 <span className="font-semibold text-gray-700">
                   {formatCurrency(calcularTotalRubrica(rubrica))}
                 </span>
-                {editingRubrica === rubrica.id ? (
+                {canManageChildren && editingRubrica === rubrica.id ? (
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => void handleSaveRubricaEdit(rubrica.id)}
@@ -847,7 +1021,7 @@ export default function RubricasPage() {
                       Cancelar
                     </button>
                   </div>
-                ) : (
+                ) : canManageChildren ? (
                   <>
                     <button
                       onClick={(e) => {
@@ -889,6 +1063,8 @@ export default function RubricasPage() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </>
+                ) : (
+                  <span className="text-xs text-gray-400">Somente leitura</span>
                 )}
               </div>
             </div>
@@ -924,7 +1100,7 @@ export default function RubricasPage() {
                     <tbody>
                       {rubrica.itens.map((item) => (
                         <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          {editingItem === item.id && editForm ? (
+                          {canManageChildren && editingItem === item.id && editForm ? (
                             <>
                               <td className="py-2 px-2">
                                 <input
@@ -1068,55 +1244,61 @@ export default function RubricasPage() {
                                   : item.meta || '-'}
                               </td>
                               <td className="py-2 px-2">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    onClick={() => handleAbrirRemanejamento(item)}
-                                    disabled={isSubmitting}
-                                    className="p-1 text-[#004225] hover:bg-emerald-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Remanejar"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="16"
-                                      height="16"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="lucide lucide-arrow-up-down-icon lucide-arrow-up-down"
+                                {canManageChildren ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => handleAbrirRemanejamento(item)}
+                                      disabled={isSubmitting}
+                                      className="p-1 text-[#004225] hover:bg-emerald-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Remanejar"
                                     >
-                                      <path d="m21 16-4 4-4-4" />
-                                      <path d="M17 20V4" />
-                                      <path d="m3 8 4-4 4 4" />
-                                      <path d="M7 4v16" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    onClick={() => handleStartEdit(item)}
-                                    disabled={isSubmitting}
-                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Editar"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => void handleRemoveItem(rubrica.id, item.id)}
-                                    disabled={isSubmitting}
-                                    className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Remover"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="lucide lucide-arrow-up-down-icon lucide-arrow-up-down"
+                                      >
+                                        <path d="m21 16-4 4-4-4" />
+                                        <path d="M17 20V4" />
+                                        <path d="m3 8 4-4 4 4" />
+                                        <path d="M7 4v16" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={() => handleStartEdit(item)}
+                                      disabled={isSubmitting}
+                                      className="p-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Editar"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => void handleRemoveItem(rubrica.id, item.id)}
+                                      disabled={isSubmitting}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Remover"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="block text-center text-xs text-gray-400">
+                                    Somente leitura
+                                  </span>
+                                )}
                               </td>
                             </>
                           )}
                         </tr>
                       ))}
 
-                      {addingToRubrica === rubrica.id && (
+                      {canManageChildren && addingToRubrica === rubrica.id && (
                         <tr className="bg-blue-50">
                           <td className="py-2 px-2">
                             <input
@@ -1222,7 +1404,9 @@ export default function RubricasPage() {
                   </ResizableTable>
                 )}
 
-                {rubrica.itens.length === 0 && addingToRubrica !== rubrica.id && (
+                {canManageChildren &&
+                  rubrica.itens.length === 0 &&
+                  addingToRubrica !== rubrica.id && (
                   <div className="flex justify-center py-2">
                     <button
                       onClick={() => setAddingToRubrica(rubrica.id)}
@@ -1265,7 +1449,7 @@ export default function RubricasPage() {
         </div>
       </div>
 
-      {itemParaRemanejamento && (
+      {canManageChildren && itemParaRemanejamento && (
         <RemanejamentoModal
           isOpen={remanejamentoModalOpen}
           onClose={() => {
@@ -1279,12 +1463,17 @@ export default function RubricasPage() {
         />
       )}
 
-      <HistoricoRemanejamentos
-        isOpen={historicoModalOpen}
-        onClose={() => setHistoricoModalOpen(false)}
-        remanejamentos={remanejamentosComDados}
-        contratoId={contratoId}
-      />
+      {canOpenTransferHistory && (
+        <HistoricoRemanejamentos
+          isOpen={historicoModalOpen}
+          onClose={() => setHistoricoModalOpen(false)}
+          remanejamentos={remanejamentosComDados}
+          contratoId={contratoId}
+          canManageChildren={canManageChildren}
+          isSubmitting={isSubmitting}
+          onComeback={handleComebackRemanejamento}
+        />
+      )}
     </div>
   );
 }

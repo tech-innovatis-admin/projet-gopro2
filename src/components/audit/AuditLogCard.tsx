@@ -39,6 +39,7 @@ type AuditLogCardProps = {
   scopeFallback?: AuditScopeEnum | null;
   showScopeBadge?: boolean;
   accent?: AuditLogCardAccent | null;
+  headerActions?: ReactNode;
   extraSummaryContent?: ReactNode;
   detailsContent?: ReactNode;
   children?: ReactNode;
@@ -55,6 +56,7 @@ export function AuditLogCard({
   scopeFallback = null,
   showScopeBadge = false,
   accent = null,
+  headerActions = null,
   extraSummaryContent = null,
   detailsContent: _detailsContent = null,
   children: _children = null,
@@ -152,7 +154,8 @@ export function AuditLogCard({
             </div>
           </div>
 
-          <div className="shrink-0 space-y-1 text-sm text-zinc-600 lg:text-right">
+          <div className="shrink-0 space-y-2 text-sm text-zinc-600 lg:text-right">
+            {headerActions ? <div className="flex justify-start lg:justify-end">{headerActions}</div> : null}
             <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
               Data e hora
             </p>

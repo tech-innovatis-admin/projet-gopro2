@@ -51,6 +51,7 @@ import {
   type StageResponseDTO,
   type StageUpdateDTO,
 } from "@/src/lib/api/types";
+import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
 
 // Tipos
 type Fase = {
@@ -390,6 +391,30 @@ export default function MetaEtapaFasePage() {
   const [savedMessage, setSavedMessage] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadHierarchy = useCallback(async () => {
     if (!Number.isFinite(projectId) || projectId <= 0) {
@@ -503,6 +528,7 @@ export default function MetaEtapaFasePage() {
   }, [loadHierarchy]);
 
   const handleEdit = () => {
+    if (!canManageChildren) return;
     setEditMetas(JSON.parse(JSON.stringify(metas)));
     setIsEditing(true);
   };
@@ -626,6 +652,7 @@ export default function MetaEtapaFasePage() {
   };
 
   const handleSave = async () => {
+    if (!canManageChildren) return;
     setIsSaving(true);
     setLoadError(null);
     try {
@@ -668,6 +695,10 @@ export default function MetaEtapaFasePage() {
   };
 
   const toggleMetaConcluida = async (metaId: string) => {
+    if (!canManageChildren) {
+      setLoadError("Perfil em modo leitura para metas, etapas e fases.");
+      return;
+    }
     if (isEditing) {
       setLoadError("Salve as alteracoes antes de concluir ou reabrir a meta.");
       return;
@@ -716,6 +747,10 @@ export default function MetaEtapaFasePage() {
   };
 
   const toggleEtapaConcluida = async (metaId: string, etapaId: string) => {
+    if (!canManageChildren) {
+      setLoadError("Perfil em modo leitura para metas, etapas e fases.");
+      return;
+    }
     if (isEditing) {
       setLoadError("Salve as alteracoes antes de concluir ou reabrir a etapa.");
       return;
@@ -767,6 +802,10 @@ export default function MetaEtapaFasePage() {
     etapaId: string,
     faseId: string
   ) => {
+    if (!canManageChildren) {
+      setLoadError("Perfil em modo leitura para metas, etapas e fases.");
+      return;
+    }
     if (isEditing) {
       setLoadError("Salve as alteracoes antes de concluir ou reabrir a fase.");
       return;
@@ -1118,19 +1157,21 @@ export default function MetaEtapaFasePage() {
               Salvo com sucesso
             </div>
           )}
-          <button
-            onClick={() => {
-              if (!isEditing) {
-                handleEdit();
-              }
-              addMeta();
-            }}
-            className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-[#004225] transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-          >
-            <Plus className="h-4 w-4" />
-            Nova Meta
-          </button>
-          {!isEditing ? (
+          {canManageChildren && (
+            <button
+              onClick={() => {
+                if (!isEditing) {
+                  handleEdit();
+                }
+                addMeta();
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-[#004225] transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Meta
+            </button>
+          )}
+          {!isEditing && canManageChildren ? (
             <button
               onClick={handleEdit}
               className="inline-flex items-center gap-2 rounded-md bg-[#004225] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#003319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
@@ -1159,6 +1200,12 @@ export default function MetaEtapaFasePage() {
           )}
         </div>
       </div>
+
+      {!loadingAccess && !canManageChildren && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Perfil em modo leitura neste modulo. O estagiario pode consultar a estrutura, mas nao pode criar, editar, concluir ou reabrir metas, etapas e fases.
+        </div>
+      )}
 
       {isLoadingData && (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
@@ -1291,8 +1338,14 @@ export default function MetaEtapaFasePage() {
                     onClick={() => {
                       void toggleMetaConcluida(meta.id);
                     }}
-                    disabled={isEditing}
-                    title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                    disabled={isEditing || !canManageChildren}
+                    title={
+                      !canManageChildren
+                        ? "Perfil em modo leitura."
+                        : isEditing
+                          ? "Salve as alteracoes antes de concluir/reabrir."
+                          : undefined
+                    }
                     className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
                       meta.concluida
                         ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
@@ -1427,7 +1480,7 @@ export default function MetaEtapaFasePage() {
                     <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                          Edicao rapida da meta
+                          Edição rápida da meta
                         </p>
                         <span className="text-[11px] text-slate-600">
                           Campos principais
@@ -1435,7 +1488,7 @@ export default function MetaEtapaFasePage() {
                       </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <label className="flex flex-col gap-1 text-xs text-slate-600">
-                          <span className="font-medium text-slate-700">Titulo</span>
+                          <span className="font-medium text-slate-700">Título</span>
                           <input
                             type="text"
                             value={meta.titulo}
@@ -1447,7 +1500,7 @@ export default function MetaEtapaFasePage() {
                         </label>
 
                         <label className="flex flex-col gap-1 text-xs text-slate-600">
-                          <span className="font-medium text-slate-700">Descricao</span>
+                          <span className="font-medium text-slate-700">Descrição</span>
                           <input
                             type="text"
                             value={meta.descricao ?? ""}
@@ -1460,7 +1513,7 @@ export default function MetaEtapaFasePage() {
                         </label>
 
                         <label className="flex flex-col gap-1 text-xs text-slate-600">
-                          <span className="font-medium text-slate-700">Data de inicio</span>
+                          <span className="font-medium text-slate-700">Data de início</span>
                           <input
                             type="date"
                             value={meta.dataInicio ?? ""}
@@ -1574,8 +1627,14 @@ export default function MetaEtapaFasePage() {
                               onClick={() => {
                                 void toggleEtapaConcluida(meta.id, etapa.id);
                               }}
-                              disabled={isEditing}
-                              title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                              disabled={isEditing || !canManageChildren}
+                              title={
+                                !canManageChildren
+                                  ? "Perfil em modo leitura."
+                                  : isEditing
+                                    ? "Salve as alteracoes antes de concluir/reabrir."
+                                    : undefined
+                              }
                               className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
                                 etapa.concluida
                                   ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
@@ -1783,8 +1842,14 @@ export default function MetaEtapaFasePage() {
                                         onClick={() => {
                                           void toggleFaseConcluida(meta.id, etapa.id, fase.id);
                                         }}
-                                        disabled={isEditing}
-                                        title={isEditing ? "Salve as alteracoes antes de concluir/reabrir." : undefined}
+                                        disabled={isEditing || !canManageChildren}
+                                        title={
+                                          !canManageChildren
+                                            ? "Perfil em modo leitura."
+                                            : isEditing
+                                              ? "Salve as alteracoes antes de concluir/reabrir."
+                                              : undefined
+                                        }
                                         className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
                                           fase.concluida
                                             ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"

@@ -7,7 +7,7 @@ import {
   listAdminUsers,
   updateAdminUser,
 } from "@/src/lib/api/endpoints/auth";
-import { fetchCurrentUser, isAdmin } from "@/src/lib/auth/session";
+import { canManageAdminArea, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
   AdminUserResponseDTO,
   HttpError,
@@ -63,7 +63,6 @@ function getErrorMessage(error: unknown): string {
 export default function AdminUsuariosPage() {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [canManage, setCanManage] = useState(false);
-  const [loggedRole, setLoggedRole] = useState<UserRoleEnum | null>(null);
 
   const [users, setUsers] = useState<AdminUserResponseDTO[]>([]);
   const [drafts, setDrafts] = useState<Record<number, UserDraft>>({});
@@ -110,8 +109,7 @@ export default function AdminUsuariosPage() {
       try {
         const user = await fetchCurrentUser();
         if (!cancelled) {
-          setCanManage(isAdmin(user));
-          setLoggedRole((user?.role?.toUpperCase() as UserRoleEnum) ?? null);
+          setCanManage(canManageAdminArea(user));
         }
       } finally {
         if (!cancelled) {
@@ -135,9 +133,9 @@ export default function AdminUsuariosPage() {
 
   const emptyMessage = useMemo(() => {
     if (loadingUsers) {
-      return "Carregando usuarios...";
+      return "Carregando usuários...";
     }
-    return "Nenhum usuario encontrado para os filtros selecionados.";
+    return "Nenhum usuário encontrado para os filtros selecionados.";
   }, [loadingUsers]);
 
   function handleDraftRole(userId: number, value: UserRoleEnum) {
@@ -182,7 +180,7 @@ export default function AdminUsuariosPage() {
         role: draft.role,
         status: draft.status,
       });
-      setFeedback(`Usuario ${user.email} atualizado com sucesso.`);
+      setFeedback(`Usuário ${user.email} atualizado com sucesso.`);
       await loadUsers();
     } catch (requestError) {
       setError(getErrorMessage(requestError));
@@ -196,9 +194,9 @@ export default function AdminUsuariosPage() {
       <NavBar />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <header>
-          <h1 className="text-2xl font-bold text-zinc-900">Gestao de usuarios</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Gestão de usuários</h1>
           <p className="text-sm text-zinc-600">
-            Controle de perfil e status para usuarios ativos no sistema.
+            Controle de perfil e status para usuários ativos no sistema.
           </p>
         </header>
 
@@ -286,20 +284,18 @@ export default function AdminUsuariosPage() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 text-left text-zinc-600">
-                        <th className="px-3 py-2">Usuario</th>
-                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Usuário</th>
+                        <th className="px-3 py-2">E-mail</th>
                         <th className="px-3 py-2">Perfil</th>
                         <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Ultimo login</th>
-                        <th className="px-3 py-2">Acoes</th>
+                        <th className="px-3 py-2">Último login</th>
+                        <th className="px-3 py-2">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {users.map((user) => {
                         const draft = drafts[user.id];
                         const isBusy = savingUserId === user.id;
-                        const isSelfSuperadmin =
-                          loggedRole === "ADMIN" && draft?.role === "SUPERADMIN";
 
                         return (
                           <tr key={user.id} className="border-b border-zinc-100">
@@ -318,20 +314,11 @@ export default function AdminUsuariosPage() {
                                 disabled={isBusy}
                               >
                                 {roleOptions.map((option) => (
-                                  <option
-                                    key={option}
-                                    value={option}
-                                    disabled={loggedRole === "ADMIN" && option === "SUPERADMIN"}
-                                  >
+                                  <option key={option} value={option}>
                                     {roleLabels[option]}
                                   </option>
                                 ))}
                               </select>
-                              {isSelfSuperadmin && (
-                                <div className="mt-1 text-xs text-amber-700">
-                                  Admin nao pode promover para superadmin.
-                                </div>
-                              )}
                             </td>
                             <td className="px-3 py-2">
                               <select
@@ -354,7 +341,7 @@ export default function AdminUsuariosPage() {
                               <Button
                                 type="button"
                                 size="sm"
-                                disabled={isBusy || isSelfSuperadmin}
+                                disabled={isBusy}
                                 onClick={() => void handleSaveUser(user)}
                               >
                                 {isBusy ? "Salvando..." : "Salvar"}
@@ -374,4 +361,3 @@ export default function AdminUsuariosPage() {
     </div>
   );
 }
-

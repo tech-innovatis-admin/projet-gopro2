@@ -339,6 +339,27 @@ export function NavBar() {
     ];
   }, [isAdmin, isSuperAdmin]);
 
+  const adminHomeHref = "/admin/usuarios";
+  const resolvedNavigationItems = useMemo<NavItem[]>(() => {
+    if (!isAdmin) {
+      return navigationItems;
+    }
+
+    return [
+      ...baseNavigationItems,
+      {
+        label: "Admin",
+        href: adminHomeHref,
+        icon: Shield,
+        children: [
+          { label: "Convites", href: "/admin/convites", icon: Shield },
+          { label: "Usuários", href: "/admin/usuarios", icon: Users },
+          { label: "Auditoria", href: "/admin/auditoria", icon: Activity },
+        ],
+      },
+    ];
+  }, [isAdmin, navigationItems]);
+
   const unreadNotificationCount = useMemo(
     () => notifications.filter((notification) => !readNotificationIds.has(notification.id)).length,
     [notifications, readNotificationIds]
@@ -503,7 +524,7 @@ export function NavBar() {
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
-          {navigationItems.map(renderDesktopItem)}
+          {resolvedNavigationItems.map(renderDesktopItem)}
         </div>
 
         <div className="flex items-center gap-2">
@@ -641,7 +662,7 @@ export function NavBar() {
                   </DropdownMenuItem>
                   {isAdmin && (
                     <DropdownMenuItem
-                      onClick={() => router.push(isSuperAdmin ? "/admin/convites" : "/admin/usuarios")}
+                      onClick={() => router.push(adminHomeHref)}
                       className="cursor-pointer gap-2"
                     >
                       <Shield className="h-4 w-4" />
@@ -678,7 +699,7 @@ export function NavBar() {
 
       {mobileOpen && (
         <div className="border-t border-zinc-200 bg-white px-3 py-3 md:hidden">
-          <div className="space-y-1">{navigationItems.map(renderMobileItem)}</div>
+          <div className="space-y-1">{resolvedNavigationItems.map(renderMobileItem)}</div>
         </div>
       )}
     </nav>

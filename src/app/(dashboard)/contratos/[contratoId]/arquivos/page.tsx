@@ -25,6 +25,10 @@ import {
   listDocumentsByOwner,
   uploadDocument,
 } from "@/src/lib/api/endpoints";
+import {
+  canManageContractChildren,
+  fetchCurrentUser,
+} from "@/src/lib/auth/session";
 import { HttpError, type DocumentResponseDTO } from "@/src/lib/api/types";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
@@ -173,6 +177,8 @@ export default function ArquivosPage() {
   const hasValidOwner = Number.isFinite(ownerId) && ownerId > 0;
 
   const [documents, setDocuments] = useState<ContractDocument[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+  const [canManageChildren, setCanManageChildren] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
@@ -190,6 +196,37 @@ export default function ArquivosPage() {
   const [selectedDocument, setSelectedDocument] = useState<ContractDocument | null>(
     null
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCanManageChildren(canManageContractChildren(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAccess(false);
+        }
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ensureCanManageChildren = () => {
+    if (canManageChildren) {
+      return true;
+    }
+
+    setError("Seu perfil pode apenas visualizar os arquivos deste contrato.");
+    return false;
+  };
 
   const loadDocuments = useCallback(async () => {
     if (!hasValidOwner) {
@@ -301,6 +338,7 @@ export default function ArquivosPage() {
   };
 
   const handleCreateDocument = async (payload: UploadPayload) => {
+    if (!ensureCanManageChildren()) return;
     if (!hasValidOwner) return;
 
     setIsUploading(true);
@@ -326,11 +364,13 @@ export default function ArquivosPage() {
   };
 
   const handleOpenReplaceModal = (item: ContractDocument) => {
+    if (!ensureCanManageChildren()) return;
     setSelectedDocument(item);
     setIsEditModalOpen(true);
   };
 
   const handleReplaceDocument = async (payload: ReplacePayload) => {
+    if (!ensureCanManageChildren()) return;
     if (!hasValidOwner) return;
 
     setIsReplacing(true);
@@ -358,6 +398,7 @@ export default function ArquivosPage() {
   };
 
   const handleDeleteDocument = async (documentId: string) => {
+    if (!ensureCanManageChildren()) return;
     const confirmed = window.confirm("Deseja realmente excluir este arquivo?");
     if (!confirmed) return;
 
@@ -385,7 +426,7 @@ export default function ArquivosPage() {
             Documentos do Contrato
           </h2>
           <p className="text-sm text-gray-500">
-            Lista de arquivos vinculados ao contrato no backend/S3
+            Lista de arquivos vinculados ao contrato!
           </p>
         </div>
 
@@ -396,14 +437,16 @@ export default function ArquivosPage() {
               {message}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319]"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Arquivo
-          </button>
+          {canManageChildren && (
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319]"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Arquivo
+            </button>
+          )}
         </div>
       </div>
 
@@ -411,6 +454,12 @@ export default function ArquivosPage() {
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertCircle className="mt-0.5 h-4 w-4" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {!loadingAccess && !canManageChildren && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Seu perfil pode consultar e baixar arquivos, mas nao pode enviar, substituir ou excluir documentos.
         </div>
       )}
 
@@ -455,7 +504,9 @@ export default function ArquivosPage() {
             Nenhum arquivo encontrado
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Envie documentos para este contrato usando o botao Novo Arquivo.
+            {canManageChildren
+              ? "Envie documentos para este contrato usando o botao Novo Arquivo."
+              : "Nenhum documento foi encontrado para este contrato."}
           </p>
         </div>
       ) : (
@@ -543,28 +594,32 @@ export default function ArquivosPage() {
                             >
                               <Download className="h-4 w-4" />
                             </button>
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleOpenReplaceModal(item)}
-                              className="rounded-lg p-2 text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
-                              title="Editar (substituir)"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => void handleDeleteDocument(item.id)}
-                              className="rounded-lg p-2 text-red-700 hover:bg-red-50 disabled:opacity-50"
-                              title="Excluir arquivo"
-                            >
-                              {isBusy ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </button>
+                            {canManageChildren && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => handleOpenReplaceModal(item)}
+                                  className="rounded-lg p-2 text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
+                                  title="Editar (substituir)"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => void handleDeleteDocument(item.id)}
+                                  className="rounded-lg p-2 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                  title="Excluir arquivo"
+                                >
+                                  {isBusy ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -577,7 +632,7 @@ export default function ArquivosPage() {
         </div>
       )}
 
-      {isCreateModalOpen && (
+      {canManageChildren && isCreateModalOpen && (
         <NovoArquivoModal
           isOpen={isCreateModalOpen}
           isSubmitting={isUploading}
@@ -586,7 +641,7 @@ export default function ArquivosPage() {
         />
       )}
 
-      {isEditModalOpen && selectedDocument && (
+      {canManageChildren && isEditModalOpen && selectedDocument && (
         <EditarArquivoModal
           isOpen={isEditModalOpen}
           arquivo={selectedDocument}

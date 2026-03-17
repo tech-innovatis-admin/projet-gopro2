@@ -31,7 +31,7 @@ import {
   resolveBudgetReferenceEntityLabel,
 } from "@/src/lib/audit/budget-reference-presentation";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
-import { fetchCurrentUser, isAdmin } from "@/src/lib/auth/session";
+import { canViewContractAudit, fetchCurrentUser } from "@/src/lib/auth/session";
 
 const PAGE_SIZE = 5;
 
@@ -285,7 +285,7 @@ export default function ContractAuditPage() {
       try {
         const user = await fetchCurrentUser();
         if (!cancelled) {
-          setCanView(isAdmin(user));
+          setCanView(canViewContractAudit(user));
         }
       } finally {
         if (!cancelled) {
@@ -530,7 +530,7 @@ export default function ContractAuditPage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <h2 className="text-xl font-semibold text-zinc-900">Auditoria</h2>
-        <p className="text-sm text-zinc-600">Acoes realizadas no contrato.</p>
+        <p className="text-sm text-zinc-600">Ações realizadas no contrato.</p>
       </header>
 
       {loadingAccess && (
@@ -541,7 +541,7 @@ export default function ContractAuditPage() {
 
       {!loadingAccess && !canView && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm text-amber-800">Acesso permitido apenas para administradores.</p>
+          <p className="text-sm text-amber-800">Não foi possível validar o acesso a auditoria deste contrato.</p>
         </section>
       )}
 
@@ -604,13 +604,11 @@ export default function ContractAuditPage() {
                       itemLabelsById: budgetItemLabelsById,
                       itemPresentationsById: budgetItemPresentationsById,
                     });
-                    const transferSummary = transferDirection
-                      ? buildBudgetTransferBusinessSummary(log, {
-                          categoryLabelsById: budgetCategoryLabelsById,
-                          itemLabelsById: budgetItemLabelsById,
-                          itemPresentationsById: budgetItemPresentationsById,
-                        })
-                      : null;
+                    const transferSummary = buildBudgetTransferBusinessSummary(log, {
+                      categoryLabelsById: budgetCategoryLabelsById,
+                      itemLabelsById: budgetItemLabelsById,
+                      itemPresentationsById: budgetItemPresentationsById,
+                    });
                     const resolvedTransferSummary =
                       transferSummary ||
                       (transferDirection
