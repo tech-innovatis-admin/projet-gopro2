@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -363,6 +363,7 @@ export default function PagamentosPlanilhaPage() {
     subitemNome: string;
     lancamento: Lancamento;
   } | null>(null);
+  const pageErrorRef = useRef<HTMLDivElement | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -444,7 +445,29 @@ export default function PagamentosPlanilhaPage() {
     [baseCompanies, projectCompaniesById]
   );
 
-  const closeSubitemModal = useCallback(() => {
+  const closeSubitemModal = ({
+    discardTransientDraft = true,
+  }: {
+    discardTransientDraft?: boolean;
+  } = {}) => {
+    if (discardTransientDraft && subitemModalEditingContext) {
+      const selected = findItemAndSubitem(
+        subitemModalEditingContext.itemId,
+        subitemModalEditingContext.subitemId
+      );
+
+      if (
+        selected &&
+        isTransientSubitem(selected.subitem) &&
+        (selected.subitem.lancamentos?.length ?? 0) === 0
+      ) {
+        discardTransientSubitem(
+          subitemModalEditingContext.itemId,
+          subitemModalEditingContext.subitemId
+        );
+      }
+    }
+
     setIsSubitemModalOpen(false);
     setSubitemModalItemId(null);
     setSubitemModalEditingContext(null);
@@ -452,7 +475,7 @@ export default function PagamentosPlanilhaPage() {
     setSubitemModalError(null);
     setIsLinkExistingPersonModalOpen(false);
     setIsLinkExistingCompanyModalOpen(false);
-  }, []);
+  };
 
   const getSubitemVinculoLabel = useCallback(
     (subitem: Subitem) => {
@@ -758,6 +781,15 @@ export default function PagamentosPlanilhaPage() {
     void loadProjectLinks();
   }, [loadProjectLinks]);
 
+  useEffect(() => {
+    if (!loadError && !actionError) return;
+
+    pageErrorRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, [loadError, actionError]);
+
   const calcularTotalOrcadoItem = (item: ItemRubrica) => {
     const valorBase =
       safeNumber(item.valorBaseOrcado) ||
@@ -815,27 +847,6 @@ export default function PagamentosPlanilhaPage() {
   );
 
   const saldoTotalContrato = calculateContractBalance(totalRecebido, totalPago);
-  const ensureContractBalanceNonNegative = ({
-    nextTotalRecebido = totalRecebido,
-    nextTotalPago = totalPago,
-    message,
-  }: {
-    nextTotalRecebido?: number;
-    nextTotalPago?: number;
-    message?: string;
-  } = {}) => {
-    const nextSaldo = calculateContractBalance(nextTotalRecebido, nextTotalPago);
-    if (nextSaldo >= 0) {
-      return true;
-    }
-
-    const deficit = formatCurrency(Math.abs(nextSaldo));
-    setActionError(
-      message ??
-        `O saldo total do contrato não pode ficar negativo. Faltam ${deficit} para cobrir os pagamentos.`
-    );
-    return false;
-  };
 
   const toggleRubrica = (rubricaId: ID) => {
     setRubricas((previous) =>
@@ -861,6 +872,16 @@ export default function PagamentosPlanilhaPage() {
     return null;
   };
 
+  const isTransientSubitem = (subitem: Subitem) =>
+    !(subitem.lancamentos ?? []).some(
+      (lancamento) => parsePersistedId(lancamento.expenseId) != null
+    );
+
+  const isBlankDraftLancamento = (lancamento: Lancamento) =>
+    parsePersistedId(lancamento.expenseId) == null &&
+    safeNumber(lancamento.valor) <= 0 &&
+    !(lancamento.dataPag || '').trim();
+
   const removeSubitemFromDraftState = (itemId: ID, subitemId: ID) => {
     setRubricas((previous) =>
       previous.map((rubrica) => ({
@@ -872,6 +893,18 @@ export default function PagamentosPlanilhaPage() {
         ),
       }))
     );
+  };
+
+  const discardTransientSubitem = (itemId: ID, subitemId: ID) => {
+    const subitemKey = createSubitemKey(itemId, subitemId);
+
+    removeSubitemFromDraftState(itemId, subitemId);
+    setEditingSubitemSession((current) =>
+      current?.subitemKey === subitemKey ? null : current
+    );
+    setExpandedSubitemKey((current) => (current === subitemKey ? null : current));
+    setEditingLancamentosSubitemKey((current) => (current === subitemKey ? null : current));
+    setIsEditingSubitens(false);
   };
 
   const updateSubitemDraftState = (
@@ -988,13 +1021,25 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    const selected = findItemAndSubitem(currentSession.itemId, currentSession.subitemId);
+    if (
+      currentSession.originalExpenseIds.length === 0 &&
+      selected?.subitem &&
+      isTransientSubitem(selected.subitem)
+    ) {
+      discardTransientSubitem(currentSession.itemId, currentSession.subitemId);
+      return;
+    }
+
+    setEditingSubitemSession(null);
+    applySubitemEditingState({
+      keepExpandedSubitemKey: currentSession.subitemKey,
+    });
     setIsPersisting(true);
     try {
       await loadData();
-      setEditingSubitemSession(null);
-      applySubitemEditingState({
-        keepExpandedSubitemKey: currentSession.subitemKey,
-      });
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível cancelar a edição do subitem.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1052,24 +1097,6 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    const parcelaAtual = parcelas.find((parcela) => parcela.id === editParcelaForm.id);
-    const nextTotalRecebido = Number(
-      (
-        totalRecebido -
-        safeNumber(parcelaAtual?.valorRecebido) +
-        toMoneyValue(editParcelaForm.valorRecebido)
-      ).toFixed(2)
-    );
-    if (
-      !ensureContractBalanceNonNegative({
-        nextTotalRecebido,
-        message:
-          'Esta alteração deixaria o saldo total do contrato negativo. Ajuste as parcelas ou os pagamentos antes de salvar.',
-      })
-    ) {
-      return;
-    }
-
     setIsPersisting(true);
     setActionError(null);
     try {
@@ -1104,18 +1131,6 @@ export default function PagamentosPlanilhaPage() {
         return;
       }
 
-      const nextTotalRecebido = Number((totalRecebido - safeNumber(alvo.valorRecebido)).toFixed(2));
-      if (
-        !ensureContractBalanceNonNegative({
-          nextTotalRecebido,
-          message:
-            'NÃ£o e possÃ­vel remover esta parcela porque isso deixaria o saldo total do contrato negativo.',
-        })
-      ) {
-        closeDeleteParcelaModal();
-        return;
-      }
-
       setIsPersisting(true);
       setActionError(null);
       try {
@@ -1132,16 +1147,6 @@ export default function PagamentosPlanilhaPage() {
     }
     if (!isPersistedId(parcelaId)) {
       setActionError('Parcela inválida para remocao.');
-      return;
-    }
-    const nextTotalRecebido = Number((totalRecebido - safeNumber(alvo.valorRecebido)).toFixed(2));
-    if (
-      !ensureContractBalanceNonNegative({
-        nextTotalRecebido,
-        message:
-          'Não e possível remover esta parcela porque isso deixaria o saldo total do contrato negativo.',
-      })
-    ) {
       return;
     }
 
@@ -1184,7 +1189,7 @@ export default function PagamentosPlanilhaPage() {
     const subitem: Subitem = {
       id: createDraftId('sub'),
       empresaRh: nome,
-      lancamentos: [createDraftLancamento()],
+      lancamentos: [],
       vinculoTipo: subitemModalForm.vinculoTipo,
       personId:
         subitemModalForm.vinculoTipo === 'person' ? subitemModalForm.personId : undefined,
@@ -1205,16 +1210,12 @@ export default function PagamentosPlanilhaPage() {
 
     const subitemKey = createSubitemKey(itemId, subitem.id);
     setActionError(null);
-    setEditingSubitemSession({
-      itemId,
-      subitemId: subitem.id,
-      subitemKey,
-      originalExpenseIds: [],
-    });
-    setIsEditingSubitens(true);
     setExpandedSubitemKey(subitemKey);
-    setEditingLancamentosSubitemKey(subitemKey);
-    closeSubitemModal();
+    setEditingSubitemSession(null);
+    setIsEditingSubitens(false);
+    setEditingLancamentosSubitemKey(null);
+    closeSubitemModal({ discardTransientDraft: false });
+    showSavedMessage('Subitem criado. Adicione um lançamento para persisti-lo.');
   };
 
   const handleStartAddSubitem = (itemId: ID) => {
@@ -1463,7 +1464,7 @@ export default function PagamentosPlanilhaPage() {
       .filter((expenseId): expenseId is number => expenseId != null);
 
     if (expenseIds.length === 0) {
-      closeSubitemModal();
+      closeSubitemModal({ discardTransientDraft: false });
       showSavedMessage('Subitem atualizado com sucesso.');
       return;
     }
@@ -1502,7 +1503,7 @@ export default function PagamentosPlanilhaPage() {
       }
 
       await loadData();
-      closeSubitemModal();
+      closeSubitemModal({ discardTransientDraft: false });
       showSavedMessage('Subitem atualizado com sucesso.');
     } catch (error) {
       setSubitemModalError(toErrorMessage(error, 'Não foi possível atualizar o subitem.'));
@@ -1640,6 +1641,16 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    if (isBlankDraftLancamento(lancamentoSelecionado)) {
+      if (!beginEditingSubitem(itemId, subitemId)) {
+        return;
+      }
+
+      removeLancamentoFromDraftState(itemId, subitemId, lancamentoId);
+      closeDeleteLancamentoModal();
+      return;
+    }
+
     if (
       lancamentoPendingDeletion?.itemId !== itemId ||
       lancamentoPendingDeletion.subitemId !== subitemId ||
@@ -1670,34 +1681,6 @@ export default function PagamentosPlanilhaPage() {
     patch: Partial<Pick<Lancamento, 'valor' | 'dataPag'>>
   ) => {
     if (!canManageChildren) return;
-
-    if (patch.valor != null) {
-      const nextValor = Math.max(0, safeNumber(patch.valor));
-      let currentValor = 0;
-
-      for (const rubrica of rubricas) {
-        const item = rubrica.itens.find((entry) => entry.id === itemId);
-        if (!item) continue;
-
-        const subitem = (item.subitens ?? []).find((entry) => entry.id === subitemId);
-        if (!subitem) break;
-
-        const lancamento = (subitem.lancamentos ?? []).find((entry) => entry.id === lancamentoId);
-        currentValor = safeNumber(lancamento?.valor);
-        break;
-      }
-
-      const nextTotalPago = Number((totalPago - currentValor + nextValor).toFixed(2));
-      if (
-        !ensureContractBalanceNonNegative({
-          nextTotalPago,
-          message:
-            'O total pago não pode ultrapassar o total recebido. Ajuste o valor do lançamento.',
-        })
-      ) {
-        return;
-      }
-    }
 
     setActionError(null);
 
@@ -1750,14 +1733,6 @@ export default function PagamentosPlanilhaPage() {
       setActionError('ID do contrato inválido para salvar pagamentos.');
       return;
     }
-    if (
-      !ensureContractBalanceNonNegative({
-        message:
-          'O saldo total do contrato não pode ficar negativo. Ajuste os lançamentos antes de salvar.',
-      })
-    ) {
-      return;
-    }
 
     if (!editingSubitemSession) {
       setActionError('Selecione um subitem para salvar.');
@@ -1767,20 +1742,20 @@ export default function PagamentosPlanilhaPage() {
     const currentSession = editingSubitemSession;
     const selected = findItemAndSubitem(currentSession.itemId, currentSession.subitemId);
     if (!selected) {
-      setActionError('Subitem invÃ¡lido para salvar.');
+      setActionError('Subitem inválido para salvar.');
       return;
     }
 
     const { item, subitem } = selected;
     const budgetItemId = parsePersistedId(item.id);
     if (budgetItemId == null) {
-      setActionError(`Item "${item.descricao}" invÃ¡lido para persistencia.`);
+      setActionError(`Item "${item.descricao}" inválido para persistir.`);
       return;
     }
 
     const categoryId = item.categoryId;
     if (!Number.isFinite(categoryId)) {
-      setActionError(`Categoria invÃ¡lida para o item "${item.descricao}".`);
+      setActionError(`Categoria inválida para o item "${item.descricao}".`);
       return;
     }
 
@@ -1806,7 +1781,9 @@ export default function PagamentosPlanilhaPage() {
       }
 
       if (!hasAmount || !hasDate) {
-        setActionError(`Preencha valor e data no subitem "${description || item.descricao}".`);
+        setActionError(
+          `Informe valor e data válidos para salvar o lançamento no subitem "${description || item.descricao}".`
+        );
         return;
       }
 
@@ -1893,7 +1870,7 @@ export default function PagamentosPlanilhaPage() {
     const hasFilledLancamentos = createPayloads.length > 0 || keepExpenseIds.size > 0;
     if (!hasFilledLancamentos && currentSession.originalExpenseIds.length === 0) {
       setActionError(
-        `Adicione ao menos um lanÃ§amento vÃ¡lido para salvar o subitem "${description || item.descricao}".`
+        `Adicione ao menos um lançamento com valor e data válidos para salvar o subitem "${description || item.descricao}".`
       );
       return;
     }
@@ -1908,7 +1885,7 @@ export default function PagamentosPlanilhaPage() {
       applySubitemEditingState({
         keepExpandedSubitemKey: currentSession.subitemKey,
       });
-      showSavedMessage('Nenhuma alteraÃ§Ã£o pendente para salvar.');
+      showSavedMessage('Nenhuma alteração pendente para salvar.');
       return;
     }
 
@@ -1935,7 +1912,7 @@ export default function PagamentosPlanilhaPage() {
       });
       showSavedMessage('Subitem salvo com sucesso.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel salvar o subitem.'));
+      setActionError(toErrorMessage(error, 'Não foi possível salvar o subitem.'));
     } finally {
       setIsPersisting(false);
     }
@@ -2133,7 +2110,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div ref={pageErrorRef} className="space-y-6 scroll-mt-24">
       {isLoading && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Carregando pagamentos...
@@ -2505,9 +2482,18 @@ export default function PagamentosPlanilhaPage() {
                                       isEditingSubitens &&
                                       editingSubitemSession?.subitemKey === subitemKey &&
                                       editingLancamentosSubitemKey === subitemKey;
+                                    const lancamentosParaExibir = isEditingLancamentos
+                                      ? subitem.lancamentos ?? []
+                                      : lancamentosOrdenados;
+                                    const hasLancamentos = quantidade > 0;
                                     const handlePrimaryLancamentoAction = () => {
                                       if (isEditingLancamentos) {
                                         void handleSaveSubitens();
+                                        return;
+                                      }
+
+                                      if (hasLancamentos) {
+                                        handleEditLancamentos(item.id, subitem.id);
                                         return;
                                       }
 
@@ -2528,16 +2514,42 @@ export default function PagamentosPlanilhaPage() {
                                         </td>
                                         <td className="px-2 py-2">
                                           <div className="space-y-1">
-                                            <span className="block text-sm font-medium text-gray-700">
-                                              {subitem.empresaRh || '-'}
-                                            </span>
+                                            <div className="flex items-start justify-between gap-2">
+                                              <span className="block min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
+                                                {subitem.empresaRh || '-'}
+                                              </span>
+                                              {canManageChildren ? (
+                                                <div className="flex shrink-0 items-center gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleStartEditSubitem(item.id, subitem.id)}
+                                                    disabled={isPersisting}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                                                    aria-label="Editar subitem"
+                                                    title="Editar subitem"
+                                                  >
+                                                    <Pencil className="h-4 w-4" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => void handleRemoveSubitem(item.id, subitem.id)}
+                                                    disabled={isPersisting}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                                                    aria-label="Excluir subitem"
+                                                    title="Excluir subitem"
+                                                  >
+                                                    <Trash2 className="h-4 w-4" />
+                                                  </button>
+                                                </div>
+                                              ) : null}
+                                            </div>
                                             <span className="block text-xs text-gray-500">
                                               {getSubitemVinculoLabel(subitem)}
                                             </span>
                                           </div>
                                         </td>
                                         <td className="px-2 py-2">
-                                          <div className="flex flex-col gap-2">
+                                          <div className="flex flex-col items-center gap-2 text-center">
                                             <div className="space-y-1 text-sm">
                                               <div className="font-medium text-gray-800">
                                                 {quantidade} {quantidade === 1 ? 'lançamento' : 'lançamentos'}
@@ -2550,14 +2562,14 @@ export default function PagamentosPlanilhaPage() {
                                                 {ultimaDataPagamento ? formatDate(ultimaDataPagamento) : '-'}
                                               </div>
                                             </div>
-                                              <button
-                                                type="button"
-                                                onClick={() => toggleExpandedSubitem(subitemKey)}
-                                                aria-expanded={isSubitemExpanded}
-                                                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                                              >
-                                                {isSubitemExpanded ? (
-                                                  <ChevronDown className="h-4 w-4" />
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleExpandedSubitem(subitemKey)}
+                                              aria-expanded={isSubitemExpanded}
+                                              className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                            >
+                                              {isSubitemExpanded ? (
+                                                <ChevronDown className="h-4 w-4" />
                                               ) : (
                                                 <ChevronRight className="h-4 w-4" />
                                               )}
@@ -2597,33 +2609,7 @@ export default function PagamentosPlanilhaPage() {
                                                 </div>
 
                                                 {canManageChildren && (
-                                                  <div className="flex w-full min-w-0 items-center gap-2">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleStartEditSubitem(item.id, subitem.id)}
-                                                      disabled={isPersisting}
-                                                      className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 sm:px-3"
-                                                    >
-                                                      <Pencil className="h-4 w-4" />
-                                                      <span className="truncate">
-                                                        Editar subitem
-                                                      </span>
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      onClick={handlePrimaryLancamentoAction}
-                                                      disabled={isPersisting}
-                                                      className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-2 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 sm:px-3"
-                                                    >
-                                                      {isEditingLancamentos ? (
-                                                        <Save className="h-4 w-4" />
-                                                      ) : (
-                                                        <Plus className="h-4 w-4" />
-                                                      )}
-                                                      <span className="truncate">
-                                                        {isEditingLancamentos ? 'Salvar lançamento' : 'Adicionar lançamento'}
-                                                      </span>
-                                                    </button>
+                                                  <div className="flex w-full min-w-0 items-center justify-end gap-2">
                                                     {isEditingLancamentos && (
                                                       <button
                                                         type="button"
@@ -2631,32 +2617,44 @@ export default function PagamentosPlanilhaPage() {
                                                           void cancelEditingSubitem();
                                                         }}
                                                         disabled={isPersisting}
-                                                        className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 sm:px-3"
+                                                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-300"
                                                       >
                                                         <X className="h-4 w-4" />
-                                                        <span className="truncate">Cancelar</span>
+                                                        <span className="truncate">Cancelar edição</span>
                                                       </button>
                                                     )}
                                                     <button
                                                       type="button"
-                                                      onClick={() => void handleRemoveSubitem(item.id, subitem.id)}
+                                                      onClick={handlePrimaryLancamentoAction}
                                                       disabled={isPersisting}
-                                                      className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-2 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 sm:px-3"
+                                                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-[#004225] bg-[#004225] px-3 py-2 text-sm font-semibold text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                                                     >
-                                                      <Trash2 className="h-4 w-4" />
-                                                      <span className="truncate">Excluir subitem</span>
+                                                      {isEditingLancamentos ? (
+                                                        <Save className="h-4 w-4" />
+                                                      ) : hasLancamentos ? (
+                                                        <Pencil className="h-4 w-4" />
+                                                      ) : (
+                                                        <Plus className="h-4 w-4" />
+                                                      )}
+                                                      <span className="truncate">
+                                                        {isEditingLancamentos
+                                                          ? 'Salvar lançamentos'
+                                                          : hasLancamentos
+                                                            ? 'Editar lançamentos'
+                                                            : 'Adicionar lançamento'}
+                                                      </span>
                                                     </button>
                                                   </div>
                                                 )}
                                               </div>
 
                                               <div className="mt-4 space-y-3">
-                                                {lancamentosOrdenados.length === 0 ? (
+                                                {lancamentosParaExibir.length === 0 ? (
                                                   <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500">
                                                     Nenhum lançamento cadastrado
                                                   </div>
                                                 ) : (
-                                                  lancamentosOrdenados.map((lancamento, index) => (
+                                                  lancamentosParaExibir.map((lancamento, index) => (
                                                     <div
                                                       key={lancamento.id}
                                                       className="rounded-lg border border-gray-200 bg-gray-50 p-3"
@@ -2693,21 +2691,11 @@ export default function PagamentosPlanilhaPage() {
                                                                 }
                                                               )
                                                             }
+                                                            placeholder="Selecionar data"
                                                             disabled={isPersisting}
                                                             className="h-9 rounded border-gray-300 bg-white px-2 py-1 text-sm"
                                                           />
                                                           <div className="flex items-center justify-end gap-2">
-                                                            <button
-                                                              type="button"
-                                                              onClick={() =>
-                                                                handleEditLancamentos(item.id, subitem.id)
-                                                              }
-                                                              disabled={isPersisting}
-                                                              className="inline-flex items-center justify-center rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                                                              aria-label="Editar lançamento"
-                                                            >
-                                                              <Pencil className="h-4 w-4" />
-                                                            </button>
                                                             <button
                                                               type="button"
                                                               onClick={() =>
@@ -2720,6 +2708,7 @@ export default function PagamentosPlanilhaPage() {
                                                               disabled={isPersisting}
                                                               className="inline-flex items-center justify-center rounded border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
                                                               aria-label="Excluir lançamento"
+                                                              title="Excluir lançamento"
                                                             >
                                                               <Trash2 className="h-4 w-4" />
                                                             </button>
@@ -2738,17 +2727,6 @@ export default function PagamentosPlanilhaPage() {
                                                               <button
                                                                 type="button"
                                                                 onClick={() =>
-                                                                  handleEditLancamentos(item.id, subitem.id)
-                                                                }
-                                                                disabled={isPersisting}
-                                                                className="inline-flex items-center justify-center rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                                                                aria-label="Editar lançamento"
-                                                              >
-                                                                <Pencil className="h-4 w-4" />
-                                                              </button>
-                                                              <button
-                                                                type="button"
-                                                                onClick={() =>
                                                                   handleRemoveLancamento(
                                                                     item.id,
                                                                     subitem.id,
@@ -2758,6 +2736,7 @@ export default function PagamentosPlanilhaPage() {
                                                                 disabled={isPersisting}
                                                                 className="inline-flex items-center justify-center rounded border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                                                                 aria-label="Excluir lançamento"
+                                                                title="Excluir lançamento"
                                                               >
                                                                 <Trash2 className="h-4 w-4" />
                                                               </button>
@@ -2767,6 +2746,21 @@ export default function PagamentosPlanilhaPage() {
                                                       )}
                                                     </div>
                                                   ))
+                                                )}
+
+                                                {canManageChildren && isEditingLancamentos && (
+                                                  <div className="flex justify-center pt-1">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleAddLancamento(item.id, subitem.id)}
+                                                      disabled={isPersisting}
+                                                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[#004225] bg-white text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                                                      aria-label="Adicionar outro lançamento"
+                                                      title="Adicionar outro lançamento"
+                                                    >
+                                                      <Plus className="h-5 w-5" />
+                                                    </button>
+                                                  </div>
                                                 )}
                                               </div>
                                             </div>

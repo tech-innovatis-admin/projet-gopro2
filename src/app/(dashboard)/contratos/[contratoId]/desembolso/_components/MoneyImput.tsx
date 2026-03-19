@@ -23,6 +23,7 @@ export type MoneyInputProps = Omit<
 
 const DEFAULT_LOCALE = "pt-BR";
 const DEFAULT_CURRENCY = "BRL";
+const DEFAULT_MAX_CENTS = 99_999_999_999;
 
 function clampInt(n: number, min: number, max: number) {
   return Math.min(Math.max(n, min), max);
@@ -81,7 +82,9 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
       allowNegative = false,
       disabled,
       readOnly,
+      onClick,
       onKeyDown,
+      onMouseUp,
       onPaste,
       onFocus,
       className,
@@ -90,7 +93,6 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
     ref
   ) {
     const inputRef = React.useRef<HTMLInputElement | null>(null);
-    const isInitialFocus = React.useRef(true);
     
     React.useImperativeHandle(ref, () => inputRef.current!);
 
@@ -99,53 +101,32 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
       [valueCents, locale, currency]
     );
 
-    // Converte posição do cursor no texto formatado para posição nos dígitos brutos
-    const getDigitPosition = (cursorPos: number, formatted: string): number => {
-      let digitCount = 0;
-      for (let i = 0; i < Math.min(cursorPos, formatted.length); i++) {
-        if (/\d/.test(formatted[i])) {
-          digitCount++;
-        }
-      }
-      return digitCount;
-    };
+    const moveCaretToEnd = React.useCallback(() => {
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (!el) return;
 
-    // Converte posição nos dígitos brutos para posição no texto formatado
-    const getFormattedPosition = (digitPos: number, formatted: string): number => {
-      let digitCount = 0;
-      for (let i = 0; i < formatted.length; i++) {
-        if (/\d/.test(formatted[i])) {
-          digitCount++;
-          if (digitCount >= digitPos) {
-            return i + 1;
-          }
+        try {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        } catch {
+          // noop
         }
-      }
-      return formatted.length;
-    };
+      });
+    }, []);
 
     const apply = React.useCallback(
-      (next: number, preserveCursor?: { before: number }) => {
+      (next: number) => {
         let v = safeInt(next);
+        const resolvedMaxCents = typeof maxCents === "number" ? maxCents : DEFAULT_MAX_CENTS;
+
         if (!allowNegative) v = Math.max(0, v);
-        if (typeof maxCents === "number") {
-          v = clampInt(v, allowNegative ? -maxCents : 0, maxCents);
-        }
+        v = clampInt(v, allowNegative ? -resolvedMaxCents : 0, resolvedMaxCents);
         
         onValueChange(v);
-        
-        // Restaura posição do cursor após formatação
-        if (preserveCursor && inputRef.current) {
-          requestAnimationFrame(() => {
-            if (inputRef.current) {
-              const newFormatted = formatCents(v, locale, currency);
-              const newPos = getFormattedPosition(preserveCursor.before, newFormatted);
-              inputRef.current.setSelectionRange(newPos, newPos);
-            }
-          });
-        }
+        moveCaretToEnd();
       },
-      [onValueChange, maxCents, allowNegative, locale, currency]
+      [onValueChange, maxCents, allowNegative, moveCaretToEnd]
     );
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -154,109 +135,42 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
       if (disabled || readOnly) return;
 
       const key = e.key;
-      const el = e.currentTarget;
-      const cursorPos = el.selectionStart || 0;
-      const currentFormatted = el.value;
+      const currentFormatted = e.currentTarget.value;
 
-      if (
-        key === "Tab" ||
-        key === "ArrowLeft" ||
-        key === "ArrowRight" ||
-        key === "Home" ||
-        key === "End"
-      ) {
+      if (key === "Tab") {
+        return;
+      }
+
+      if (key === "ArrowLeft" || key === "ArrowRight" || key === "Home" || key === "End") {
+        e.preventDefault();
+        moveCaretToEnd();
         return;
       }
 
       if (key === "Backspace") {
         e.preventDefault();
-        
-        // Se há seleção, remove os dígitos selecionados
-        if (el.selectionStart !== el.selectionEnd) {
-          const start = el.selectionStart || 0;
-          const end = el.selectionEnd || 0;
-          const beforeStart = getDigitPosition(start, currentFormatted);
-          const beforeEnd = getDigitPosition(end, currentFormatted);
-          
-          // Remove dígitos da posição start até end
-          const digits = digitsOnly(currentFormatted);
-          const newDigits = digits.slice(0, beforeStart) + digits.slice(beforeEnd);
-          const next = parseToCents(newDigits, allowNegative);
-          apply(next, { before: beforeStart });
-          return;
-        }
-        
-        // Se não há seleção, remove o dígito antes do cursor
-        if (cursorPos > 0) {
-          const digitPos = getDigitPosition(cursorPos, currentFormatted);
-          if (digitPos > 0) {
-            const digits = digitsOnly(currentFormatted);
-            const newDigits = digits.slice(0, digitPos - 1) + digits.slice(digitPos);
-            const next = parseToCents(newDigits, allowNegative);
-            apply(next, { before: digitPos - 1 });
-            return;
-          }
-        }
-        
-        // Se está no início, apenas zera
-        apply(0);
+
+        const digits = digitsOnly(currentFormatted);
+        const next = parseToCents(digits.slice(0, -1), allowNegative);
+        apply(next);
         return;
       }
 
       if (key === "Delete") {
         e.preventDefault();
-        
-        // Se há seleção, remove os dígitos selecionados
-        if (el.selectionStart !== el.selectionEnd) {
-          const start = el.selectionStart || 0;
-          const end = el.selectionEnd || 0;
-          const beforeStart = getDigitPosition(start, currentFormatted);
-          const beforeEnd = getDigitPosition(end, currentFormatted);
-          
-          const digits = digitsOnly(currentFormatted);
-          const newDigits = digits.slice(0, beforeStart) + digits.slice(beforeEnd);
-          const next = parseToCents(newDigits, allowNegative);
-          apply(next, { before: beforeStart });
-          return;
-        }
-        
-        // Se não há seleção, remove o dígito na posição do cursor
-        const digitPos = getDigitPosition(cursorPos, currentFormatted);
+
         const digits = digitsOnly(currentFormatted);
-        if (digitPos < digits.length) {
-          const newDigits = digits.slice(0, digitPos) + digits.slice(digitPos + 1);
-          const next = parseToCents(newDigits, allowNegative);
-          apply(next, { before: digitPos });
-          return;
-        }
-        
+        const next = parseToCents(digits.slice(0, -1), allowNegative);
+        apply(next);
         return;
       }
 
       if (/^\d$/.test(key)) {
         e.preventDefault();
-        const digit = Number(key);
-        
-        // Se há seleção, substitui os dígitos selecionados
-        if (el.selectionStart !== el.selectionEnd) {
-          const start = el.selectionStart || 0;
-          const end = el.selectionEnd || 0;
-          const beforeStart = getDigitPosition(start, currentFormatted);
-          const beforeEnd = getDigitPosition(end, currentFormatted);
-          
-          const digits = digitsOnly(currentFormatted);
-          const newDigits = digits.slice(0, beforeStart) + digit + digits.slice(beforeEnd);
-          const next = parseToCents(newDigits, allowNegative);
-          apply(next, { before: beforeStart + 1 });
-          return;
-        }
-        
-        // Insere dígito na posição do cursor
-        const digitPos = getDigitPosition(cursorPos, currentFormatted);
         const digits = digitsOnly(currentFormatted);
-        const newDigits = digits.slice(0, digitPos) + digit + digits.slice(digitPos);
+        const newDigits = `${digits}${key}`;
         const next = parseToCents(newDigits, allowNegative);
-        apply(next, { before: digitPos + 1 });
+        apply(next);
         return;
       }
 
@@ -277,20 +191,24 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
 
     const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
       onFocus?.(e);
-      
-      // Apenas na primeira vez que recebe foco, coloca cursor no final
-      if (isInitialFocus.current) {
-        isInitialFocus.current = false;
-        requestAnimationFrame(() => {
-          try {
-            const el = e.target;
-            const len = el.value.length;
-            el.setSelectionRange(len, len);
-          } catch {
-            // noop
-          }
-        });
-      }
+      moveCaretToEnd();
+    };
+
+    const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+      onClick?.(e);
+      if (e.defaultPrevented) return;
+      if (disabled || readOnly) return;
+
+      moveCaretToEnd();
+    };
+
+    const handleMouseUp = (e: React.MouseEvent<HTMLInputElement>) => {
+      onMouseUp?.(e);
+      if (e.defaultPrevented) return;
+      if (disabled || readOnly) return;
+
+      e.preventDefault();
+      moveCaretToEnd();
     };
 
     // Handler onChange necessário para evitar warning do React
@@ -313,7 +231,9 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onFocus={handleFocus}
-        className={className}
+        onClick={handleClick}
+        onMouseUp={handleMouseUp}
+        className={`${className ?? ""} text-center tabular-nums`}
         {...rest}
       />
     );

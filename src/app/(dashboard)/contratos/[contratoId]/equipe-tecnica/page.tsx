@@ -42,6 +42,7 @@ import {
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { MoneyInput } from "../desembolso/_components/MoneyImput";
 import {
   formatCPF,
   unformatCPF,
@@ -127,28 +128,6 @@ function parseProjectId(rawId: string) {
 function toOptional(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function onlyDigits(value?: string) {
-  return (value || "").replace(/\D/g, "");
-}
-
-function formatMoneyInput(value: number | "") {
-  if (typeof value !== "number" || Number.isNaN(value)) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function parseMoneyInput(value: string): number | "" {
-  const digits = onlyDigits(value);
-  if (!digits) return "";
-  const cents = Number(digits);
-  if (!Number.isFinite(cents)) return "";
-  return cents / 100;
 }
 
 function isUuid(value?: string | null) {
@@ -1551,17 +1530,19 @@ function MemberFormModal({
             </Field>
 
             <Field label="Valor base (R$)">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formatMoneyInput(formData.baseAmount)}
-                onChange={(e) =>
+              <MoneyInput
+                valueCents={
+                  typeof formData.baseAmount === "number" && Number.isFinite(formData.baseAmount)
+                    ? Math.round(formData.baseAmount * 100)
+                    : 0
+                }
+                onValueChange={(valueCents) =>
                   setFormData((prev) => ({
                     ...prev,
-                    baseAmount: parseMoneyInput(e.target.value),
+                    baseAmount: valueCents > 0 ? valueCents / 100 : "",
                   }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#004225]"
                 placeholder="R$ 0,00"
               />
             </Field>
