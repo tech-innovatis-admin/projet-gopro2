@@ -413,7 +413,7 @@ export function DatePicker({
           disabled={disabled}
           inputMode="numeric"
           className={cn(
-            "h-full w-full bg-transparent px-4 pr-20 text-sm outline-none placeholder:text-gray-400",
+            "h-full w-full bg-transparent px-4 pr-16 text-sm outline-none placeholder:text-gray-400 sm:pr-20",
             displayValue ? "text-gray-900 font-medium" : "text-gray-900"
           )}
         />

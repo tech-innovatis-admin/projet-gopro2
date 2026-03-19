@@ -2663,7 +2663,7 @@ export default function PagamentosPlanilhaPage() {
                                                         Lançamento {index + 1}
                                                       </div>
                                                       {canManageChildren && isEditingLancamentos ? (
-                                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_180px_auto]">
+                                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto]">
                                                           <MoneyInput
                                                             valueCents={Math.round(lancamento.valor * 100)}
                                                             onValueChange={(cents) =>
@@ -2693,7 +2693,7 @@ export default function PagamentosPlanilhaPage() {
                                                             }
                                                             placeholder="Selecionar data"
                                                             disabled={isPersisting}
-                                                            className="h-9 rounded border-gray-300 bg-white px-2 py-1 text-sm"
+                                                            className="h-9 min-w-[220px] rounded border-gray-300 bg-white px-2 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
                                                           />
                                                           <div className="flex items-center justify-end gap-2">
                                                             <button
@@ -2716,11 +2716,13 @@ export default function PagamentosPlanilhaPage() {
                                                         </div>
                                                       ) : (
                                                         <div className="flex flex-col gap-2 text-sm text-gray-700 sm:flex-row sm:items-center sm:justify-between">
-                                                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-6">
-                                                            <span className="font-medium text-gray-900">
+                                                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                                                            <span className="font-semibold text-gray-900">
                                                               {formatCurrency(lancamento.valor)}
                                                             </span>
-                                                            <span>{formatDate(lancamento.dataPag)}</span>
+                                                            <span className="inline-flex w-fit items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600">
+                                                              {formatDate(lancamento.dataPag)}
+                                                            </span>
                                                           </div>
                                                           {canManageChildren ? (
                                                             <div className="flex items-center gap-2 self-end sm:self-auto">
