@@ -107,7 +107,7 @@ function resolveLocationLabel(item: ContractsMapItem, city: string | null, state
   if (city && state) return `${city} - ${state}`;
   if (city) return city;
   if (state) return state;
-  return "Nao informado";
+  return "Não informado";
 }
 
 function toMapLocations(data: ContractsMapItem[]): MapLocation[] {

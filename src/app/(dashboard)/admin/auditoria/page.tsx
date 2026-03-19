@@ -7,7 +7,8 @@ import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
 import { listAuditLogs } from "@/src/lib/api/endpoints/auth";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
 import { canManageAdminAudit, fetchCurrentUser } from "@/src/lib/auth/session";
-import { AuditLogResponseDTO, AuditScopeEnum, HttpError } from "@/src/lib/api/types";
+import { AuditLogResponseDTO, AuditScopeEnum } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const PAGE_SIZE = 10;
 
@@ -15,7 +16,7 @@ const scopeOptions: Array<{ value: AuditScopeEnum | ""; label: string }> = [
   { value: "", label: "Todos os escopos" },
   { value: "SYSTEM", label: "Sistema" },
   { value: "CONTRACTS", label: "Contratos" },
-  { value: "USERS", label: "Usuarios" },
+  { value: "USERS", label: "Usuários" },
   { value: "PEOPLE_COMPANIES", label: "Pessoas e empresas" },
 ];
 
@@ -25,16 +26,6 @@ const roleLabels: Record<string, string> = {
   ANALISTA: "Analista",
   ESTAGIARIO: "Estagiario",
 };
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Erro inesperado ao carregar a auditoria.";
-}
 
 function resolveActorRoleLabel(log: AuditLogResponseDTO): string | null {
   const role = log.usuarioResponsavelRole?.trim().toUpperCase();
@@ -118,7 +109,7 @@ export default function AdminAuditoriaPage() {
       setTotalPages(response.totalPages);
       setTotalElements(response.totalElements);
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível carregar a auditoria."));
       setLogs([]);
       setActorNamesById({});
       setTotalPages(0);
@@ -152,13 +143,13 @@ export default function AdminAuditoriaPage() {
         <header>
           <h1 className="text-2xl font-bold text-zinc-900">Auditoria administrativa</h1>
           <p className="text-sm text-zinc-600">
-            Timeline consolidada das acoes administrativas e operacionais do sistema.
+            Timeline consolidada das ações administrativas e operacionais do sistema.
           </p>
         </header>
 
         {loadingAccess && (
           <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-zinc-600">Validando permissao...</p>
+            <p className="text-sm text-zinc-600">Validando permissão...</p>
           </section>
         )}
 
@@ -224,7 +215,7 @@ export default function AdminAuditoriaPage() {
                       setCurrentPage(0);
                     }}
                     className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-                    placeholder="Resumo, entidade, usuario ou descricao"
+                    placeholder="Resumo, entidade, usuário ou descrição"
                   />
                 </div>
               </div>
@@ -267,7 +258,7 @@ export default function AdminAuditoriaPage() {
 
                   <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-zinc-600">
-                      Pagina {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
+                      Página {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
                     </p>
                     <div className="flex gap-2">
                       <Button

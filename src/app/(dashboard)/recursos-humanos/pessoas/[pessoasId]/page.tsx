@@ -23,6 +23,7 @@ import {
   CONTRACT_TYPE_LABELS,
   type ProjectPerson,
 } from "../types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 // =============================================================================
 // PÁGINA DE DETALHES DA PESSOA
@@ -50,7 +51,7 @@ export default function PessoaDetalhesPage() {
         }
       } catch (loadError) {
         if (isMounted) {
-          setError(loadError instanceof Error ? loadError.message : "Falha ao carregar pessoa.");
+          setError(getUserErrorMessage(loadError, "Falha ao carregar pessoa."));
           setPerson(null);
         }
       } finally {
@@ -120,7 +121,7 @@ export default function PessoaDetalhesPage() {
               Pessoa não encontrada
             </h2>
             <p className="text-gray-500 mb-6">
-              {error || "A pessoa solicitada nao existe ou foi removida."}
+              {error || "A pessoa solicitada não existe ou foi removida."}
             </p>
             <Link
               href="/recursos-humanos/pessoas"

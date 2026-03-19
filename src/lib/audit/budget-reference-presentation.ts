@@ -707,10 +707,10 @@ export function buildBudgetTransferBusinessSummary(
     transferId: transfer.id,
     sourceLabel:
       sourceItem?.transferLabel ||
-      (transfer.fromItemId !== null ? `Item #${transfer.fromItemId}` : "NÃ£o informado"),
+      (transfer.fromItemId !== null ? `Item #${transfer.fromItemId}` : "Não informado"),
     destinationLabel:
       destinationItem?.transferLabel ||
-      (transfer.toItemId !== null ? `Item #${transfer.toItemId}` : "NÃ£o informado"),
+      (transfer.toItemId !== null ? `Item #${transfer.toItemId}` : "Não informado"),
     sourceInitialTotal: formatCurrencyBRL(sourceInitialAmount),
     destinationInitialTotal: formatCurrencyBRL(destinationInitialAmount),
     transferredAmount: formatCurrencyBRL(transfer.amount),

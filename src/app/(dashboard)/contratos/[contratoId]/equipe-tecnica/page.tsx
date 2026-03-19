@@ -40,6 +40,8 @@ import {
   type RoleProjectPeopleEnum,
   type StatusProjectPeopleEnum,
 } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { DatePicker } from "@/components/ui/DatePicker";
 import {
   formatCPF,
   unformatCPF,
@@ -170,7 +172,7 @@ type IbgeCityResponse = {
 async function fetchBrazilStates() {
   const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
   if (!response.ok) {
-    throw new Error("Nao foi possivel carregar os estados.");
+    throw new Error("Não foi possível carregar os estados.");
   }
 
   const data = (await response.json()) as IbgeStateResponse[];
@@ -191,7 +193,7 @@ async function fetchCitiesByState(uf: string) {
     `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`,
   );
   if (!response.ok) {
-    throw new Error("Nao foi possivel carregar as cidades.");
+    throw new Error("Não foi possível carregar as cidades.");
   }
 
   const data = (await response.json()) as IbgeCityResponse[];
@@ -215,9 +217,7 @@ function papelToRole(papel: Papel): RoleProjectPeopleEnum {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof HttpError) return error.message;
-  if (error instanceof Error) return error.message;
-  return fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function isBlank(value?: string) {
@@ -234,7 +234,7 @@ function hasRequiredMemberFields(formData: MembroFormData) {
 }
 
 function formatDateBr(value?: string) {
-  if (!value) return "Periodo nao informado";
+  if (!value) return "Período não informado";
   const parts = value.split("-");
   if (parts.length !== 3) return value;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -259,15 +259,15 @@ function getContractTypeLabel(value?: ContractTypeEnum | null) {
   if (value === "BOLSA") return "Bolsa";
   if (value === "RPA") return "RPA";
   if (value === "CLT") return "CLT";
-  return "Nao informado";
+  return "Não informado";
 }
 
 function buildPeriodLabel(startDate?: string, endDate?: string) {
-  if (!startDate && !endDate) return "Periodo nao informado";
+  if (!startDate && !endDate) return "Período não informado";
   if (startDate && endDate) {
     return `${formatDateBr(startDate)} ate ${formatDateBr(endDate)}`;
   }
-  if (startDate) return `Inicio: ${formatDateBr(startDate)}`;
+  if (startDate) return `Início: ${formatDateBr(startDate)}`;
   return `Fim: ${formatDateBr(endDate)}`;
 }
 
@@ -372,7 +372,7 @@ export default function EquipeTecnicaPage() {
       return true;
     }
 
-    setActionError("Seu perfil pode apenas visualizar esta area do contrato.");
+    setActionError("Seu perfil pode apenas visualizar esta área do contrato.");
     return false;
   };
 
@@ -415,7 +415,7 @@ export default function EquipeTecnicaPage() {
 
   const loadMembros = async () => {
     if (!projectId) {
-      setLoadError("ID do contrato invalido.");
+      setLoadError("ID do contrato inválido.");
       setMembros([]);
       setAllPeople([]);
       setIsLoading(false);
@@ -604,19 +604,19 @@ export default function EquipeTecnicaPage() {
       setLinkCargaHoraria("");
       setIsLinkModalOpen(true);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel carregar pessoas existentes."));
+      setActionError(getErrorMessage(error, "Não foi possível carregar pessoas existentes."));
     }
   };
 
   const saveMembro = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato invalido.");
+      setActionError("ID do contrato inválido.");
       return;
     }
     if (!hasRequiredMemberFields(formData)) {
       setActionError(
-        "Preencha os campos obrigatorios: nome, papel, cidade e estado.",
+        "Preencha os campos obrigatórios: nome, papel, cidade e estado.",
       );
       return;
     }
@@ -678,7 +678,7 @@ export default function EquipeTecnicaPage() {
           } catch (error) {
             avatarUploadWarning = getErrorMessage(
               error,
-              "Pessoa salva, mas a foto nao foi enviada.",
+              "Pessoa salva, mas a foto não foi enviada.",
             );
           }
         }
@@ -731,7 +731,7 @@ export default function EquipeTecnicaPage() {
         } catch (error) {
           linkWarning = getErrorMessage(
             error,
-            "Pessoa cadastrada, mas nao foi possivel vincular ao projeto.",
+            "Pessoa cadastrada, mas não foi possível vincular ao projeto.",
           );
         }
 
@@ -751,7 +751,7 @@ export default function EquipeTecnicaPage() {
           } catch (error) {
             avatarUploadWarning = getErrorMessage(
               error,
-              "Pessoa salva, mas a foto nao foi enviada.",
+              "Pessoa salva, mas a foto não foi enviada.",
             );
           }
         }
@@ -769,7 +769,7 @@ export default function EquipeTecnicaPage() {
         setActionError(warnings.join(" "));
       }
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel salvar o membro."));
+      setActionError(getErrorMessage(error, "Não foi possível salvar o membro."));
     } finally {
       setIsSaving(false);
     }
@@ -778,7 +778,7 @@ export default function EquipeTecnicaPage() {
   const linkExistingPerson = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato invalido.");
+      setActionError("ID do contrato inválido.");
       return;
     }
     if (!selectedPersonId || typeof selectedPersonId !== "number") {
@@ -813,7 +813,7 @@ export default function EquipeTecnicaPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel vincular a pessoa."));
+      setActionError(getErrorMessage(error, "Não foi possível vincular a pessoa."));
     } finally {
       setIsLinking(false);
     }
@@ -831,7 +831,7 @@ export default function EquipeTecnicaPage() {
       await deleteProjectPeople(membro.projectPeopleId);
       await loadMembros();
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel remover o membro."));
+      setActionError(getErrorMessage(error, "Não foi possível remover o membro."));
     }
   };
 
@@ -887,7 +887,7 @@ export default function EquipeTecnicaPage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Seu perfil pode consultar a equipe tecnica, mas nao pode criar, vincular, editar ou remover pessoas.
+          Seu perfil pode consultar a equipe tecnica, mas não pode criar, vincular, editar ou remover pessoas.
         </div>
       )}
 
@@ -1027,7 +1027,7 @@ export default function EquipeTecnicaPage() {
                 )}
 
                 <div className="flex items-center justify-between text-gray-600">
-                  <span>Vinculo: {membro.vinculo || "Nao informado"}</span>
+                  <span>Vínculo: {membro.vinculo || "Não informado"}</span>
                   <span>{membro.cargaHoraria ? `${membro.cargaHoraria}h` : "0h"}</span>
                 </div>
 
@@ -1199,7 +1199,7 @@ function MemberFormModal({
       .catch(() => {
         if (!isMounted) return;
         setUfOptions([]);
-        setUfLookupError("Nao foi possivel carregar os estados.");
+        setUfLookupError("Não foi possível carregar os estados.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -1227,7 +1227,7 @@ function MemberFormModal({
       .catch(() => {
         if (!isMounted) return;
         setCityOptions([]);
-        setCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setCityLookupError("Não foi possível carregar as cidades deste estado.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -1420,13 +1420,11 @@ function MemberFormModal({
             </Field>
 
             <Field label="Data de nascimento">
-              <input
-                type="date"
+              <DatePicker
                 value={formData.birthDate}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, birthDate: e.target.value }))
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, birthDate: value }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               />
             </Field>
 
@@ -1477,7 +1475,7 @@ function MemberFormModal({
               ) : null}
             </Field>
 
-            <Field label="Vinculo institucional">
+            <Field label="Vínculo institucional">
               <input
                 type="text"
                 value={formData.vinculo}
@@ -1513,7 +1511,7 @@ function MemberFormModal({
                 }
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               >
-                <option value="">Nao informado</option>
+                <option value="">Não informado</option>
                 <option value="BOLSA">Bolsa</option>
                 <option value="RPA">RPA</option>
                 <option value="CLT">CLT</option>
@@ -1531,28 +1529,24 @@ function MemberFormModal({
                 }
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               >
-                <option value="">Nao informado</option>
+                <option value="">Não informado</option>
                 <option value="PENDENTE">Pendente</option>
                 <option value="ATIVO">Ativo</option>
                 <option value="ENCERRADO">Encerrado</option>
               </select>
             </Field>
 
-            <Field label="Data inicio">
-              <input
-                type="date"
+            <Field label="Data início">
+              <DatePicker
                 value={formData.startDate}
-                onChange={(e) => setFormData((prev) => ({ ...prev, startDate: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                onChange={(value) => setFormData((prev) => ({ ...prev, startDate: value }))}
               />
             </Field>
 
             <Field label="Data fim">
-              <input
-                type="date"
+              <DatePicker
                 value={formData.endDate}
-                onChange={(e) => setFormData((prev) => ({ ...prev, endDate: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                onChange={(value) => setFormData((prev) => ({ ...prev, endDate: value }))}
               />
             </Field>
 
@@ -1572,23 +1566,23 @@ function MemberFormModal({
               />
             </Field>
 
-            <Field label="Endereco" className="md:col-span-2">
+            <Field label="Endereço" className="md:col-span-2">
               <input
                 type="text"
                 value={formData.endereco}
                 onChange={(e) => setFormData((prev) => ({ ...prev, endereco: e.target.value }))}
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Rua, numero e bairro"
+                placeholder="Rua, número e bairro"
               />
             </Field>
 
-            <Field label="Observacoes" className="md:col-span-2">
+            <Field label="Observações" className="md:col-span-2">
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                 rows={3}
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none"
-                placeholder="Observacoes adicionais"
+                placeholder="Observações adicionais"
               />
             </Field>
           </div>
@@ -1625,7 +1619,7 @@ function MemberFormModal({
               {isSaving
                 ? "Salvando..."
                 : isEditingItem
-                  ? "Salvar alteracoes"
+                  ? "Salvar alterações"
                   : "Adicionar pessoa"}
             </button>
           </div>
@@ -1678,7 +1672,7 @@ function LinkExistingMemberModal({
         <div className="p-6 space-y-4">
           {people.length === 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              Nao ha pessoas disponiveis para vincular.
+              Não ha pessoas disponiveis para vincular.
             </div>
           ) : (
             <>
@@ -1714,7 +1708,7 @@ function LinkExistingMemberModal({
                 </select>
               </Field>
 
-              <Field label="Vinculo institucional">
+              <Field label="Vínculo institucional">
                 <input
                   type="text"
                   value={linkVinculo}

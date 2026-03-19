@@ -389,7 +389,7 @@ export function DateTimePicker({
                 type="button"
                 onClick={() => navigateYear("next")}
                 className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
-                title="Proximo ano"
+                title="Próximo ano"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -398,7 +398,7 @@ export function DateTimePicker({
                 type="button"
                 onClick={() => navigateMonth("next")}
                 className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
-                title="Proximo mes"
+                title="Próximo mes"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>

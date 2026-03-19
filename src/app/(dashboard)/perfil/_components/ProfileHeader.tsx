@@ -61,7 +61,7 @@ function formatLastAccess(lastLoginAt: string | null): string {
 export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHeaderProps) {
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
   const statusLabel = STATUS_LABELS[user.status] ?? user.status;
-  const username = user.username?.trim() || "Nao informado";
+  const username = user.username?.trim() || "Não informado";
   const lastAccess = formatLastAccess(user.lastLoginAt);
 
   return (
@@ -135,7 +135,7 @@ export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHe
               variant="outline"
               className="flex-1 border-white/40 bg-white/90 text-[#00331d] hover:bg-white sm:flex-none"
             >
-              <Link href="/perfil/seguranca">Seguranca</Link>
+              <Link href="/perfil/seguranca">Segurança</Link>
             </Button>
             {/* TODO: Reativar quando a pagina de configuracoes estiver implementada. */}
             {/* <Button asChild className="flex-1 bg-[#002818] hover:bg-[#001f13] sm:flex-none">
@@ -166,7 +166,7 @@ export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHe
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
             <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500">
               <Clock3 className="h-3.5 w-3.5" />
-              Ultimo acesso da conta
+              Último acesso da conta
             </div>
             <p className="text-sm font-semibold text-gray-900">{lastAccess}</p>
           </div>

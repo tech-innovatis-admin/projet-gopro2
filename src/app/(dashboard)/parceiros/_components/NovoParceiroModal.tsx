@@ -62,7 +62,7 @@ function formatCnpj(value: string): string {
 async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
   const normalizedZipCode = onlyDigits(zipCode);
   if (normalizedZipCode.length !== 8) {
-    throw new Error("CEP deve ter 8 digitos.");
+    throw new Error("CEP deve ter 8 dígitos.");
   }
   const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
   if (!response.ok) {
@@ -70,7 +70,7 @@ async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
   }
   const data = (await response.json()) as ViaCepResponse;
   if (data.erro) {
-    throw new Error("CEP nao encontrado.");
+    throw new Error("CEP não encontrado.");
   }
   return data;
 }
@@ -151,7 +151,7 @@ export function NovoParceiroModal({
     }
   }, [isOpen]);
 
-  // Handler de mudanÃ§a de campo
+  // Handler de mudança de campo
   const handleChange = (field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     // Limpa erro do campo ao editar
@@ -192,19 +192,19 @@ export function NovoParceiroModal({
       });
     } catch (lookupFailure) {
       setZipCodeLookupError(
-        lookupFailure instanceof Error ? lookupFailure.message : "Nao foi possivel consultar o CEP."
+        lookupFailure instanceof Error ? lookupFailure.message : "Não foi possível consultar o CEP."
       );
     } finally {
       setIsZipCodeLoading(false);
     }
   };
 
-  // ValidaÃ§Ã£o
+  // Validação
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormData, string>> = {};
 
     if (!form.nome.trim()) {
-      newErrors.nome = "Nome Ã© obrigatÃ³rio";
+      newErrors.nome = "Nome é obrigatório";
     }
     if (!form.tipo) {
       newErrors.tipo = "Selecione o tipo";
@@ -213,10 +213,10 @@ export function NovoParceiroModal({
       newErrors.uf = "Selecione o UF";
     }
     if (!form.municipio.trim()) {
-      newErrors.municipio = "MunicÃ­pio Ã© obrigatÃ³rio";
+      newErrors.municipio = "Município é obrigatório";
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "E-mail invÃ¡lido";
+      newErrors.email = "E-mail inválido";
     }
 
     setErrors(newErrors);
@@ -254,7 +254,7 @@ export function NovoParceiroModal({
       setSubmitError(
         submitFailure instanceof Error
           ? submitFailure.message
-          : "Nao foi possivel cadastrar o parceiro."
+          : "Não foi possível cadastrar o parceiro."
       );
     } finally {
       setIsSubmitting(false);
@@ -288,7 +288,7 @@ export function NovoParceiroModal({
                   Novo Parceiro
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Cadastre um novo IFES ou FundaÃ§Ã£o
+                  Cadastre um novo IFES ou Fundação
                 </p>
               </div>
             </div>
@@ -335,7 +335,7 @@ export function NovoParceiroModal({
                     )}
                   >
                     <Building className="h-5 w-5" />
-                    <span className="font-medium">FundaÃ§Ã£o</span>
+                    <span className="font-medium">Fundação</span>
                   </button>
                 </div>
                 {errors.tipo && (
@@ -355,7 +355,7 @@ export function NovoParceiroModal({
                     type="text"
                     value={form.nome}
                     onChange={(e) => handleChange("nome", e.target.value)}
-                    placeholder="Ex.: Instituto Federal do MaranhÃ£o"
+                    placeholder="Ex.: Instituto Federal do Maranhão"
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
                       errors.nome ? "border-red-300" : "border-gray-200"
@@ -395,7 +395,7 @@ export function NovoParceiroModal({
                 />
               </div>
 
-              {/* LocalizaÃ§Ã£o */}
+              {/* Localização */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
@@ -444,13 +444,13 @@ export function NovoParceiroModal({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    MunicÃ­pio <span className="text-red-500">*</span>
+                    Município <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.municipio}
                     onChange={(e) => handleChange("municipio", e.target.value)}
-                    placeholder="Ex.: SÃ£o LuÃ­s"
+                    placeholder="Ex.: São Luís"
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
                       errors.municipio ? "border-red-300" : "border-gray-200"
@@ -462,13 +462,13 @@ export function NovoParceiroModal({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    EndereÃ§o Completo <span className="text-gray-400 font-normal">(opcional)</span>
+                    Endereço Completo <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <input
                     type="text"
                     value={form.endereco}
                     onChange={(e) => handleChange("endereco", e.target.value)}
-                    placeholder="Ex.: Av. GetÃºlio Vargas, 04 - Monte Castelo"
+                    placeholder="Ex.: Av. Getúlio Vargas, 04 - Monte Castelo"
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
                   />
                 </div>
@@ -526,15 +526,15 @@ export function NovoParceiroModal({
                 />
               </div>
 
-              {/* ObservaÃ§Ãµes */}
+              {/* Observações */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  ObservaÃ§Ãµes
+                  Observações
                 </label>
                 <textarea
                   value={form.observacoes}
                   onChange={(e) => handleChange("observacoes", e.target.value)}
-                  placeholder="InformaÃ§Ãµes adicionais sobre o parceiro..."
+                  placeholder="Informações adicionais sobre o parceiro..."
                   rows={3}
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors resize-none"
                 />

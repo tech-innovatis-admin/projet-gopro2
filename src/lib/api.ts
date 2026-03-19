@@ -28,15 +28,27 @@
  * ```
  */
 
+import {
+  getUserErrorMessage,
+  getStatusErrorMessage,
+  resolveUserMessage,
+} from "@/src/lib/feedback/user-messages";
+
 // =============================================================================
 // TIPOS
 // =============================================================================
 
 /** Formato de erro padronizado do BFF */
+export interface BackendFieldError {
+  field: string;
+  message: string;
+}
+
 export interface ApiError {
   message: string;
   code?: string;
   details?: unknown;
+  fieldErrors?: BackendFieldError[];
   timestamp?: string;
   path?: string;
 }
@@ -85,6 +97,7 @@ export class ApiException extends Error {
   public readonly statusCode: number;
   public readonly code?: string;
   public readonly details?: unknown;
+  public readonly fieldErrors?: BackendFieldError[];
   public readonly timestamp?: string;
   public readonly path?: string;
 
@@ -94,6 +107,7 @@ export class ApiException extends Error {
     this.statusCode = statusCode;
     this.code = error.code;
     this.details = error.details;
+    this.fieldErrors = error.fieldErrors;
     this.timestamp = error.timestamp;
     this.path = error.path;
   }
@@ -156,6 +170,28 @@ function isApiErrorResponse(data: unknown): data is ApiErrorResponse {
   );
 }
 
+function extractFieldErrors(
+  error: Pick<ApiError, 'fieldErrors' | 'details'>
+): BackendFieldError[] | undefined {
+  if (Array.isArray(error.fieldErrors) && error.fieldErrors.length > 0) {
+    return error.fieldErrors;
+  }
+
+  if (
+    error.details &&
+    typeof error.details === 'object' &&
+    Array.isArray((error.details as { fieldErrors?: BackendFieldError[] }).fieldErrors)
+  ) {
+    return (error.details as { fieldErrors: BackendFieldError[] }).fieldErrors;
+  }
+
+  return undefined;
+}
+
+function resolveDisplayMessage(message: string, fieldErrors?: BackendFieldError[]): string {
+  return resolveUserMessage(message, { fieldErrors });
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   // Resposta sem conteúdo (ex: DELETE 204)
   if (response.status === 204) {
@@ -181,10 +217,24 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     if (isApiErrorResponse(data)) {
-      throw new ApiException(data.error, response.status);
+      const fieldErrors = extractFieldErrors(data.error);
+      throw new ApiException(
+        {
+          ...data.error,
+          message: resolveDisplayMessage(data.error.message, fieldErrors),
+          fieldErrors,
+          details:
+            data.error.details ?? (fieldErrors?.length ? { fieldErrors } : undefined),
+        },
+        response.status
+      );
     }
     throw new ApiException(
-      { message: data.message || `Erro ${response.status}` },
+      {
+        message: resolveDisplayMessage(data.message || `Erro ${response.status}`, data.fieldErrors),
+        fieldErrors: Array.isArray(data.fieldErrors) ? data.fieldErrors : undefined,
+        details: data,
+      },
       response.status
     );
   }
@@ -358,7 +408,7 @@ export const api = {
         }
       }
       throw new ApiException(
-        { message: `Erro ao baixar arquivo: ${response.status}` },
+        { message: getStatusErrorMessage(response.status) || `Erro ao baixar arquivo: ${response.status}` },
         response.status
       );
     }
@@ -379,13 +429,7 @@ export function isApiException(error: unknown): error is ApiException {
 }
 
 export function getErrorMessage(error: unknown): string {
-  if (isApiException(error)) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Ocorreu um erro inesperado';
+  return getUserErrorMessage(error);
 }
 
 /**
@@ -393,10 +437,7 @@ export function getErrorMessage(error: unknown): string {
  * Redireciona para login se 401, ou retorna mensagem
  */
 export function handleApiError(error: unknown): string {
-  if (isApiException(error)) {
-    return error.message;
-  }
-  return getErrorMessage(error);
+  return getUserErrorMessage(error);
 }
 
 /**
@@ -419,12 +460,12 @@ export function handleApiError(error: unknown): string {
  * ```
  */
 export function getFieldErrors(error: unknown): Record<string, string> | null {
-  if (!isApiException(error) || !error.details) return null;
-  
-  const details = error.details as { fieldErrors?: Array<{ field: string; message: string }> };
-  if (!Array.isArray(details.fieldErrors)) return null;
-  
-  return details.fieldErrors.reduce((acc, { field, message }) => {
+  if (!isApiException(error)) return null;
+
+  const fieldErrors = error.fieldErrors || extractFieldErrors(error);
+  if (!fieldErrors?.length) return null;
+
+  return fieldErrors.reduce((acc, { field, message }) => {
     acc[field] = message;
     return acc;
   }, {} as Record<string, string>);

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
@@ -25,7 +25,8 @@ import { Button } from "@/components/ui/button";
 import { NavBar } from "@/components/ui/NavBar";
 import { listMyAuditLogs, me as fetchAuthMe, uploadMyAvatar } from "@/src/lib/api/endpoints/auth";
 import { generateDocumentDownloadUrl } from "@/src/lib/api/endpoints/documents";
-import { type AuditLogResponseDTO, type AuthUserResponseDTO, HttpError } from "@/src/lib/api/types";
+import { type AuditLogResponseDTO, type AuthUserResponseDTO } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   resolveContext,
   resolveEntity,
@@ -70,13 +71,7 @@ const LOGIN_ACTIVITY_TERMS = ["login", "signin", "autentic", "logout", "signout"
 type ProfileTab = "overview" | "activities";
 
 function getRequestErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Não foi possível carregar os dados.";
+  return getUserErrorMessage(error, "Não foi possível carregar os dados.");
 }
 
 function isUuid(value?: string | null): boolean {
@@ -580,7 +575,7 @@ export default function PerfilPage() {
           <header className="space-y-2">
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Meu Perfil</h1>
             <p className="text-sm text-gray-600 sm:text-base">
-              Gerencie seus dados da conta e personalize sua expêriencia no sistema.
+              Gerencie seus dados da conta e personalize sua experiência no sistema.
             </p>
           </header>
 
@@ -866,7 +861,7 @@ export default function PerfilPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={profileAvatarPreview}
-                          alt={`Pre-visualizacao da foto de ${currentUser.fullName}`}
+                          alt={`Pre-visualização da foto de ${currentUser.fullName}`}
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -935,3 +930,4 @@ export default function PerfilPage() {
     </div>
   );
 }
+

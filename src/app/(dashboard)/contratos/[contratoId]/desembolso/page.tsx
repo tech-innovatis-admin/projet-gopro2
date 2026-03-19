@@ -23,7 +23,8 @@ import {
   updateDisbursementSchedule,
 } from "@/src/lib/api/endpoints";
 import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
-import { HttpError, type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
+import { type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 type ParcelaPrevista = {
   id: string;
@@ -131,7 +132,7 @@ async function fetchAllDisbursementSchedules(projectId: number) {
 }
 
 function toErrorMessage(error: unknown, fallback: string) {
-  return error instanceof HttpError ? error.message : fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 export default function DesembolsoPage() {
@@ -183,7 +184,7 @@ export default function DesembolsoPage() {
       setEditParcelas([]);
       setProjectCode("");
       setValorTotalContrato(0);
-      setLoadError("ID do contrato invalido para carregar desembolsos.");
+      setLoadError("ID do contrato inválido para carregar desembolsos.");
       setIsLoading(false);
       return;
     }
@@ -211,7 +212,7 @@ export default function DesembolsoPage() {
       setValorTotalContrato(parseNumber(project?.contractValue));
       setIsEditing(false);
     } catch (error) {
-      const message = toErrorMessage(error, "Nao foi possivel carregar os desembolsos.");
+      const message = toErrorMessage(error, "Não foi possível carregar os desembolsos.");
       setLoadError(message);
       setParcelas([]);
       setEditParcelas([]);
@@ -286,14 +287,14 @@ export default function DesembolsoPage() {
 
     const projectId = Number.parseInt(contratoId, 10);
     if (!Number.isFinite(projectId)) {
-      setSaveError("ID do contrato invalido para salvar desembolsos.");
+      setSaveError("ID do contrato inválido para salvar desembolsos.");
       return;
     }
 
     const normalizedEdit = sortAndRenumber(copyParcelas(editParcelas));
     const invalidRow = normalizedEdit.find((p) => !validateParcela(p));
     if (invalidRow) {
-      setSaveError(`Parcela ${invalidRow.numero} invalida. Verifique data e valor.`);
+      setSaveError(`Parcela ${invalidRow.numero} inválida. Verifique data e valor.`);
       return;
     }
 
@@ -336,7 +337,7 @@ export default function DesembolsoPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 2500);
     } catch (error) {
-      const message = toErrorMessage(error, "Nao foi possivel salvar os desembolsos.");
+      const message = toErrorMessage(error, "Não foi possível salvar os desembolsos.");
       setSaveError(message);
     } finally {
       setIsSaving(false);
@@ -406,7 +407,7 @@ export default function DesembolsoPage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Perfil em modo leitura neste modulo. O estagiario pode consultar os desembolsos, mas nao pode criar ou alterar parcelas.
+          Perfil em modo leitura neste modulo. O estagiario pode consultar os desembolsos, mas não pode criar ou alterar parcelas.
         </div>
       )}
 

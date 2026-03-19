@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import {
   completeRegistration,
   validateRegistrationToken,
 } from "@/src/lib/api/endpoints/auth";
-import { HttpError, UserRoleEnum } from "@/src/lib/api/types";
+import { UserRoleEnum } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 type InviteInfo = {
   email: string;
@@ -38,16 +39,6 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Nao foi possivel concluir o cadastro.";
-}
-
 export default function RegisterPage() {
   const router = useRouter();
 
@@ -60,6 +51,8 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const trimmedUsername = username.trim();
@@ -68,7 +61,7 @@ export default function RegisterPage() {
     { id: "length", label: "Pelo menos 8 caracteres", isValid: password.length >= 8 },
     { id: "upper", label: "Uma letra maiuscula", isValid: /[A-Z]/.test(password) },
     { id: "lower", label: "Uma letra minuscula", isValid: /[a-z]/.test(password) },
-    { id: "digit", label: "Um numero", isValid: /[0-9]/.test(password) },
+    { id: "digit", label: "Um número", isValid: /[0-9]/.test(password) },
     { id: "special", label: "Um caractere especial", isValid: /[^\p{L}\p{N}]/u.test(password) },
   ];
   const isPasswordPolicyValid = passwordRules.every((rule) => rule.isValid);
@@ -80,7 +73,7 @@ export default function RegisterPage() {
     setToken(inviteToken);
 
     if (!inviteToken) {
-      setError("Link de convite invalido.");
+      setError("Link de convite inválido.");
       setLoadingInvite(false);
       return;
     }
@@ -99,7 +92,7 @@ export default function RegisterPage() {
         }
       } catch (requestError) {
         if (!cancelled) {
-          setError(getErrorMessage(requestError));
+          setError(getUserErrorMessage(requestError, "Não foi possível concluir o cadastro."));
           setInviteInfo(null);
         }
       } finally {
@@ -119,12 +112,12 @@ export default function RegisterPage() {
     event.preventDefault();
 
     if (!inviteInfo || !token) {
-      setError("Convite invalido.");
+      setError("Convite inválido.");
       return;
     }
 
     if (!trimmedUsername) {
-      setError("Usuario e obrigatorio.");
+      setError("Usuário é obrigatório.");
       return;
     }
 
@@ -165,10 +158,10 @@ export default function RegisterPage() {
         return;
       }
 
-      setSuccess("Cadastro concluido com sucesso. Faca login para continuar.");
+      setSuccess("Cadastro concluído com sucesso. Faça login para continuar.");
       router.push("/login");
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível concluir o cadastro."));
     } finally {
       setSubmitting(false);
     }
@@ -237,7 +230,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="username">Usuario</Label>
+                  <Label htmlFor="username">Usuário</Label>
                   <Input
                     id="username"
                     value={username}
@@ -249,15 +242,27 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                    minLength={8}
-                    disabled={submitting}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                      minLength={8}
+                      disabled={submitting}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      disabled={submitting}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 transition-colors hover:text-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                   <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
                     <p className="mb-2 text-xs font-medium text-zinc-700">A senha deve conter:</p>
                     <ul className="space-y-1">
@@ -286,15 +291,31 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirmar senha</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    required
-                    minLength={8}
-                    disabled={submitting}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      required
+                      minLength={8}
+                      disabled={submitting}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                      disabled={submitting}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 transition-colors hover:text-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                   {didConfirmPassword && (
                     <p
                       className={`flex items-center gap-2 text-xs ${
@@ -324,7 +345,7 @@ export default function RegisterPage() {
             )}
 
             <div className="text-center text-sm text-zinc-600">
-              Ja possui acesso?{" "}
+              Já possui acesso?{" "}
               <Link href="/login" className="font-medium text-[#004225] hover:underline">
                 Entrar
               </Link>

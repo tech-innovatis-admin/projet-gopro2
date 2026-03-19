@@ -1,6 +1,11 @@
 import type { BackendErrorResponse, BackendFieldError, BffErrorEnvelope } from './types';
 import { HttpError } from './types';
 import { redirectToLogin } from '../auth/session';
+import {
+  getCodeErrorMessage,
+  getStatusErrorMessage,
+  resolveUserMessage,
+} from '../feedback/user-messages';
 
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -67,18 +72,27 @@ function isBackendErrorResponse(payload: unknown): payload is BackendErrorRespon
   );
 }
 
+function resolveDisplayMessage(
+  message: string,
+  fieldErrors?: BackendFieldError[]
+): string {
+  return resolveUserMessage(message, { fieldErrors });
+}
+
 function normalizeErrorPayload(payload: unknown, status: number): NormalizedErrorPayload {
-  const fallback = `Erro HTTP ${status}`;
+  const fallback = getStatusErrorMessage(status) ?? `Erro HTTP ${status}`;
 
   if (isBffErrorEnvelope(payload)) {
     const details = payload.error.details;
     const fieldErrors =
-      details && typeof details === 'object' && 'fieldErrors' in details
+      payload.error.fieldErrors ||
+      (details && typeof details === 'object' && 'fieldErrors' in details
         ? (details as { fieldErrors?: BackendFieldError[] }).fieldErrors
-        : undefined;
+        : undefined);
+    const message = resolveDisplayMessage(payload.error.message || fallback, fieldErrors);
 
     return {
-      message: payload.error.message || fallback,
+      message,
       details,
       code: payload.error.code,
       timestamp: payload.error.timestamp,
@@ -88,8 +102,9 @@ function normalizeErrorPayload(payload: unknown, status: number): NormalizedErro
   }
 
   if (isBackendErrorResponse(payload)) {
+    const message = resolveDisplayMessage(payload.message || fallback, payload.fieldErrors);
     return {
-      message: payload.message || fallback,
+      message,
       details: payload,
       code: typeof payload.status === 'number' ? `HTTP_${payload.status}` : `HTTP_${status}`,
       timestamp: payload.timestamp,
@@ -167,11 +182,11 @@ async function request<T>(method: string, path: string, options: RequestOptions 
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new HttpError(`Timeout da requisicao (${timeoutMs}ms)`, 504, error, {
+      throw new HttpError(getCodeErrorMessage('TIMEOUT_ERROR') ?? `Timeout da requisição (${timeoutMs}ms)`, 504, error, {
         code: 'TIMEOUT_ERROR',
       });
     }
-    throw new HttpError('Falha de conexao com a API', 0, error, {
+    throw new HttpError(getCodeErrorMessage('CONNECTION_ERROR') ?? 'Falha de conexão com a API', 0, error, {
       code: 'CONNECTION_ERROR',
     });
   }

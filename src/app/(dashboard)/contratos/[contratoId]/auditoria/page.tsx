@@ -228,7 +228,7 @@ function resolveTransferDirection(log: AuditLogResponseDTO): TransferDirection |
 
 function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number, string>): string {
   if (itemId === null) {
-    return "Nao informado";
+    return "Não informado";
   }
 
   return labelsById[itemId] || `Item #${itemId}`;
@@ -236,7 +236,7 @@ function resolveBudgetItemLabel(itemId: number | null, labelsById: Record<number
 
 function formatCurrencyBRL(value: number | null): string {
   if (value === null) {
-    return "Nao informado";
+    return "Não informado";
   }
 
   return new Intl.NumberFormat("pt-BR", {
@@ -306,7 +306,7 @@ export default function ContractAuditPage() {
     }
 
     if (!contractId) {
-      setError("ID do contrato invalido.");
+      setError("ID do contrato inválido.");
       setLogs([]);
       setActorNamesById({});
       setTotalPages(0);
@@ -535,7 +535,7 @@ export default function ContractAuditPage() {
 
       {loadingAccess && (
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-zinc-600">Validando permissao...</p>
+          <p className="text-sm text-zinc-600">Validando permissão...</p>
         </section>
       )}
 
@@ -615,11 +615,11 @@ export default function ContractAuditPage() {
                         ? {
                             sourceLabel: resolveBudgetItemLabel(transferDirection.fromItemId, budgetItemLabelsById),
                             destinationLabel: resolveBudgetItemLabel(transferDirection.toItemId, budgetItemLabelsById),
-                            sourceInitialTotal: "Nao informado",
-                            destinationInitialTotal: "Nao informado",
+                            sourceInitialTotal: "Não informado",
+                            destinationInitialTotal: "Não informado",
                             transferredAmount: formatCurrencyBRL(transferDirection.amount),
-                            sourceFinalTotal: "Nao informado",
-                            destinationFinalTotal: "Nao informado",
+                            sourceFinalTotal: "Não informado",
+                            destinationFinalTotal: "Não informado",
                           }
                         : null);
 
@@ -647,7 +647,7 @@ export default function ContractAuditPage() {
                           <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                             <div>
                               <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                Usuario responsavel
+                                Usuário responsavel
                               </dt>
                               <dd className="mt-1 font-medium text-zinc-900">
                                 {resolveActorName(log, actorNamesById)}
@@ -675,7 +675,7 @@ export default function ContractAuditPage() {
 
                 <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-zinc-600">
-                    Pagina {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
+                    Página {totalPages === 0 ? 0 : currentPage + 1} de {totalPages} | {totalElements} registro(s)
                   </p>
                   <div className="flex gap-2">
                     <Button

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  Edit,
   Save,
   X,
   CheckCircle,
@@ -18,6 +17,9 @@ import {
   Edit2,
   Check,
 } from "lucide-react";
+import { AppModalShell } from "@/components/ui/app-modal-shell";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { MoneyInput } from "../desembolso/_components/MoneyImput";
 import {
   createGoal,
   createPhase,
@@ -40,7 +42,6 @@ import {
 } from "@/src/lib/api/endpoints";
 import {
   type GoalRequestDTO,
-  HttpError,
   type GoalResponseDTO,
   type GoalUpdateDTO,
   type PageResponseDTO,
@@ -52,6 +53,7 @@ import {
   type StageUpdateDTO,
 } from "@/src/lib/api/types";
 import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 // Tipos
 type Fase = {
@@ -76,6 +78,8 @@ type Etapa = {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
   concluida?: boolean;
   dataConclusao?: string;
   fases: Fase[];
@@ -90,6 +94,8 @@ type Meta = {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
   concluida?: boolean;
   dataConclusao?: string;
   etapas: Etapa[];
@@ -134,13 +140,7 @@ function parseDateOnly(value?: string | null): Date | null {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Nao foi possivel carregar metas, etapas e fases.";
+  return getUserErrorMessage(error, "Não foi possível carregar metas, etapas e fases.");
 }
 
 async function fetchAllPages<T>(
@@ -168,6 +168,116 @@ function formatDate(iso?: string) {
   const parsed = parseDateOnly(iso);
   if (!parsed) return iso;
   return parsed.toLocaleDateString("pt-BR");
+}
+
+function formatCurrencyBRL(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
+function amountToCents(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.round(value * 100);
+}
+
+function centsToAmount(valueCents: number) {
+  return Number((valueCents / 100).toFixed(2));
+}
+
+function resolveEtapaFinancialContext(meta?: Meta | null, currentEtapaId?: string) {
+  const goalHasFinancialValue =
+    Boolean(meta?.hasFinancialValue) && typeof meta?.financialAmount === "number";
+  const goalAmountCents = goalHasFinancialValue ? amountToCents(meta?.financialAmount) : 0;
+
+  const currentEtapa = currentEtapaId
+    ? meta?.etapas.find((item) => item.id === currentEtapaId)
+    : undefined;
+  const currentEtapaAmountCents =
+    currentEtapa?.hasFinancialValue && typeof currentEtapa.financialAmount === "number"
+      ? amountToCents(currentEtapa.financialAmount)
+      : 0;
+
+  const allocatedByOtherEtapasCents =
+    meta?.etapas.reduce((total, etapa) => {
+      if (etapa.id === currentEtapaId) return total;
+      if (!etapa.hasFinancialValue || typeof etapa.financialAmount !== "number") {
+        return total;
+      }
+      return total + amountToCents(etapa.financialAmount);
+    }, 0) ?? 0;
+
+  const availableForEtapaCents = goalHasFinancialValue
+    ? Math.max(goalAmountCents - allocatedByOtherEtapasCents, 0)
+    : 0;
+  const remainingToCompleteGoalCents = goalHasFinancialValue
+    ? Math.max(goalAmountCents - allocatedByOtherEtapasCents - currentEtapaAmountCents, 0)
+    : 0;
+
+  return {
+    goalHasFinancialValue,
+    goalAmountCents,
+    currentEtapaAmountCents,
+    allocatedByOtherEtapasCents,
+    availableForEtapaCents,
+    remainingToCompleteGoalCents,
+  };
+}
+
+type MetaModalDraft = {
+  titulo: string;
+  descricao: string;
+  dataInicio: string;
+  dataFim: string;
+  hasFinancialValue: boolean;
+  financialAmountCents: number;
+};
+
+type MetaModalState =
+  | {
+      mode: "create" | "edit";
+      metaId?: string;
+      numero: number;
+    }
+  | null;
+
+type StructureModalDraft = {
+  titulo: string;
+  descricao: string;
+  dataInicio: string;
+  dataFim: string;
+};
+
+type EtapaModalDraft = StructureModalDraft & {
+  hasFinancialValue: boolean;
+  financialAmountCents: number;
+};
+
+type EtapaCreateModalState =
+  | {
+      mode: "create" | "edit";
+      metaId: string;
+      metaNumero: number;
+      numero: number;
+      etapaId?: string;
+    }
+  | null;
+
+type FaseCreateModalState =
+  | {
+      mode: "create" | "edit";
+      metaId: string;
+      metaNumero: number;
+      etapaId: string;
+      etapaNumero: number;
+      numero: number;
+      faseId?: string;
+    }
+  | null;
+
+function cloneMetaHierarchy(list: Meta[]) {
+  return JSON.parse(JSON.stringify(list)) as Meta[];
 }
 
 const STATUS_STYLES: Record<
@@ -199,7 +309,7 @@ const STATUS_STYLES: Record<
     progress: "bg-amber-500",
   },
   CONCLUIDO: {
-    label: "Concluido",
+    label: "Concluído",
     chip: "border-emerald-200 bg-emerald-50 text-emerald-700",
     dot: "bg-emerald-500",
     progress: "bg-emerald-500",
@@ -383,8 +493,48 @@ export default function MetaEtapaFasePage() {
   const [editMetas, setEditMetas] = useState<Meta[]>([]);
   const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
+  const [metaModalState, setMetaModalState] = useState<MetaModalState>(null);
+  const [metaModalDraft, setMetaModalDraft] = useState<MetaModalDraft>({
+    titulo: "",
+    descricao: "",
+    dataInicio: "",
+    dataFim: "",
+    hasFinancialValue: false,
+    financialAmountCents: 0,
+  });
+  const [metaModalError, setMetaModalError] = useState<string | null>(null);
+  const [etapaCreateModalState, setEtapaCreateModalState] =
+    useState<EtapaCreateModalState>(null);
+  const [etapaCreateDraft, setEtapaCreateDraft] = useState<EtapaModalDraft>({
+    titulo: "",
+    descricao: "",
+    dataInicio: "",
+    dataFim: "",
+    hasFinancialValue: false,
+    financialAmountCents: 0,
+  });
+  const [etapaModalError, setEtapaModalError] = useState<string | null>(null);
+  const [faseCreateModalState, setFaseCreateModalState] =
+    useState<FaseCreateModalState>(null);
+  const [faseCreateDraft, setFaseCreateDraft] = useState<StructureModalDraft>({
+    titulo: "",
+    descricao: "",
+    dataInicio: "",
+    dataFim: "",
+  });
+  const [metaPendingDeletion, setMetaPendingDeletion] = useState<Meta | null>(null);
+  const [etapaPendingDeletion, setEtapaPendingDeletion] = useState<{
+    metaId: string;
+    metaNumero: number;
+    etapa: Etapa;
+  } | null>(null);
+  const [fasePendingDeletion, setFasePendingDeletion] = useState<{
+    metaId: string;
+    metaNumero: number;
+    etapaId: string;
+    etapaNumero: number;
+    fase: Fase;
+  } | null>(null);
   const [editingDate, setEditingDate] = useState<{ id: string; type: "meta" | "etapa" | "fase"; field: "dataInicio" | "dataFim"; ids: string[] } | null>(null);
   const [editDateValue, setEditDateValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -418,7 +568,7 @@ export default function MetaEtapaFasePage() {
 
   const loadHierarchy = useCallback(async () => {
     if (!Number.isFinite(projectId) || projectId <= 0) {
-      setLoadError("ID do contrato invalido para carregar metas.");
+      setLoadError("ID do contrato inválido para carregar metas.");
       setMetas([]);
       setEditMetas([]);
       return;
@@ -482,6 +632,11 @@ export default function MetaEtapaFasePage() {
             descricao: stage.descricao ?? undefined,
             dataInicio: toDateOnly(stage.dataInicio),
             dataFim: toDateOnly(stage.dataFim),
+            hasFinancialValue: Boolean(stage.hasFinancialValue),
+            financialAmount:
+              stage.hasFinancialValue && typeof stage.financialAmount === "number"
+                ? stage.financialAmount
+                : undefined,
             concluida: Boolean(stage.dataConclusao),
             dataConclusao: toDateOnly(stage.dataConclusao),
             fases: nextFases,
@@ -497,6 +652,8 @@ export default function MetaEtapaFasePage() {
           descricao: goal.descricao ?? undefined,
           dataInicio: toDateOnly(goal.dataInicio),
           dataFim: toDateOnly(goal.dataFim),
+          hasFinancialValue: Boolean(goal.hasFinancialValue),
+          financialAmount: goal.financialAmount ?? undefined,
           concluida: Boolean(goal.dataConclusao),
           dataConclusao: toDateOnly(goal.dataConclusao),
           etapas: nextEtapas,
@@ -504,7 +661,7 @@ export default function MetaEtapaFasePage() {
       });
 
       setMetas(nextMetas);
-      setEditMetas(JSON.parse(JSON.stringify(nextMetas)));
+      setEditMetas(cloneMetaHierarchy(nextMetas));
       setExpandedMetas(new Set(nextMetas.slice(0, 1).map((meta) => meta.id)));
       setExpandedEtapas(
         new Set(
@@ -527,16 +684,13 @@ export default function MetaEtapaFasePage() {
     void loadHierarchy();
   }, [loadHierarchy]);
 
-  const handleEdit = () => {
-    if (!canManageChildren) return;
-    setEditMetas(JSON.parse(JSON.stringify(metas)));
-    setIsEditing(true);
-  };
-
   const handleCancel = () => {
-    setEditMetas(JSON.parse(JSON.stringify(metas)));
-    setEditingId(null);
-    setEditValue("");
+    setEditMetas(cloneMetaHierarchy(metas));
+    setMetaModalState(null);
+    setMetaModalError(null);
+    setEtapaCreateModalState(null);
+    setFaseCreateModalState(null);
+    setMetaPendingDeletion(null);
     setEditingDate(null);
     setEditDateValue("");
     setIsEditing(false);
@@ -559,9 +713,14 @@ export default function MetaEtapaFasePage() {
     return trimmed.length > 0 ? trimmed : fallback;
   };
 
+  const flashSavedMessage = () => {
+    setSavedMessage(true);
+    setTimeout(() => setSavedMessage(false), 3000);
+  };
+
   const persistHierarchyChanges = async () => {
     if (!Number.isFinite(projectId) || projectId <= 0) {
-      throw new Error("ID do contrato invalido para salvar metas.");
+      throw new Error("ID do contrato inválido para salvar metas.");
     }
 
     const metasOrdered = [...editMetas].sort((a, b) => a.numero - b.numero);
@@ -574,6 +733,11 @@ export default function MetaEtapaFasePage() {
         descricao: normalizeOptionalText(meta.descricao),
         dataInicio: normalizeOptionalDate(meta.dataInicio),
         dataFim: normalizeOptionalDate(meta.dataFim),
+        hasFinancialValue: Boolean(meta.hasFinancialValue),
+        financialAmount:
+          meta.hasFinancialValue && typeof meta.financialAmount === "number"
+            ? meta.financialAmount
+            : undefined,
       };
 
       const goalUpdatePayload: GoalUpdateDTO = {
@@ -583,6 +747,11 @@ export default function MetaEtapaFasePage() {
         descricao: normalizeOptionalText(meta.descricao),
         dataInicio: normalizeOptionalDate(meta.dataInicio),
         dataFim: normalizeOptionalDate(meta.dataFim),
+        hasFinancialValue: Boolean(meta.hasFinancialValue),
+        financialAmount:
+          meta.hasFinancialValue && typeof meta.financialAmount === "number"
+            ? meta.financialAmount
+            : undefined,
       };
 
       const goalId =
@@ -602,6 +771,11 @@ export default function MetaEtapaFasePage() {
           descricao: normalizeOptionalText(etapa.descricao),
           dataInicio: normalizeOptionalDate(etapa.dataInicio),
           dataFim: normalizeOptionalDate(etapa.dataFim),
+          hasFinancialValue: Boolean(etapa.hasFinancialValue),
+          financialAmount:
+            etapa.hasFinancialValue && typeof etapa.financialAmount === "number"
+              ? etapa.financialAmount
+              : undefined,
         };
 
         const stageUpdatePayload: StageUpdateDTO = {
@@ -611,6 +785,11 @@ export default function MetaEtapaFasePage() {
           descricao: normalizeOptionalText(etapa.descricao),
           dataInicio: normalizeOptionalDate(etapa.dataInicio),
           dataFim: normalizeOptionalDate(etapa.dataFim),
+          hasFinancialValue: Boolean(etapa.hasFinancialValue),
+          financialAmount:
+            etapa.hasFinancialValue && typeof etapa.financialAmount === "number"
+              ? etapa.financialAmount
+              : undefined,
         };
 
         const stageId =
@@ -658,40 +837,15 @@ export default function MetaEtapaFasePage() {
     try {
       await persistHierarchyChanges();
       await loadHierarchy();
-      setEditingId(null);
-      setEditValue("");
       setEditingDate(null);
       setEditDateValue("");
       setIsEditing(false);
-      setSavedMessage(true);
-      setTimeout(() => setSavedMessage(false), 3000);
+      flashSavedMessage();
     } catch (error) {
       setLoadError(getErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const updateMetaQuickField = (
-    metaId: string,
-    field: "titulo" | "descricao" | "dataInicio" | "dataFim",
-    value: string
-  ) => {
-    setEditMetas((prev) =>
-      prev.map((meta) =>
-        meta.id !== metaId
-          ? meta
-          : field === "titulo"
-            ? {
-                ...meta,
-                titulo: value.trim() === "" ? meta.titulo : value,
-              }
-            : {
-                ...meta,
-                [field]: value.trim() === "" ? undefined : value,
-              }
-      )
-    );
   };
 
   const toggleMetaConcluida = async (metaId: string) => {
@@ -700,7 +854,7 @@ export default function MetaEtapaFasePage() {
       return;
     }
     if (isEditing) {
-      setLoadError("Salve as alteracoes antes de concluir ou reabrir a meta.");
+      setLoadError("Salve as alterações antes de concluir ou reabrir a meta.");
       return;
     }
 
@@ -752,7 +906,7 @@ export default function MetaEtapaFasePage() {
       return;
     }
     if (isEditing) {
-      setLoadError("Salve as alteracoes antes de concluir ou reabrir a etapa.");
+      setLoadError("Salve as alterações antes de concluir ou reabrir a etapa.");
       return;
     }
 
@@ -807,7 +961,7 @@ export default function MetaEtapaFasePage() {
       return;
     }
     if (isEditing) {
-      setLoadError("Salve as alteracoes antes de concluir ou reabrir a fase.");
+      setLoadError("Salve as alterações antes de concluir ou reabrir a fase.");
       return;
     }
 
@@ -880,59 +1034,440 @@ export default function MetaEtapaFasePage() {
   };
 
   // Funções de edição
-  const addMeta = () => {
-    const novoNumero = editMetas.length + 1;
-    const novaMeta: Meta = {
-      id: `meta-${Date.now()}`,
-      numero: novoNumero,
-      titulo: `Meta ${novoNumero}`,
-      etapas: [],
+  const openCreateMetaModal = () => {
+    if (!canManageChildren) return;
+
+    const nextNumero = metas.length + 1;
+
+    setMetaModalError(null);
+    setMetaModalDraft({
+      titulo: `Meta ${nextNumero}`,
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: 0,
+    });
+    setMetaModalState({
+      mode: "create",
+      numero: nextNumero,
+    });
+  };
+
+  const openEditMetaModal = (meta: Meta) => {
+    if (!canManageChildren) return;
+
+    setMetaModalError(null);
+    setMetaModalDraft({
+      titulo: meta.titulo,
+      descricao: meta.descricao ?? "",
+      dataInicio: meta.dataInicio ?? "",
+      dataFim: meta.dataFim ?? "",
+      hasFinancialValue: Boolean(meta.hasFinancialValue),
+      financialAmountCents: amountToCents(meta.financialAmount),
+    });
+    setMetaModalState({
+      mode: "edit",
+      metaId: meta.id,
+      numero: meta.numero,
+    });
+  };
+
+  const closeMetaModal = () => {
+    setMetaModalState(null);
+    setMetaModalError(null);
+    setMetaModalDraft({
+      titulo: "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: 0,
+    });
+  };
+
+  const updateMetaQuickField = (
+    metaId: string,
+    field: "titulo" | "descricao" | "dataInicio" | "dataFim",
+    value: string
+  ) => {
+    setEditMetas((prev) =>
+      prev.map((meta) =>
+        meta.id === metaId
+          ? {
+              ...meta,
+              [field]:
+                field === "descricao"
+                  ? value
+                  : field === "dataInicio" || field === "dataFim"
+                    ? value || undefined
+                    : value,
+            }
+          : meta
+      )
+    );
+  };
+
+  const saveMetaModal = async () => {
+    if (!metaModalState) return;
+    setMetaModalError(null);
+
+    if (metaModalDraft.hasFinancialValue && metaModalDraft.financialAmountCents <= 0) {
+      setMetaModalError("Informe o valor financeiro da meta.");
+      return;
+    }
+
+    const normalizedMeta: Pick<
+      Meta,
+      "titulo" | "descricao" | "dataInicio" | "dataFim" | "hasFinancialValue" | "financialAmount"
+    > = {
+      titulo: metaModalDraft.titulo.trim() || `Meta ${metaModalState.numero}`,
+      descricao: normalizeOptionalText(metaModalDraft.descricao),
+      dataInicio: normalizeOptionalDate(metaModalDraft.dataInicio),
+      dataFim: normalizeOptionalDate(metaModalDraft.dataFim),
+      hasFinancialValue: metaModalDraft.hasFinancialValue,
+      financialAmount: metaModalDraft.hasFinancialValue
+        ? centsToAmount(metaModalDraft.financialAmountCents)
+        : undefined,
     };
-    setEditMetas([...editMetas, novaMeta]);
-    setExpandedMetas((prev) => new Set(prev).add(novaMeta.id));
-    setEditingId(novaMeta.id);
-    setEditValue(novaMeta.titulo);
+
+    if (!Number.isFinite(projectId) || projectId <= 0) {
+      setLoadError(
+        metaModalState.mode === "create"
+          ? "ID do contrato inválido para criar a meta."
+          : "ID do contrato inválido para atualizar a meta."
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    setLoadError(null);
+    try {
+      if (metaModalState.mode === "create") {
+        await createGoal({
+          projectId,
+          numero: metaModalState.numero,
+          titulo: normalizedMeta.titulo,
+          descricao: normalizedMeta.descricao,
+          dataInicio: normalizedMeta.dataInicio,
+          dataFim: normalizedMeta.dataFim,
+          hasFinancialValue: normalizedMeta.hasFinancialValue,
+          financialAmount: normalizedMeta.financialAmount,
+        });
+      } else {
+        const currentMeta = metas.find((meta) => meta.id === metaModalState.metaId);
+        if (!currentMeta?.backendId) {
+          setLoadError("Não foi possível localizar a meta para atualizar.");
+          return;
+        }
+
+        await updateGoal(currentMeta.backendId, {
+          projectId,
+          numero: currentMeta.numero,
+          titulo: normalizedMeta.titulo,
+          descricao: normalizedMeta.descricao,
+          dataInicio: normalizedMeta.dataInicio,
+          dataFim: normalizedMeta.dataFim,
+          hasFinancialValue: normalizedMeta.hasFinancialValue,
+          financialAmount: normalizedMeta.financialAmount,
+        });
+      }
+
+      closeMetaModal();
+      await loadHierarchy();
+      flashSavedMessage();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const addEtapa = (metaId: string) => {
-    setEditMetas((prev) =>
-      prev.map((meta) => {
-        if (meta.id !== metaId) return meta;
-        const novoNumero = meta.etapas.length + 1;
-        const novaEtapa: Etapa = {
-          id: `etapa-${Date.now()}`,
-          numero: novoNumero,
-          titulo: `Etapa ${novoNumero}`,
-          fases: [],
-        };
-        return { ...meta, etapas: [...meta.etapas, novaEtapa] };
-      })
-    );
+  const etapaModalParentMeta = useMemo(() => {
+    if (!etapaCreateModalState) return null;
+    return metas.find((item) => item.id === etapaCreateModalState.metaId) ?? null;
+  }, [metas, etapaCreateModalState]);
+
+  const etapaModalFinancialContext = useMemo(
+    () =>
+      resolveEtapaFinancialContext(
+        etapaModalParentMeta,
+        etapaCreateModalState?.mode === "edit" ? etapaCreateModalState.etapaId : undefined
+      ),
+    [etapaModalParentMeta, etapaCreateModalState]
+  );
+
+  const openCreateEtapaModal = (meta: Meta) => {
+    if (!canManageChildren) return;
+
+    const sourceMeta = metas.find((item) => item.id === meta.id) ?? meta;
+    const nextNumero = sourceMeta.etapas.length + 1;
+    const etapaFinancialContext = resolveEtapaFinancialContext(sourceMeta);
+
+    setEtapaModalError(null);
+    setEtapaCreateDraft({
+      titulo: `Etapa ${nextNumero}`,
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: etapaFinancialContext.availableForEtapaCents,
+    });
+    setEtapaCreateModalState({
+      mode: "create",
+      metaId: sourceMeta.id,
+      metaNumero: sourceMeta.numero,
+      numero: nextNumero,
+    });
+    setExpandedMetas((prev) => new Set(prev).add(sourceMeta.id));
   };
 
-  const addFase = (metaId: string, etapaId: string) => {
-    setEditMetas((prev) =>
-      prev.map((meta) => {
-        if (meta.id !== metaId) return meta;
-        return {
-          ...meta,
-          etapas: meta.etapas.map((etapa) => {
-            if (etapa.id !== etapaId) return etapa;
-            const novoNumero = etapa.fases.length + 1;
-            const novaFase: Fase = {
-              id: `fase-${Date.now()}`,
-              numero: novoNumero,
-              titulo: `Fase ${novoNumero}`,
-            };
-            return { ...etapa, fases: [...etapa.fases, novaFase] };
-          }),
-        };
-      })
+  const openEditEtapaModal = (meta: Meta, etapa: Etapa) => {
+    if (!canManageChildren) return;
+
+    setEtapaModalError(null);
+    setEtapaCreateDraft({
+      titulo: etapa.titulo,
+      descricao: etapa.descricao ?? "",
+      dataInicio: etapa.dataInicio ?? "",
+      dataFim: etapa.dataFim ?? "",
+      hasFinancialValue: Boolean(etapa.hasFinancialValue),
+      financialAmountCents: amountToCents(etapa.financialAmount),
+    });
+    setEtapaCreateModalState({
+      mode: "edit",
+      metaId: meta.id,
+      metaNumero: meta.numero,
+      numero: etapa.numero,
+      etapaId: etapa.id,
+    });
+    setExpandedMetas((prev) => new Set(prev).add(meta.id));
+  };
+
+  const closeEtapaCreateModal = () => {
+    setEtapaCreateModalState(null);
+    setEtapaModalError(null);
+    setEtapaCreateDraft({
+      titulo: "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: 0,
+    });
+  };
+
+  const saveEtapaCreateModal = async () => {
+    if (!etapaCreateModalState) return;
+
+    const parentMeta = metas.find((item) => item.id === etapaCreateModalState.metaId);
+    if (!parentMeta?.backendId) {
+      setLoadError(
+        etapaCreateModalState.mode === "create"
+          ? "Não foi possível localizar a meta para criar a etapa."
+          : "Não foi possível localizar a meta para atualizar a etapa."
+      );
+      return;
+    }
+
+    setEtapaModalError(null);
+
+    if (etapaCreateDraft.hasFinancialValue) {
+      if (!etapaModalFinancialContext?.goalHasFinancialValue) {
+        setEtapaModalError(
+          "Defina primeiro o valor financeiro da meta antes de informar valor na etapa."
+        );
+        return;
+      }
+
+      if (etapaCreateDraft.financialAmountCents <= 0) {
+        setEtapaModalError("Informe o valor financeiro da etapa.");
+        return;
+      }
+
+      if (etapaCreateDraft.financialAmountCents > etapaModalFinancialContext.availableForEtapaCents) {
+        const suggestedCents = Math.max(etapaModalFinancialContext.availableForEtapaCents, 0);
+        setEtapaCreateDraft((prev) => ({
+          ...prev,
+          financialAmountCents: suggestedCents,
+        }));
+        setEtapaModalError(
+          suggestedCents > 0
+            ? `O valor da etapa não pode superar o valor da meta. Preenchi ${formatCurrencyBRL(
+                centsToAmount(suggestedCents)
+              )}, que é o valor restante para completar a meta.`
+            : "Esta meta já atingiu todo o valor financeiro previsto. Não há saldo disponível para esta etapa."
+        );
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    setLoadError(null);
+    try {
+      if (etapaCreateModalState.mode === "create") {
+        await createStage({
+          goalId: parentMeta.backendId,
+          numero: etapaCreateModalState.numero,
+          titulo: etapaCreateDraft.titulo.trim() || `Etapa ${etapaCreateModalState.numero}`,
+          descricao: normalizeOptionalText(etapaCreateDraft.descricao),
+          dataInicio: normalizeOptionalDate(etapaCreateDraft.dataInicio),
+          dataFim: normalizeOptionalDate(etapaCreateDraft.dataFim),
+          hasFinancialValue: etapaCreateDraft.hasFinancialValue,
+          financialAmount: etapaCreateDraft.hasFinancialValue
+            ? centsToAmount(etapaCreateDraft.financialAmountCents)
+            : undefined,
+        });
+      } else {
+        const parentEtapa = parentMeta.etapas.find(
+          (item) => item.id === etapaCreateModalState.etapaId
+        );
+        if (!parentEtapa?.backendId) {
+          setLoadError("Não foi possível localizar a etapa para atualizar.");
+          return;
+        }
+
+        await updateStage(parentEtapa.backendId, {
+          goalId: parentMeta.backendId,
+          numero: parentEtapa.numero,
+          titulo: etapaCreateDraft.titulo.trim() || `Etapa ${parentEtapa.numero}`,
+          descricao: normalizeOptionalText(etapaCreateDraft.descricao),
+          dataInicio: normalizeOptionalDate(etapaCreateDraft.dataInicio),
+          dataFim: normalizeOptionalDate(etapaCreateDraft.dataFim),
+          hasFinancialValue: etapaCreateDraft.hasFinancialValue,
+          financialAmount: etapaCreateDraft.hasFinancialValue
+            ? centsToAmount(etapaCreateDraft.financialAmountCents)
+            : undefined,
+        });
+      }
+
+      closeEtapaCreateModal();
+      await loadHierarchy();
+      flashSavedMessage();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openCreateFaseModal = (meta: Meta, etapa: Etapa) => {
+    if (!canManageChildren) return;
+
+    const sourceMeta = metas.find((item) => item.id === meta.id) ?? meta;
+    const sourceEtapa =
+      sourceMeta.etapas.find((item) => item.id === etapa.id) ?? etapa;
+    const nextNumero = sourceEtapa.fases.length + 1;
+
+    setFaseCreateDraft({
+      titulo: `Fase ${nextNumero}`,
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+    });
+    setFaseCreateModalState({
+      mode: "create",
+      metaId: sourceMeta.id,
+      metaNumero: sourceMeta.numero,
+      etapaId: sourceEtapa.id,
+      etapaNumero: sourceEtapa.numero,
+      numero: nextNumero,
+    });
+    setExpandedMetas((prev) => new Set(prev).add(sourceMeta.id));
+    setExpandedEtapas((prev) => new Set(prev).add(sourceEtapa.id));
+  };
+
+  const openEditFaseModal = (meta: Meta, etapa: Etapa, fase: Fase) => {
+    if (!canManageChildren) return;
+
+    setFaseCreateDraft({
+      titulo: fase.titulo,
+      descricao: fase.descricao ?? "",
+      dataInicio: fase.dataInicio ?? "",
+      dataFim: fase.dataFim ?? "",
+    });
+    setFaseCreateModalState({
+      mode: "edit",
+      metaId: meta.id,
+      metaNumero: meta.numero,
+      etapaId: etapa.id,
+      etapaNumero: etapa.numero,
+      numero: fase.numero,
+      faseId: fase.id,
+    });
+    setExpandedMetas((prev) => new Set(prev).add(meta.id));
+    setExpandedEtapas((prev) => new Set(prev).add(etapa.id));
+  };
+
+  const closeFaseCreateModal = () => {
+    setFaseCreateModalState(null);
+    setFaseCreateDraft({
+      titulo: "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+    });
+  };
+
+  const saveFaseCreateModal = async () => {
+    if (!faseCreateModalState) return;
+
+    const parentMeta = metas.find((item) => item.id === faseCreateModalState.metaId);
+    const parentEtapa = parentMeta?.etapas.find(
+      (item) => item.id === faseCreateModalState.etapaId
     );
+    if (!parentEtapa?.backendId) {
+      setLoadError(
+        faseCreateModalState.mode === "create"
+          ? "Não foi possível localizar a etapa para criar a fase."
+          : "Não foi possível localizar a etapa para atualizar a fase."
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    setLoadError(null);
+    try {
+      if (faseCreateModalState.mode === "create") {
+        await createPhase({
+          stageId: parentEtapa.backendId,
+          numero: faseCreateModalState.numero,
+          titulo: faseCreateDraft.titulo.trim() || `Fase ${faseCreateModalState.numero}`,
+          descricao: normalizeOptionalText(faseCreateDraft.descricao),
+          dataInicio: normalizeOptionalDate(faseCreateDraft.dataInicio),
+          dataFim: normalizeOptionalDate(faseCreateDraft.dataFim),
+        });
+      } else {
+        const currentFase = parentEtapa.fases.find(
+          (item) => item.id === faseCreateModalState.faseId
+        );
+        if (!currentFase?.backendId) {
+          setLoadError("Não foi possível localizar a fase para atualizar.");
+          return;
+        }
+
+        await updatePhase(currentFase.backendId, {
+          stageId: parentEtapa.backendId,
+          numero: currentFase.numero,
+          titulo: faseCreateDraft.titulo.trim() || `Fase ${currentFase.numero}`,
+          descricao: normalizeOptionalText(faseCreateDraft.descricao),
+          dataInicio: normalizeOptionalDate(faseCreateDraft.dataInicio),
+          dataFim: normalizeOptionalDate(faseCreateDraft.dataFim),
+        });
+      }
+
+      closeFaseCreateModal();
+      await loadHierarchy();
+      flashSavedMessage();
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const removeMeta = async (id: string) => {
-    const meta = editMetas.find((item) => item.id === id);
+    const meta = metas.find((item) => item.id === id) ?? editMetas.find((item) => item.id === id);
     if (!meta) return;
 
     if (meta.backendId) {
@@ -948,8 +1483,82 @@ export default function MetaEtapaFasePage() {
     setEditMetas((prev) => prev.filter((m) => m.id !== id));
   };
 
+  const openDeleteMetaModal = (meta: Meta) => {
+    if (!canManageChildren) return;
+    setMetaPendingDeletion(meta);
+  };
+
+  const closeDeleteMetaModal = () => {
+    setMetaPendingDeletion(null);
+  };
+
+  const confirmMetaDeletion = async () => {
+    if (!metaPendingDeletion) return;
+
+    await removeMeta(metaPendingDeletion.id);
+    setExpandedMetas((prev) => {
+      const next = new Set(prev);
+      next.delete(metaPendingDeletion.id);
+      return next;
+    });
+    closeDeleteMetaModal();
+  };
+
+  const openDeleteEtapaModal = (meta: Meta, etapa: Etapa) => {
+    if (!canManageChildren) return;
+    setEtapaPendingDeletion({
+      metaId: meta.id,
+      metaNumero: meta.numero,
+      etapa,
+    });
+  };
+
+  const closeDeleteEtapaModal = () => {
+    setEtapaPendingDeletion(null);
+  };
+
+  const confirmEtapaDeletion = async () => {
+    if (!etapaPendingDeletion) return;
+
+    await removeEtapa(etapaPendingDeletion.metaId, etapaPendingDeletion.etapa.id);
+    setExpandedEtapas((prev) => {
+      const next = new Set(prev);
+      next.delete(etapaPendingDeletion.etapa.id);
+      return next;
+    });
+    closeDeleteEtapaModal();
+  };
+
+  const openDeleteFaseModal = (meta: Meta, etapa: Etapa, fase: Fase) => {
+    if (!canManageChildren) return;
+    setFasePendingDeletion({
+      metaId: meta.id,
+      metaNumero: meta.numero,
+      etapaId: etapa.id,
+      etapaNumero: etapa.numero,
+      fase,
+    });
+  };
+
+  const closeDeleteFaseModal = () => {
+    setFasePendingDeletion(null);
+  };
+
+  const confirmFaseDeletion = async () => {
+    if (!fasePendingDeletion) return;
+
+    await removeFase(
+      fasePendingDeletion.metaId,
+      fasePendingDeletion.etapaId,
+      fasePendingDeletion.fase.id
+    );
+    closeDeleteFaseModal();
+  };
+
   const removeEtapa = async (metaId: string, etapaId: string) => {
-    const meta = editMetas.find((item) => item.id === metaId);
+    const meta =
+      metas.find((item) => item.id === metaId) ??
+      editMetas.find((item) => item.id === metaId);
     const etapa = meta?.etapas.find((item) => item.id === etapaId);
     if (!etapa) return;
 
@@ -973,7 +1582,9 @@ export default function MetaEtapaFasePage() {
   };
 
   const removeFase = async (metaId: string, etapaId: string, faseId: string) => {
-    const meta = editMetas.find((item) => item.id === metaId);
+    const meta =
+      metas.find((item) => item.id === metaId) ??
+      editMetas.find((item) => item.id === metaId);
     const etapa = meta?.etapas.find((item) => item.id === etapaId);
     const fase = etapa?.fases.find((item) => item.id === faseId);
     if (!fase) return;
@@ -1001,59 +1612,6 @@ export default function MetaEtapaFasePage() {
         };
       })
     );
-  };
-
-  const startEdit = (id: string, value: string) => {
-    setEditingId(id);
-    setEditValue(value);
-  };
-
-  const saveEditItem = (type: "meta" | "etapa" | "fase", ids: string[]) => {
-    if (type === "meta") {
-      setEditMetas((prev) =>
-        prev.map((m) => (m.id === ids[0] ? { ...m, titulo: editValue } : m))
-      );
-    } else if (type === "etapa") {
-      setEditMetas((prev) =>
-        prev.map((m) =>
-          m.id === ids[0]
-            ? {
-                ...m,
-                etapas: m.etapas.map((e) =>
-                  e.id === ids[1] ? { ...e, titulo: editValue } : e
-                ),
-              }
-            : m
-        )
-      );
-    } else if (type === "fase") {
-      setEditMetas((prev) =>
-        prev.map((m) =>
-          m.id === ids[0]
-            ? {
-                ...m,
-                etapas: m.etapas.map((e) =>
-                  e.id === ids[1]
-                    ? {
-                        ...e,
-                        fases: e.fases.map((f) =>
-                          f.id === ids[2] ? { ...f, titulo: editValue } : f
-                        ),
-                      }
-                    : e
-                ),
-              }
-            : m
-        )
-      );
-    }
-    setEditingId(null);
-    setEditValue("");
-  };
-
-  const cancelEditItem = () => {
-    setEditingId(null);
-    setEditValue("");
   };
 
   // Funções para editar datas
@@ -1122,7 +1680,7 @@ export default function MetaEtapaFasePage() {
   };
 
   // Modo de visualizacao (read-only)
-  const currentMetas = isEditing ? editMetas : metas;
+  const currentMetas = metas;
   const metrics = useMemo(() => {
     const totalMetas = currentMetas.length;
     const totalEtapas = currentMetas.reduce(
@@ -1137,6 +1695,21 @@ export default function MetaEtapaFasePage() {
     );
     return { totalMetas, totalEtapas, totalFases };
   }, [currentMetas]);
+
+  const metaModalDescription =
+    metaModalState?.mode === "edit"
+      ? "Atualize os dados principais da meta sem poluir a linha da estrutura."
+      : "Cadastre uma nova meta e salve diretamente por este modal.";
+
+  const etapaModalDescription =
+    etapaCreateModalState?.mode === "edit"
+      ? "Atualize os dados da etapa e salve diretamente por este modal."
+      : "Cadastre uma etapa dentro da meta selecionada e salve diretamente por este modal.";
+
+  const faseModalDescription =
+    faseCreateModalState?.mode === "edit"
+      ? "Atualize os dados da fase e salve diretamente por este modal."
+      : "Cadastre uma fase dentro da etapa selecionada e salve diretamente por este modal.";
 
   return (
     <div className="space-y-4">
@@ -1159,27 +1732,14 @@ export default function MetaEtapaFasePage() {
           )}
           {canManageChildren && (
             <button
-              onClick={() => {
-                if (!isEditing) {
-                  handleEdit();
-                }
-                addMeta();
-              }}
-              className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-[#004225] transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              onClick={openCreateMetaModal}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#004225] px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-950/20 transition-all hover:-translate-y-0.5 hover:bg-[#003319] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             >
               <Plus className="h-4 w-4" />
               Nova Meta
             </button>
           )}
-          {!isEditing && canManageChildren ? (
-            <button
-              onClick={handleEdit}
-              className="inline-flex items-center gap-2 rounded-md bg-[#004225] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#003319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-            >
-              <Edit className="h-4 w-4" />
-              Editar
-            </button>
-          ) : (
+          {false && isEditing && (
             <>
               <button
                 onClick={handleCancel}
@@ -1203,7 +1763,7 @@ export default function MetaEtapaFasePage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Perfil em modo leitura neste modulo. O estagiario pode consultar a estrutura, mas nao pode criar, editar, concluir ou reabrir metas, etapas e fases.
+          Perfil em modo leitura neste modulo. O estagiario pode consultar a estrutura, mas não pode criar, editar, concluir ou reabrir metas, etapas e fases.
         </div>
       )}
 
@@ -1244,13 +1804,11 @@ export default function MetaEtapaFasePage() {
             Nenhuma meta cadastrada
           </h3>
           <p className="text-sm text-gray-500 mb-4">
-            {isEditing
-              ? "Adicione metas para estruturar o contrato."
-              : "Clique em Editar para adicionar metas."}
+            Use Nova Meta para comecar a estruturar o contrato.
           </p>
-          {isEditing && (
+          {canManageChildren && (
             <button
-              onClick={addMeta}
+              onClick={openCreateMetaModal}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -1291,47 +1849,9 @@ export default function MetaEtapaFasePage() {
                 <span className="text-sm font-bold text-slate-800">
                   Meta {meta.numero}:
                 </span>
-                {isEditing && editingId === meta.id ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="flex-1 rounded border border-[#004225] bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveEditItem("meta", [meta.id]);
-                        if (e.key === "Escape") cancelEditItem();
-                      }}
-                    />
-                    <button
-                      onClick={() => saveEditItem("meta", [meta.id])}
-                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={cancelEditItem}
-                      className="p-1 text-red-600 hover:bg-red-100 rounded"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm font-medium text-gray-900">
-                      {meta.titulo}
-                    </span>
-                    {isEditing && (
-                      <button
-                        onClick={() => startEdit(meta.id, meta.titulo)}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-slate-200 rounded transition-colors"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </>
-                )}
+                <span className="flex-1 text-sm font-medium text-gray-900">
+                  {meta.titulo}
+                </span>
                 <div className="flex items-center gap-2">
                   <StatusChip status={metaIndicators.status} />
                   <button
@@ -1343,7 +1863,7 @@ export default function MetaEtapaFasePage() {
                       !canManageChildren
                         ? "Perfil em modo leitura."
                         : isEditing
-                          ? "Salve as alteracoes antes de concluir/reabrir."
+                          ? "Salve as alterações antes de concluir/reabrir."
                           : undefined
                     }
                     className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -1362,20 +1882,14 @@ export default function MetaEtapaFasePage() {
                     {metaFasesCount} fases
                   </span>
                 </div>
-                {isEditing ? (
+                {false ? (
                   <div className="flex items-center gap-2">
                     {editingDate?.id === meta.id && editingDate?.field === "dataInicio" ? (
                       <div className="flex items-center gap-1">
-                        <input
-                          type="date"
+                        <DatePicker
                           value={editDateValue}
-                          onChange={(e) => setEditDateValue(e.target.value)}
-                          className="rounded border border-[#004225] bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEditDate();
-                            if (e.key === "Escape") cancelEditDate();
-                          }}
+                          onChange={setEditDateValue}
+                          className="h-8 rounded border-[#004225] px-2 py-1 text-xs"
                         />
                         <button
                           onClick={saveEditDate}
@@ -1402,16 +1916,10 @@ export default function MetaEtapaFasePage() {
                     <span className="text-xs text-gray-400">-</span>
                     {editingDate?.id === meta.id && editingDate?.field === "dataFim" ? (
                       <div className="flex items-center gap-1">
-                        <input
-                          type="date"
+                        <DatePicker
                           value={editDateValue}
-                          onChange={(e) => setEditDateValue(e.target.value)}
-                          className="rounded border border-[#004225] bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEditDate();
-                            if (e.key === "Escape") cancelEditDate();
-                          }}
+                          onChange={setEditDateValue}
+                          className="h-8 rounded border-[#004225] px-2 py-1 text-xs"
                         />
                         <button
                           onClick={saveEditDate}
@@ -1443,27 +1951,42 @@ export default function MetaEtapaFasePage() {
                     </span>
                   )
                 )}
-                {isEditing && (
-                  <button
-                    onClick={() => {
-                      void removeMeta(meta.id);
-                    }}
-                    className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                    title="Excluir meta"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                {canManageChildren && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditMetaModal(meta)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      title="Editar meta"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Editar
+                    </button>
+                    {canManageChildren && (
+                      <button
+                        onClick={() => openDeleteMetaModal(meta)}
+                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                        title="Excluir meta"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="border-b border-slate-200 bg-white px-4 py-2">
                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                   <span className="inline-flex items-center gap-1">
                     <CalendarClock className="h-3.5 w-3.5 text-slate-500" />
-                    {formatDate(meta.dataInicio)} ate {formatDate(meta.dataFim)}
+                    {formatDate(meta.dataInicio)} até {formatDate(meta.dataFim)}
                   </span>
+                  {meta.hasFinancialValue && typeof meta.financialAmount === "number" && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      Valor financeiro: {formatCurrencyBRL(meta.financialAmount)}
+                    </span>
+                  )}
                   {meta.concluida && meta.dataConclusao && (
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                      Concluida em {formatDate(meta.dataConclusao)}
+                      Concluída em {formatDate(meta.dataConclusao)}
                     </span>
                   )}
                 </div>
@@ -1476,7 +1999,7 @@ export default function MetaEtapaFasePage() {
               {/* Conteúdo da Meta (Etapas) */}
               {expandedMetas.has(meta.id) && (
                 <div className="p-4 space-y-3">
-                  {isEditing && (
+                  {false && (
                     <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
@@ -1514,25 +2037,23 @@ export default function MetaEtapaFasePage() {
 
                         <label className="flex flex-col gap-1 text-xs text-slate-600">
                           <span className="font-medium text-slate-700">Data de início</span>
-                          <input
-                            type="date"
+                          <DatePicker
                             value={meta.dataInicio ?? ""}
-                            onChange={(event) =>
-                              updateMetaQuickField(meta.id, "dataInicio", event.target.value)
+                            onChange={(value) =>
+                              updateMetaQuickField(meta.id, "dataInicio", value)
                             }
-                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
+                            className="h-9 rounded-md border-[#004225] text-sm"
                           />
                         </label>
 
                         <label className="flex flex-col gap-1 text-xs text-slate-600">
                           <span className="font-medium text-slate-700">Data de fim</span>
-                          <input
-                            type="date"
+                          <DatePicker
                             value={meta.dataFim ?? ""}
-                            onChange={(event) =>
-                              updateMetaQuickField(meta.id, "dataFim", event.target.value)
+                            onChange={(value) =>
+                              updateMetaQuickField(meta.id, "dataFim", value)
                             }
-                            className="h-9 rounded-md border border-[#004225] bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/20"
+                            className="h-9 rounded-md border-[#004225] text-sm"
                           />
                         </label>
                       </div>
@@ -1542,9 +2063,9 @@ export default function MetaEtapaFasePage() {
                   {meta.etapas.length === 0 ? (
                     <div className="text-center py-6 text-gray-500 text-sm">
                       Nenhuma etapa cadastrada.
-                      {isEditing && (
+                      {canManageChildren && (
                         <button
-                          onClick={() => addEtapa(meta.id)}
+                          onClick={() => openCreateEtapaModal(meta)}
                           className="ml-2 text-[#004225] hover:underline font-medium"
                         >
                           Adicionar etapa
@@ -1578,50 +2099,9 @@ export default function MetaEtapaFasePage() {
                             <span className="text-sm font-semibold text-blue-700">
                               Etapa {etapa.numero}:
                             </span>
-                            {isEditing && editingId === etapa.id ? (
-                              <div className="flex-1 flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1 px-2 py-1 text-sm border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter")
-                                      saveEditItem("etapa", [meta.id, etapa.id]);
-                                    if (e.key === "Escape") cancelEditItem();
-                                  }}
-                                />
-                                <button
-                                  onClick={() =>
-                                    saveEditItem("etapa", [meta.id, etapa.id])
-                                  }
-                                  className="p-1 text-green-600 hover:bg-green-100 rounded"
-                                >
-                                  <Check className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={cancelEditItem}
-                                  className="p-1 text-red-600 hover:bg-red-100 rounded"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="flex-1 text-sm text-gray-800">
-                                  {etapa.titulo}
-                                </span>
-                                {isEditing && (
-                                  <button
-                                    onClick={() => startEdit(etapa.id, etapa.titulo)}
-                                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                                  >
-                                    <Edit2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                              </>
-                            )}
+                            <span className="flex-1 text-sm text-gray-800">
+                              {etapa.titulo}
+                            </span>
                             <StatusChip status={etapaIndicators.status} />
                             <button
                               onClick={() => {
@@ -1632,7 +2112,7 @@ export default function MetaEtapaFasePage() {
                                 !canManageChildren
                                   ? "Perfil em modo leitura."
                                   : isEditing
-                                    ? "Salve as alteracoes antes de concluir/reabrir."
+                                    ? "Salve as alterações antes de concluir/reabrir."
                                     : undefined
                               }
                               className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -1648,16 +2128,10 @@ export default function MetaEtapaFasePage() {
                               <div className="flex items-center gap-2">
                                 {editingDate?.id === etapa.id && editingDate?.field === "dataInicio" ? (
                                   <div className="flex items-center gap-1">
-                                    <input
-                                      type="date"
+                                    <DatePicker
                                       value={editDateValue}
-                                      onChange={(e) => setEditDateValue(e.target.value)}
-                                      className="px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                      autoFocus
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") saveEditDate();
-                                        if (e.key === "Escape") cancelEditDate();
-                                      }}
+                                      onChange={setEditDateValue}
+                                      className="h-8 rounded border-[#004225] px-2 py-0.5 text-xs"
                                     />
                                     <button
                                       onClick={saveEditDate}
@@ -1684,16 +2158,10 @@ export default function MetaEtapaFasePage() {
                                 <span className="text-xs text-gray-300">-</span>
                                 {editingDate?.id === etapa.id && editingDate?.field === "dataFim" ? (
                                   <div className="flex items-center gap-1">
-                                    <input
-                                      type="date"
+                                    <DatePicker
                                       value={editDateValue}
-                                      onChange={(e) => setEditDateValue(e.target.value)}
-                                      className="px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                      autoFocus
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") saveEditDate();
-                                        if (e.key === "Escape") cancelEditDate();
-                                      }}
+                                      onChange={setEditDateValue}
+                                      className="h-8 rounded border-[#004225] px-2 py-0.5 text-xs"
                                     />
                                     <button
                                       onClick={saveEditDate}
@@ -1725,26 +2193,39 @@ export default function MetaEtapaFasePage() {
                                 </span>
                               )
                             )}
-                            {isEditing && (
-                              <button
-                                onClick={() => {
-                                  void removeEtapa(meta.id, etapa.id);
-                                }}
-                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Excluir etapa"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                            {canManageChildren && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => openEditEtapaModal(meta, etapa)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-50"
+                                  title="Editar etapa"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => openDeleteEtapaModal(meta, etapa)}
+                                  className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Excluir etapa"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             )}
                           </div>
                           <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                             <span className="inline-flex items-center gap-1">
                               <CalendarClock className="h-3.5 w-3.5 text-slate-500" />
-                              {formatDate(etapa.dataInicio)} ate {formatDate(etapa.dataFim)}
+                              {formatDate(etapa.dataInicio)} até {formatDate(etapa.dataFim)}
                             </span>
+                            {etapa.hasFinancialValue && typeof etapa.financialAmount === "number" && (
+                              <span className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                Valor financeiro: {formatCurrencyBRL(etapa.financialAmount)}
+                              </span>
+                            )}
                             {etapa.concluida && etapa.dataConclusao && (
                               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                                Concluida em {formatDate(etapa.dataConclusao)}
+                                Concluída em {formatDate(etapa.dataConclusao)}
                               </span>
                             )}
                           </div>
@@ -1759,9 +2240,9 @@ export default function MetaEtapaFasePage() {
                               {etapa.fases.length === 0 ? (
                                 <div className="text-sm text-gray-400 py-2">
                                   Nenhuma fase.
-                                  {isEditing && (
+                                  {canManageChildren && (
                                     <button
-                                      onClick={() => addFase(meta.id, etapa.id)}
+                                      onClick={() => openCreateFaseModal(meta, etapa)}
                                       className="ml-2 text-[#004225] hover:underline font-medium"
                                     >
                                       Adicionar fase
@@ -1781,62 +2262,9 @@ export default function MetaEtapaFasePage() {
                                       <span className="text-xs font-medium text-gray-600">
                                         Fase {fase.numero}:
                                       </span>
-                                      {isEditing && editingId === fase.id ? (
-                                        <div className="flex-1 flex items-center gap-2">
-                                          <input
-                                            type="text"
-                                            value={editValue}
-                                            onChange={(e) =>
-                                              setEditValue(e.target.value)
-                                            }
-                                            className="flex-1 px-2 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter")
-                                                saveEditItem("fase", [
-                                                  meta.id,
-                                                  etapa.id,
-                                                  fase.id,
-                                                ]);
-                                              if (e.key === "Escape") cancelEditItem();
-                                            }}
-                                          />
-                                          <button
-                                            onClick={() =>
-                                              saveEditItem("fase", [
-                                                meta.id,
-                                                etapa.id,
-                                                fase.id,
-                                              ])
-                                            }
-                                            className="p-0.5 text-green-600 hover:bg-green-100 rounded"
-                                          >
-                                            <Check className="h-3 w-3" />
-                                          </button>
-                                          <button
-                                            onClick={cancelEditItem}
-                                            className="p-0.5 text-red-600 hover:bg-red-100 rounded"
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span className="flex-1 text-xs text-gray-700">
-                                            {fase.titulo}
-                                          </span>
-                                          {isEditing && (
-                                            <button
-                                              onClick={() =>
-                                                startEdit(fase.id, fase.titulo)
-                                              }
-                                              className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                                            >
-                                              <Edit2 className="h-3 w-3" />
-                                            </button>
-                                          )}
-                                        </>
-                                      )}
+                                      <span className="flex-1 text-xs text-gray-700">
+                                        {fase.titulo}
+                                      </span>
                                       <StatusChip status={faseIndicators.status} />
                                       <button
                                         onClick={() => {
@@ -1847,7 +2275,7 @@ export default function MetaEtapaFasePage() {
                                           !canManageChildren
                                             ? "Perfil em modo leitura."
                                             : isEditing
-                                              ? "Salve as alteracoes antes de concluir/reabrir."
+                                              ? "Salve as alterações antes de concluir/reabrir."
                                               : undefined
                                         }
                                         className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -1863,16 +2291,10 @@ export default function MetaEtapaFasePage() {
                                         <div className="flex items-center gap-2">
                                           {editingDate?.id === fase.id && editingDate?.field === "dataInicio" ? (
                                             <div className="flex items-center gap-1">
-                                              <input
-                                                type="date"
+                                              <DatePicker
                                                 value={editDateValue}
-                                                onChange={(e) => setEditDateValue(e.target.value)}
-                                                className="px-1.5 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                                autoFocus
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter") saveEditDate();
-                                                  if (e.key === "Escape") cancelEditDate();
-                                                }}
+                                                onChange={setEditDateValue}
+                                                className="h-8 rounded border-[#004225] px-1.5 py-0.5 text-xs"
                                               />
                                               <button
                                                 onClick={saveEditDate}
@@ -1899,16 +2321,10 @@ export default function MetaEtapaFasePage() {
                                           <span className="text-xs text-gray-300">-</span>
                                           {editingDate?.id === fase.id && editingDate?.field === "dataFim" ? (
                                             <div className="flex items-center gap-1">
-                                              <input
-                                                type="date"
+                                              <DatePicker
                                                 value={editDateValue}
-                                                onChange={(e) => setEditDateValue(e.target.value)}
-                                                className="px-1.5 py-0.5 text-xs border border-[#004225] rounded focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                                                autoFocus
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter") saveEditDate();
-                                                  if (e.key === "Escape") cancelEditDate();
-                                                }}
+                                                onChange={setEditDateValue}
+                                                className="h-8 rounded border-[#004225] px-1.5 py-0.5 text-xs"
                                               />
                                               <button
                                                 onClick={saveEditDate}
@@ -1942,28 +2358,36 @@ export default function MetaEtapaFasePage() {
                                       )}
                                       {fase.concluida && fase.dataConclusao && (
                                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                                          Concluida em {formatDate(fase.dataConclusao)}
+                                          Concluída em {formatDate(fase.dataConclusao)}
                                         </span>
                                       )}
-                                      {isEditing && (
-                                        <button
-                                          onClick={() =>
-                                            void removeFase(meta.id, etapa.id, fase.id)
-                                          }
-                                          className="p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                          title="Excluir fase"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
+                                      {canManageChildren && (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => openEditFaseModal(meta, etapa, fase)}
+                                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                                            title="Editar fase"
+                                          >
+                                            <Edit2 className="h-3 w-3" />
+                                            Editar
+                                          </button>
+                                          <button
+                                            onClick={() => openDeleteFaseModal(meta, etapa, fase)}
+                                            className="p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            title="Excluir fase"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                   );
                                   })}
                                 </>
                               )}
-                              {isEditing && (
+                              {canManageChildren && (
                                 <button
-                                  onClick={() => addFase(meta.id, etapa.id)}
+                                  onClick={() => openCreateFaseModal(meta, etapa)}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-[#004225] hover:bg-gray-100 rounded-lg transition-colors"
                                 >
                                   <Plus className="h-3 w-3" />
@@ -1977,9 +2401,9 @@ export default function MetaEtapaFasePage() {
                       })}
                     </>
                   )}
-                  {isEditing && (
+                  {canManageChildren && (
                     <button
-                      onClick={() => addEtapa(meta.id)}
+                      onClick={() => openCreateEtapaModal(meta)}
                       className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-black hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
                     >
                       <Plus className="h-4 w-4" />
@@ -1993,6 +2417,784 @@ export default function MetaEtapaFasePage() {
           })}
         </div>
       ) : null}
+
+      <AppModalShell
+        isOpen={Boolean(metaModalState)}
+        title={metaModalState?.mode === "edit" ? "Editar meta" : "Nova meta"}
+        description={metaModalDescription}
+        icon={
+          metaModalState?.mode === "edit" ? (
+            <Edit2 className="h-5 w-5" />
+          ) : (
+            <Plus className="h-5 w-5" />
+          )
+        }
+        tone={metaModalState?.mode === "edit" ? "info" : "brand"}
+        onClose={closeMetaModal}
+        maxWidthClassName="max-w-2xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeMetaModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="meta-modal-form"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319]"
+            >
+              <Save className="h-4 w-4" />
+              {metaModalState?.mode === "edit" ? "Salvar alterações" : "Criar meta"}
+            </button>
+          </div>
+        }
+      >
+        {metaModalState && (
+          <form
+            id="meta-modal-form"
+            className="space-y-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveMetaModal();
+            }}
+          >
+            <div
+              className={`rounded-2xl border px-4 py-3 ${
+                metaModalState.mode === "edit"
+                  ? "border-blue-200 bg-blue-50"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+            >
+              <p
+                className={`text-xs font-medium uppercase tracking-wide ${
+                  metaModalState.mode === "edit" ? "text-blue-700" : "text-emerald-700"
+                }`}
+              >
+                Meta
+              </p>
+              <p
+                className={`mt-1 font-medium ${
+                  metaModalState.mode === "edit" ? "text-blue-950" : "text-emerald-950"
+                }`}
+              >
+                Meta {metaModalState.numero}
+              </p>
+              <p
+                className={`mt-1 text-sm ${
+                  metaModalState.mode === "edit" ? "text-blue-800" : "text-emerald-800"
+                }`}
+              >
+                O preenchimento fica concentrado aqui para deixar a lista principal mais limpa e rápida de usar.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={metaModalDraft.titulo}
+                  onChange={(event) =>
+                    setMetaModalDraft((prev) => ({
+                      ...prev,
+                      titulo: event.target.value,
+                    }))
+                  }
+                  placeholder={`Meta ${metaModalState.numero}`}
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/15"
+                  autoFocus
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Descrição
+                </label>
+                <textarea
+                  value={metaModalDraft.descricao}
+                  onChange={(event) =>
+                    setMetaModalDraft((prev) => ({
+                      ...prev,
+                      descricao: event.target.value,
+                    }))
+                  }
+                  placeholder="Descreva o objetivo e o contexto da meta."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/15"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de início
+                </label>
+                <DatePicker
+                  value={metaModalDraft.dataInicio}
+                  onChange={(value) =>
+                    setMetaModalDraft((prev) => ({
+                      ...prev,
+                      dataInicio: value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de fim
+                </label>
+                <DatePicker
+                  value={metaModalDraft.dataFim}
+                  onChange={(value) =>
+                    setMetaModalDraft((prev) => ({
+                      ...prev,
+                      dataFim: value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={metaModalDraft.hasFinancialValue}
+                    onChange={(event) => {
+                      setMetaModalError(null);
+                      setMetaModalDraft((prev) => ({
+                        ...prev,
+                        hasFinancialValue: event.target.checked,
+                      }));
+                    }}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-[#004225] focus:ring-[#004225]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-900">
+                      Tem valor financeiro atrelado a meta?
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Marque esta opção para registrar um valor financeiro específico para a meta.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {metaModalDraft.hasFinancialValue && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                    Valor da meta
+                  </label>
+                  <MoneyInput
+                    valueCents={metaModalDraft.financialAmountCents}
+                    onValueChange={(nextCents) => {
+                      setMetaModalError(null);
+                      setMetaModalDraft((prev) => ({
+                        ...prev,
+                        financialAmountCents: nextCents,
+                      }));
+                    }}
+                    placeholder="R$ 0,00"
+                    className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#004225] focus:ring-2 focus:ring-[#004225]/15"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Valor informado: {formatCurrencyBRL(centsToAmount(metaModalDraft.financialAmountCents))}
+                  </p>
+                </div>
+              )}
+            </div>
+            {metaModalError && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {metaModalError}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Ao confirmar este modal, a meta será salva imediatamente.
+            </div>
+          </form>
+        )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={Boolean(etapaCreateModalState)}
+        title={etapaCreateModalState?.mode === "edit" ? "Editar etapa" : "Nova etapa"}
+        description={etapaModalDescription}
+        icon={<Milestone className="h-5 w-5" />}
+        tone="info"
+        onClose={closeEtapaCreateModal}
+        maxWidthClassName="max-w-2xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeEtapaCreateModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="etapa-create-modal-form"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              <Save className="h-4 w-4" />
+              {etapaCreateModalState?.mode === "edit" ? "Salvar etapa" : "Criar etapa"}
+            </button>
+          </div>
+        }
+      >
+        {etapaCreateModalState && (
+          <form
+            id="etapa-create-modal-form"
+            className="space-y-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveEtapaCreateModal();
+            }}
+          >
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-blue-700">
+                Meta vinculada
+              </p>
+              <p className="mt-1 font-medium text-blue-950">
+                Meta {etapaCreateModalState.metaNumero}
+              </p>
+              <p className="mt-1 text-sm text-blue-800">
+                {etapaCreateModalState?.mode === "edit"
+                  ? "As alterações desta etapa serão salvas diretamente."
+                  : "A nova etapa será criada dentro desta meta."}
+              </p>
+            </div>
+
+            {etapaModalFinancialContext?.goalHasFinancialValue ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                  Distribuição financeira da meta
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-emerald-900 md:grid-cols-3">
+                  <p>
+                    Valor da meta:{" "}
+                    <span className="font-semibold">
+                      {formatCurrencyBRL(centsToAmount(etapaModalFinancialContext.goalAmountCents))}
+                    </span>
+                  </p>
+                  <p>
+                    Outras etapas:{" "}
+                    <span className="font-semibold">
+                      {formatCurrencyBRL(
+                        centsToAmount(etapaModalFinancialContext.allocatedByOtherEtapasCents)
+                      )}
+                    </span>
+                  </p>
+                  <p>
+                    Disponível para esta etapa:{" "}
+                    <span className="font-semibold">
+                      {formatCurrencyBRL(
+                        centsToAmount(etapaModalFinancialContext.availableForEtapaCents)
+                      )}
+                    </span>
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-emerald-700">
+                  O total das etapas não pode ultrapassar o valor financeiro definido na meta.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Defina primeiro o valor financeiro da meta para distribuir valores entre as etapas.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={etapaCreateDraft.titulo}
+                  onChange={(event) =>
+                    setEtapaCreateDraft((prev) => ({
+                      ...prev,
+                      titulo: event.target.value,
+                    }))
+                  }
+                  placeholder={`Etapa ${etapaCreateModalState.numero}`}
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                  autoFocus
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Descrição
+                </label>
+                <textarea
+                  value={etapaCreateDraft.descricao}
+                  onChange={(event) =>
+                    setEtapaCreateDraft((prev) => ({
+                      ...prev,
+                      descricao: event.target.value,
+                    }))
+                  }
+                  placeholder="Descreva o objetivo e o escopo desta etapa."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de início
+                </label>
+                <DatePicker
+                  value={etapaCreateDraft.dataInicio}
+                  onChange={(value) =>
+                    setEtapaCreateDraft((prev) => ({
+                      ...prev,
+                      dataInicio: value,
+                    }))
+                  }
+                  className="focus-within:border-blue-500 focus-within:ring-blue-500/15"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de fim
+                </label>
+                <DatePicker
+                  value={etapaCreateDraft.dataFim}
+                  onChange={(value) =>
+                    setEtapaCreateDraft((prev) => ({
+                      ...prev,
+                      dataFim: value,
+                    }))
+                  }
+                  className="focus-within:border-blue-500 focus-within:ring-blue-500/15"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={etapaCreateDraft.hasFinancialValue}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setEtapaModalError(null);
+
+                      if (checked && !etapaModalFinancialContext?.goalHasFinancialValue) {
+                        setEtapaModalError(
+                          "Defina primeiro o valor financeiro da meta antes de informar valor na etapa."
+                        );
+                        return;
+                      }
+
+                      if (
+                        checked &&
+                        etapaModalFinancialContext &&
+                        etapaModalFinancialContext.availableForEtapaCents <= 0
+                      ) {
+                        setEtapaModalError(
+                          "Esta meta já atingiu todo o valor financeiro previsto. Não há saldo disponível para esta etapa."
+                        );
+                        return;
+                      }
+
+                      setEtapaCreateDraft((prev) => ({
+                        ...prev,
+                        hasFinancialValue: checked,
+                        financialAmountCents: checked
+                          ? prev.financialAmountCents > 0
+                            ? Math.min(
+                                prev.financialAmountCents,
+                                etapaModalFinancialContext?.availableForEtapaCents ?? prev.financialAmountCents
+                              )
+                            : etapaModalFinancialContext?.availableForEtapaCents ?? 0
+                          : 0,
+                      }));
+                    }}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-900">
+                      Tem valor financeiro atrelado à etapa?
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Use esta opção para distribuir parte do valor financeiro da meta nesta etapa.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {etapaCreateDraft.hasFinancialValue && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                    Valor da etapa
+                  </label>
+                  <MoneyInput
+                    valueCents={etapaCreateDraft.financialAmountCents}
+                    onValueChange={(nextCents) => {
+                      const availableCents = etapaModalFinancialContext?.availableForEtapaCents ?? nextCents;
+                      if (nextCents > availableCents) {
+                        const adjustedCents = Math.max(availableCents, 0);
+                        setEtapaCreateDraft((prev) => ({
+                          ...prev,
+                          financialAmountCents: adjustedCents,
+                        }));
+                        setEtapaModalError(
+                          adjustedCents > 0
+                            ? `O valor da etapa não pode superar o valor da meta. Preenchi ${formatCurrencyBRL(
+                                centsToAmount(adjustedCents)
+                              )}, que é o valor restante para completar a meta.`
+                            : "Esta meta já atingiu todo o valor financeiro previsto. Não há saldo disponível para esta etapa."
+                        );
+                        return;
+                      }
+
+                      setEtapaModalError(null);
+                      setEtapaCreateDraft((prev) => ({
+                        ...prev,
+                        financialAmountCents: nextCents,
+                      }));
+                    }}
+                    placeholder="R$ 0,00"
+                    className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                  />
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>
+                      Valor informado:{" "}
+                      {formatCurrencyBRL(centsToAmount(etapaCreateDraft.financialAmountCents))}
+                    </span>
+                    {etapaModalFinancialContext && (
+                      <span>
+                        Saldo restante da meta após esta etapa:{" "}
+                        {formatCurrencyBRL(
+                          centsToAmount(
+                            Math.max(
+                              etapaModalFinancialContext.availableForEtapaCents -
+                                etapaCreateDraft.financialAmountCents,
+                              0
+                            )
+                          )
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {etapaModalError && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {etapaModalError}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Ao confirmar este modal, a etapa será salva imediatamente.
+            </div>
+          </form>
+        )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={Boolean(faseCreateModalState)}
+        title={faseCreateModalState?.mode === "edit" ? "Editar fase" : "Nova fase"}
+        description={faseModalDescription}
+        icon={<Flag className="h-5 w-5" />}
+        tone="neutral"
+        onClose={closeFaseCreateModal}
+        maxWidthClassName="max-w-2xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeFaseCreateModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="fase-create-modal-form"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-900"
+            >
+              <Save className="h-4 w-4" />
+              {faseCreateModalState?.mode === "edit" ? "Salvar fase" : "Criar fase"}
+            </button>
+          </div>
+        }
+      >
+        {faseCreateModalState && (
+          <form
+            id="fase-create-modal-form"
+            className="space-y-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveFaseCreateModal();
+            }}
+          >
+            <div className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
+                Estrutura vinculada
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                Meta {faseCreateModalState.metaNumero} • Etapa {faseCreateModalState.etapaNumero}
+              </p>
+              <p className="mt-1 text-sm text-slate-700">
+                {faseCreateModalState?.mode === "edit"
+                  ? "As alterações desta fase serão salvas diretamente."
+                  : "A nova fase será criada dentro desta etapa."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={faseCreateDraft.titulo}
+                  onChange={(event) =>
+                    setFaseCreateDraft((prev) => ({
+                      ...prev,
+                      titulo: event.target.value,
+                    }))
+                  }
+                  placeholder={`Fase ${faseCreateModalState.numero}`}
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/15"
+                  autoFocus
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Descrição
+                </label>
+                <textarea
+                  value={faseCreateDraft.descricao}
+                  onChange={(event) =>
+                    setFaseCreateDraft((prev) => ({
+                      ...prev,
+                      descricao: event.target.value,
+                    }))
+                  }
+                  placeholder="Descreva a entrega ou o objetivo desta fase."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/15"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de início
+                </label>
+                <DatePicker
+                  value={faseCreateDraft.dataInicio}
+                  onChange={(value) =>
+                    setFaseCreateDraft((prev) => ({
+                      ...prev,
+                      dataInicio: value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data de fim
+                </label>
+                <DatePicker
+                  value={faseCreateDraft.dataFim}
+                  onChange={(value) =>
+                    setFaseCreateDraft((prev) => ({
+                      ...prev,
+                      dataFim: value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Ao confirmar este modal, a fase será salva imediatamente.
+            </div>
+          </form>
+        )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={Boolean(metaPendingDeletion)}
+        title="Excluir meta"
+        description="Confirme a exclusão da meta antes de continuar."
+        icon={<Trash2 className="h-5 w-5" />}
+        tone="danger"
+        onClose={closeDeleteMetaModal}
+        maxWidthClassName="max-w-lg"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeDeleteMetaModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void confirmMetaDeletion();
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir meta
+            </button>
+          </div>
+        }
+      >
+        {metaPendingDeletion && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">
+                Tem certeza de que deseja excluir esta meta?
+              </p>
+              <p className="mt-1 text-sm text-red-700">
+                Esta ação remove a meta e toda a estrutura de etapas e fases vinculadas.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Meta selecionada
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                Meta {metaPendingDeletion.numero}: {metaPendingDeletion.titulo}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                {metaPendingDeletion.etapas.length} etapa(s) vinculada(s)
+              </p>
+            </div>
+          </div>
+        )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={Boolean(etapaPendingDeletion)}
+        title="Excluir etapa"
+        description="Confirme a exclusÃ£o da etapa antes de continuar."
+        icon={<Trash2 className="h-5 w-5" />}
+        tone="danger"
+        onClose={closeDeleteEtapaModal}
+        maxWidthClassName="max-w-lg"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeDeleteEtapaModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void confirmEtapaDeletion();
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir etapa
+            </button>
+          </div>
+        }
+      >
+        {etapaPendingDeletion && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">
+                Tem certeza de que deseja excluir esta etapa?
+              </p>
+              <p className="mt-1 text-sm text-red-700">
+                Esta aÃ§Ã£o remove a etapa e todas as fases vinculadas.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Etapa selecionada
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                Meta {etapaPendingDeletion.metaNumero} - Etapa {etapaPendingDeletion.etapa.numero}:{" "}
+                {etapaPendingDeletion.etapa.titulo}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                {etapaPendingDeletion.etapa.fases.length} fase(s) vinculada(s)
+              </p>
+            </div>
+          </div>
+        )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={Boolean(fasePendingDeletion)}
+        title="Excluir fase"
+        description="Confirme a exclusÃ£o da fase antes de continuar."
+        icon={<Trash2 className="h-5 w-5" />}
+        tone="danger"
+        onClose={closeDeleteFaseModal}
+        maxWidthClassName="max-w-lg"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeDeleteFaseModal}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void confirmFaseDeletion();
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir fase
+            </button>
+          </div>
+        }
+      >
+        {fasePendingDeletion && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">
+                Tem certeza de que deseja excluir esta fase?
+              </p>
+              <p className="mt-1 text-sm text-red-700">
+                Esta aÃ§Ã£o remove a fase da etapa e nÃ£o pode ser desfeita.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Fase selecionada
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                Meta {fasePendingDeletion.metaNumero} - Etapa {fasePendingDeletion.etapaNumero} -{" "}
+                Fase {fasePendingDeletion.fase.numero}: {fasePendingDeletion.fase.titulo}
+              </p>
+            </div>
+          </div>
+        )}
+      </AppModalShell>
     </div>
   );
 }

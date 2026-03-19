@@ -17,9 +17,9 @@ import { canManageInvites, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
   AllowedRegistrationResponseDTO,
   AllowedRegistrationStatusEnum,
-  HttpError,
   UserRoleEnum,
 } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const roleOptions: UserRoleEnum[] = ["SUPERADMIN", "ADMIN", "ANALISTA", "ESTAGIARIO"];
 const statusOptions: Array<AllowedRegistrationStatusEnum | ""> = [
@@ -63,16 +63,6 @@ function formatDate(value: string | null): string {
 function toLocalDateTimeOrUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed || undefined;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Erro inesperado.";
 }
 
 export default function AdminConvitesPage() {
@@ -125,7 +115,7 @@ export default function AdminConvitesPage() {
       setInvites(response.content);
       setInviterNamesById(inviterNameMap);
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível carregar os convites."));
       setInvites([]);
       setInviterNamesById({});
     } finally {
@@ -193,7 +183,7 @@ export default function AdminConvitesPage() {
       setExpiresAt("");
       await loadInvites();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível criar o convite."));
     } finally {
       setCreating(false);
     }
@@ -209,7 +199,7 @@ export default function AdminConvitesPage() {
       setFeedback("Convite cancelado com sucesso.");
       await loadInvites();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível cancelar o convite."));
     } finally {
       setRunningActionId(null);
     }
@@ -226,7 +216,7 @@ export default function AdminConvitesPage() {
       setInviteLink(updated.inviteLink);
       await loadInvites();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível reemitir o convite."));
     } finally {
       setRunningActionId(null);
     }
@@ -259,12 +249,12 @@ export default function AdminConvitesPage() {
       document.body.removeChild(textArea);
 
       if (!copied) {
-        setError("Nao foi possivel copiar o link automaticamente.");
+        setError("Não foi possível copiar o link automaticamente.");
         return;
       }
     }
 
-    setFeedback("Link copiado para a area de transferencia.");
+    setFeedback("Link copiado para a área de transferencia.");
   }
 
   return (
@@ -272,7 +262,7 @@ export default function AdminConvitesPage() {
       <NavBar />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <header>
-          <h1 className="text-2xl font-bold text-zinc-900">Gestao de convites</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Gestão de convites</h1>
           <p className="text-sm text-zinc-600">
             Admin e superadmin podem liberar novos cadastros por e-mail.
           </p>
@@ -280,7 +270,7 @@ export default function AdminConvitesPage() {
 
         {loadingAccess && (
           <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-            Validando permissao...
+            Validando permissão...
           </div>
         )}
 
@@ -302,7 +292,7 @@ export default function AdminConvitesPage() {
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="usuario@empresa.com"
+                    placeholder="usuário@empresa.com"
                     required
                     disabled={creating}
                   />
@@ -335,7 +325,7 @@ export default function AdminConvitesPage() {
                     defaultTime="23:59"
                   />
                   <p className="text-xs text-zinc-500">
-                    Se informar apenas a data, o vencimento sera definido para 23:59.
+                    Se informar apenas a data, o vencimento será definido para 23:59.
                   </p>
                 </div>
 

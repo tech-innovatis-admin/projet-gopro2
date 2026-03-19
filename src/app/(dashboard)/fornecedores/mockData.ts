@@ -219,7 +219,7 @@ export const MOCK_FORNECEDORES: Fornecedor[] = [
     nome: "Santos Logística",
     razaoSocial: "Santos Logística e Transporte LTDA",
     cnpj: "45.678.901/0001-14",
-    email: "operacoes@santoslog.com.br",
+    email: "operações@santoslog.com.br",
     telefone: "(13) 5555-3333",
     uf: "SP",
     municipio: "Santos",

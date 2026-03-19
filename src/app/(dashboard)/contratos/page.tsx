@@ -30,8 +30,8 @@ import {
   listPeople,
   listProjects,
 } from "@/src/lib/api/endpoints";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
-  HttpError,
   type ProjectResponseDTO,
   type ProjectStatusEnum,
 } from "@/src/lib/api/types";
@@ -202,7 +202,7 @@ const segmentoOptions = [
   "Outro",
 ];
 
-const NO_INFO_LABEL = "Nao informado";
+const NO_INFO_LABEL = "Não informado";
 
 function normalizeMoneyValue(value: number | string | null | undefined): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -398,6 +398,21 @@ export default function ContratosPage() {
   const [pageSize] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const statusParam = params.get("status");
+    const nextStatus: Filters["status"] =
+      statusParam &&
+      ["PRE_PROJETO", "PLANEJAMENTO", "EXECUCAO", "FINALIZADO", "SUSPENSO"].includes(statusParam)
+        ? (statusParam as ProjectStatus)
+        : "TODOS";
+
+    setFilters((previous) =>
+      previous.status === nextStatus ? previous : { ...previous, status: nextStatus }
+    );
+    setPage(1);
+  }, []);
+
   // Opcoes para os dropdowns de filtros
   const statusDropdownOptions: DropdownOption[] = useMemo(() => [
     { value: "TODOS", label: "Todos os status" },
@@ -521,11 +536,7 @@ export default function ContratosPage() {
       );
       setContratos(mappedProjects);
     } catch (fetchError) {
-      const message =
-        fetchError instanceof HttpError
-          ? fetchError.message
-          : "Nao foi possivel carregar os contratos.";
-      setError(message);
+      setError(getUserErrorMessage(fetchError, "Não foi possível carregar os contratos."));
       setContratos([]);
     } finally {
       setLoading(false);
@@ -734,7 +745,7 @@ export default function ContratosPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-            <p className="text-sm text-gray-500">Gestao unificada de Projetos e Produtos</p>
+            <p className="text-sm text-gray-500">Gestão unificada de Projetos e Produtos</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -992,7 +1003,7 @@ export default function ContratosPage() {
               {/* Valor Minimo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Valor minimo
+                  Valor mínimo
                 </label>
                 <MoneyInput
                   valueCents={filters.valorMinimo}
@@ -1008,7 +1019,7 @@ export default function ContratosPage() {
               {/* Valor Maximo */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Valor maximo
+                  Valor máximo
                 </label>
                 <MoneyInput
                   valueCents={filters.valorMaximo}
@@ -1085,11 +1096,11 @@ export default function ContratosPage() {
                 </Th>
                 <Th className="text-center">Status</Th>
                 <Th onClick={() => handleSort("dataInicio")} sortable className="text-center">
-                  Inicio
+                  Início
                   <SortIcon column="dataInicio" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("dataTermino")} sortable className="text-center">
-                  Termino
+                  Término
                   <SortIcon column="dataTermino" sortConfig={sortConfig} />
                 </Th>
                 <Th onClick={() => handleSort("coordenador")} sortable className="text-center">

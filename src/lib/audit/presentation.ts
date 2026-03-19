@@ -1,4 +1,5 @@
-import { AuditLogResponseDTO, AuditScopeEnum, HttpError } from "../api/types";
+import { AuditLogResponseDTO, AuditScopeEnum } from "../api/types";
+import { getUserErrorMessage } from "../feedback/user-messages";
 export {
   resolveAuditDescription,
   resolveAuditOperationKind,
@@ -129,18 +130,12 @@ export function parseContractId(value: string): number | null {
 }
 
 export function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Erro inesperado.";
+  return getUserErrorMessage(error, "Não foi possível carregar a auditoria.");
 }
 
 export function formatDateTime(value?: string | null): string {
   if (!value) {
-    return "NÃ£o informado";
+    return "Não informado";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {

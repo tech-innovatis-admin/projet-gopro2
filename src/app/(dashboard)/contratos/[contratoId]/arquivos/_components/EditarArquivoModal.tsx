@@ -23,12 +23,12 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
   PLANO_TRABALHO: "Plano de Trabalho",
   TERMO_REFERENCIA: "Termo de Referencia",
   ATA_REUNIAO: "Ata de Reuniao",
-  RELATORIO_TECNICO: "Relatorio Tecnico",
-  RELATORIO_FINANCEIRO: "Relatorio Financeiro",
+  RELATORIO_TECNICO: "Relatório Técnico",
+  RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
   PROPOSTA_COMERCIAL: "Proposta Comercial",
   ETP: "ETP",
-  RELATORIO_INCUBADAS: "Relatorio de Incubadas",
+  RELATORIO_INCUBADAS: "Relatório de Incubadas",
   NOTA_FISCAL: "Nota Fiscal",
   TED: "TED",
   COMPROVANTES: "Comprovantes",
@@ -166,7 +166,7 @@ export function EditarArquivoModal({
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-[#004225] file:px-3 file:py-1.5 file:text-white file:hover:bg-[#003319]"
             />
             <p className="text-xs text-gray-500">
-              Esta acao substitui o documento atual. Tamanho maximo:{" "}
+              Esta ação substitui o documento atual. Tamanho máximo:{" "}
               {formatFileSize(MAX_FILE_SIZE)}.
             </p>
             {replacementFileLabel && (
@@ -198,7 +198,7 @@ export function EditarArquivoModal({
               disabled={isSubmitting}
               className="inline-flex items-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:opacity-50"
             >
-              {isSubmitting ? "Salvando..." : "Salvar alteracoes"}
+              {isSubmitting ? "Salvando..." : "Salvar alterações"}
             </button>
           </div>
         </form>

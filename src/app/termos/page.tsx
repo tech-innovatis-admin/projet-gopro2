@@ -89,7 +89,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-zinc-800">6. Modificações dos Termos</h2>
             <p className="text-zinc-600 leading-relaxed">
               Reservamo-nos o direito de modificar estes Termos a qualquer momento. As alterações 
-              entrarão em vigor imediatamente após a publicação. O uso contínuo do serviço após 
+              entrarão em vigor imediatamente após a públicação. O uso contínuo do serviço após 
               as modificações constitui aceitação dos novos termos.
             </p>
           </section>

@@ -10,6 +10,7 @@ import {
   MapPin,
   FileText,
 } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 // Ícone customizado de Briefcase Business
 const BriefcaseBusinessIcon = () => (
@@ -493,13 +494,11 @@ function IncubadaModal({
               <label className="block text-sm font-medium text-gray-700">
                 Data de Início
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={formData.dataInicio || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, dataInicio: e.target.value })
+                onChange={(value) =>
+                  setFormData({ ...formData, dataInicio: value })
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               />
             </div>
 
@@ -508,13 +507,11 @@ function IncubadaModal({
               <label className="block text-sm font-medium text-gray-700">
                 Data de Término
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={formData.dataFim || ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, dataFim: e.target.value })
+                onChange={(value) =>
+                  setFormData({ ...formData, dataFim: value })
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               />
             </div>
 

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BarChart3, CheckCircle2, Clock3, ListChecks, PauseCircle, PlayCircle, type LucideIcon } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { getProjectDashboard } from "@/src/lib/api/endpoints";
-import { HttpError, type ProjectDashboardResponseDTO, type ProjectGovIfEnum, type ProjectStatusEnum } from "@/src/lib/api/types";
+import { type ProjectDashboardResponseDTO, type ProjectGovIfEnum, type ProjectStatusEnum } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
 import { ContractsLineChart } from "./_components/ContractsLineChart";
 import { ContractsMap } from "./_components/ContractsMap";
@@ -110,17 +112,8 @@ const neutralTone: CardTone = {
   border: "border-zinc-200 hover:border-zinc-300",
 };
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Falha ao carregar dashboard.";
-}
-
 export default function HomePage() {
+  const router = useRouter();
   const [dashboard, setDashboard] = useState<ProjectDashboardResponseDTO | null>(null);
   const [expiringContracts, setExpiringContracts] = useState<ProjectDashboardResponseDTO["expiringContracts"] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -150,7 +143,7 @@ export default function HomePage() {
     } catch (fetchError) {
       setDashboard(null);
       setYearOptions([CURRENT_YEAR]);
-      setError(getErrorMessage(fetchError));
+      setError(getUserErrorMessage(fetchError, "Falha ao carregar o dashboard."));
     } finally {
       setLoading(false);
     }
@@ -292,6 +285,18 @@ export default function HomePage() {
     },
   ];
 
+  const handleSummaryCardClick = useCallback(
+    (cardKey: SummaryCard["key"]) => {
+      if (cardKey === "TOTAL") {
+        router.push("/contratos");
+        return;
+      }
+
+      router.push(`/contratos?status=${cardKey}`);
+    },
+    [router]
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
       <NavBar />
@@ -337,10 +342,12 @@ export default function HomePage() {
               const isEmpty = card.contracts === 0 && card.totalValue === 0;
               const tone = isEmpty ? neutralTone : cardToneByStatus[card.key];
               return (
-                <article
+                <button
+                  type="button"
                   key={card.key}
+                  onClick={() => handleSummaryCardClick(card.key)}
                   aria-labelledby={`summary-card-title-${card.key}`}
-                  className={`group relative h-full overflow-hidden rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 lg:p-5 ${tone.border}`}
+                  className={`group relative h-full w-full overflow-hidden rounded-xl border bg-white p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 lg:p-5 ${tone.border}`}
                 >
                   <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${tone.accent}`} />
                   <div className="flex h-full flex-col">
@@ -382,8 +389,8 @@ export default function HomePage() {
                         {`${card.title}. ${formatNumber(card.contracts)} contratos. Valor total ${formatCurrency(card.totalValue)}.`}
                       </p>
                     )}
-                    </div>
-                </article>
+                  </div>
+                </button>
               );
             })}
           </div>

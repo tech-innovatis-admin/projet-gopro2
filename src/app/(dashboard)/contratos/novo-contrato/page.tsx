@@ -51,7 +51,6 @@ import {
 import {
   type DisbursementScheduleRequestDTO,
   type GoalRequestDTO,
-  HttpError,
   type PartnerRequestDTO,
   type PartnersTypeEnum,
   type PeopleRequestDTO,
@@ -68,6 +67,7 @@ import {
   type StageRequestDTO,
   type StatusDisbursementScheduleEnum,
 } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   canManageContractChildren,
   fetchCurrentUser,
@@ -282,6 +282,7 @@ const publicAgencyTypeOptions: { value: PublicAgencyTypeEnum; label: string }[] 
   { value: "PREFEITURA", label: "Prefeitura" },
   { value: "GOVERNO_ESTADUAL", label: "Governo Estadual" },
   { value: "MINISTERIO", label: "Ministerio" },
+  { value: "EMPRESA_PRIVADA", label: "Empresa privada" },
 ];
 
 const initialFormState: NovoContratoForm = {
@@ -467,7 +468,7 @@ const formatPhoneInput = (value: string) => {
 async function fetchBrazilStates() {
   const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
   if (!response.ok) {
-    throw new Error("Nao foi possivel carregar os estados.");
+    throw new Error("Não foi possível carregar os estados.");
   }
 
   const data = (await response.json()) as IbgeStateResponse[];
@@ -488,7 +489,7 @@ async function fetchCitiesByState(uf: string) {
     `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`
   );
   if (!response.ok) {
-    throw new Error("Nao foi possivel carregar as cidades.");
+    throw new Error("Não foi possível carregar as cidades.");
   }
 
   const data = (await response.json()) as IbgeCityResponse[];
@@ -513,8 +514,8 @@ function NovoContratoPageContent() {
   const hideChildSections = hideAdvancedSections || !canManageChildren;
   const pageTitle = isEditMode ? "Editar Contrato" : "Novo Contrato";
   const pageDescription = isEditMode
-    ? "Atualize as informacoes principais do contrato."
-    : "Preencha as informacoes do contrato";
+    ? "Atualize as informações principais do contrato."
+    : "Preencha as informações do contrato";
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -646,11 +647,12 @@ function NovoContratoPageContent() {
           }))
       );
     } catch (error) {
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel carregar parceiros, agencias, secretarias e coordenadores.";
-      setLoadError(message);
+      setLoadError(
+        getUserErrorMessage(
+          error,
+          "Não foi possível carregar parceiros, agencias, secretarias e coordenadores."
+        )
+      );
       setOrganizacoesParceiras([]);
       setOrganizacoesFinanciadoras([]);
       setSecretariasCliente([]);
@@ -800,11 +802,7 @@ function NovoContratoPageContent() {
       if (signal?.aborted) {
         return;
       }
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel carregar os dados atuais do contrato.";
-      setLoadError(message);
+      setLoadError(getUserErrorMessage(error, "Não foi possível carregar os dados atuais do contrato."));
     } finally {
       if (signal?.aborted) {
         return;
@@ -839,7 +837,7 @@ function NovoContratoPageContent() {
       .catch(() => {
         if (!isMounted) return;
         setUfOptions([]);
-        setUfLookupError("Nao foi possivel carregar os estados. Tente novamente.");
+        setUfLookupError("Não foi possível carregar os estados. Tente novamente.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -872,7 +870,7 @@ function NovoContratoPageContent() {
       .catch(() => {
         if (!isMounted) return;
         setCidadeOptions([]);
-        setCidadeLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setCidadeLookupError("Não foi possível carregar as cidades deste estado.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -905,7 +903,7 @@ function NovoContratoPageContent() {
       .catch(() => {
         if (!isMounted) return;
         setCoordinatorCityOptions([]);
-        setCoordinatorCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setCoordinatorCityLookupError("Não foi possível carregar as cidades deste estado.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -938,7 +936,7 @@ function NovoContratoPageContent() {
       .catch(() => {
         if (!isMounted) return;
         setPartnerCityOptions([]);
-        setPartnerCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setPartnerCityLookupError("Não foi possível carregar as cidades deste estado.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -957,11 +955,11 @@ function NovoContratoPageContent() {
   ): string => {
     switch (name) {
       case "titulo":
-        if (typeof value !== "string" || !value.trim()) return "O titulo do projeto e obrigatorio";
-        if (value.trim().length < 5) return "O titulo deve ter pelo menos 5 caracteres";
+        if (typeof value !== "string" || !value.trim()) return "O título do projeto é obrigatório";
+        if (value.trim().length < 5) return "O título deve ter pelo menos 5 caracteres";
         return "";
       case "govIf":
-        if (typeof value !== "string" || !value || (value !== "IF" && value !== "GOV")) return "Selecione uma opcao";
+        if (typeof value !== "string" || !value || (value !== "IF" && value !== "GOV")) return "Selecione uma opção";
         return "";
       case "tipo":
         if (typeof value !== "string" || !value) return "Selecione um tipo de contrato";
@@ -990,43 +988,43 @@ function NovoContratoPageContent() {
         if (!Array.isArray(value) || value.length === 0) return "Selecione ao menos um segmento";
         return "";
       case "dataInicio":
-        if (typeof value !== "string" || !value) return "A data de inicio e obrigatoria";
+        if (typeof value !== "string" || !value) return "A data de início é obrigatória";
         return "";
       case "dataFim":
-        if (typeof value !== "string" || !value) return "A data de fim e obrigatoria";
+        if (typeof value !== "string" || !value) return "A data de fim é obrigatória";
         if (form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de fim deve ser posterior a data de inicio";
+          return "A data de fim deve ser posterior a data de início";
         }
         return "";
       case "dataInicioEfetivo":
-        // Opcional, mas se preenchido deve ser valido
+        // Opcional, mas se preenchido deve ser válido
         if (typeof value === "string" && value && form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de inicio efetivo deve ser posterior ou igual a data de inicio do contrato";
+          return "A data de início efetivo deve ser posterior ou igual a data de início do contrato";
         }
         return "";
       case "dataFimEfetivo":
         // Opcional, mas se preenchido deve ser posterior ao inicio efetivo
         if (typeof value === "string" && value && form.dataInicioEfetivo && new Date(value) < new Date(form.dataInicioEfetivo)) {
-          return "A data de fim efetivo deve ser posterior a data de inicio efetivo";
+          return "A data de fim efetivo deve ser posterior a data de início efetivo";
         }
         return "";
       case "uf":
         if (typeof value !== "string" || !value.trim()) return "Selecione a UF";
-        if (value.trim().length !== 2) return "UF invalida";
+        if (value.trim().length !== 2) return "UF inválida";
         return "";
       case "cidade":
         if (typeof value !== "string" || !value.trim()) return "Selecione a cidade";
         return "";
       case "scope":
-        if (typeof value !== "string" || !value.trim()) return "O objeto do contrato e obrigatorio";
+        if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
         if (value.trim().length < 10) return "O objeto do contrato deve ter pelo menos 10 caracteres";
         return "";
       case "contract_value":
-        if (typeof value !== "string" || !value.trim()) return "O valor do projeto e obrigatorio";
+        if (typeof value !== "string" || !value.trim()) return "O valor do projeto é obrigatório";
         const numericValue = value.replace(/\D/g, "");
-        if (!numericValue || parseInt(numericValue, 10) <= 0) return "Informe um valor valido maior que zero";
+        if (!numericValue || parseInt(numericValue, 10) <= 0) return "Informe um valor válido maior que zero";
         if (parseInt(numericValue, 10) / 100 > MAX_CONTRACT_VALUE) {
-          return `O valor maximo permitido e ${new Intl.NumberFormat("pt-BR", {
+          return `O valor máximo permitido e ${new Intl.NumberFormat("pt-BR", {
             style: "currency",
             currency: "BRL",
           }).format(MAX_CONTRACT_VALUE)}.`;
@@ -1114,7 +1112,7 @@ function NovoContratoPageContent() {
     if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Maximo de 20MB por arquivo.",
+        [tipo]: "Arquivo muito grande. Máximo de 20MB por arquivo.",
       }));
       return;
     }
@@ -1122,7 +1120,7 @@ function NovoContratoPageContent() {
     if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Formato invalido. Aceitos: PDF, PNG, JPG e JPEG.",
+        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG e JPEG.",
       }));
       return;
     }
@@ -1279,13 +1277,13 @@ function NovoContratoPageContent() {
 
     if (!name || !tradeName || !city || !state) {
       setPartnerFormError(
-        "Preencha os campos obrigatorios: nome, nome fantasia, cidade e estado."
+        "Preencha os campos obrigatórios: nome, nome fantasia, cidade e estado."
       );
       return;
     }
 
     if (cnpjDigits.length !== 14) {
-      setPartnerFormError("Informe um CNPJ valido com 14 digitos.");
+      setPartnerFormError("Informe um CNPJ válido com 14 dígitos.");
       return;
     }
 
@@ -1323,9 +1321,7 @@ function NovoContratoPageContent() {
       handleChange(partnerTargetField, String(createdPartner.id));
       closePartnerModal();
     } catch (error) {
-      const message =
-        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar o parceiro.";
-      setPartnerFormError(message);
+      setPartnerFormError(getUserErrorMessage(error, "Não foi possível cadastrar o parceiro."));
     } finally {
       setIsCreatingPartner(false);
     }
@@ -1356,7 +1352,7 @@ function NovoContratoPageContent() {
     }
 
     if (cnpjDigits.length !== 14) {
-      setClientFormError("Informe um CNPJ valido com 14 digitos.");
+      setClientFormError("Informe um CNPJ válido com 14 dígitos.");
       return;
     }
 
@@ -1395,9 +1391,7 @@ function NovoContratoPageContent() {
       handleChange("clientePrimarioId", String(createdClient.id));
       closeClientModal();
     } catch (error) {
-      const message =
-        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar o cliente.";
-      setClientFormError(message);
+      setClientFormError(getUserErrorMessage(error, "Não foi possível cadastrar o cliente."));
     } finally {
       setIsCreatingClient(false);
     }
@@ -1437,7 +1431,7 @@ function NovoContratoPageContent() {
     }
 
     if (secretaryForm.cnpj.trim() && cnpjDigits.length !== 14) {
-      setSecretaryFormError("Informe um CNPJ valido com 14 digitos ou deixe em branco.");
+      setSecretaryFormError("Informe um CNPJ válido com 14 dígitos ou deixe em branco.");
       return;
     }
 
@@ -1475,9 +1469,7 @@ function NovoContratoPageContent() {
       handleChange("clienteSecundarioId", String(createdSecretary.id));
       closeSecretaryModal();
     } catch (error) {
-      const message =
-        error instanceof HttpError ? error.message : "Nao foi possivel cadastrar a secretaria.";
-      setSecretaryFormError(message);
+      setSecretaryFormError(getUserErrorMessage(error, "Não foi possível cadastrar a secretaria."));
     } finally {
       setIsCreatingSecretary(false);
     }
@@ -1519,7 +1511,7 @@ function NovoContratoPageContent() {
     }
 
     if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
-      setCoordinatorFormError("Informe um CPF valido com 11 digitos.");
+      setCoordinatorFormError("Informe um CPF válido com 11 dígitos.");
       return;
     }
 
@@ -1562,12 +1554,7 @@ function NovoContratoPageContent() {
       handleChange("coordenador", String(createdPerson.id));
       closeCoordinatorModal();
     } catch (error) {
-      const message = error instanceof HttpError
-        ? (error.fieldErrors?.length
-          ? error.fieldErrors.map((fieldError) => fieldError.message).join(" | ")
-          : error.message)
-        : "Nao foi possivel cadastrar o coordenador.";
-      setCoordinatorFormError(message);
+      setCoordinatorFormError(getUserErrorMessage(error, "Não foi possível cadastrar o coordenador."));
     } finally {
       setIsCreatingCoordinator(false);
     }
@@ -1859,23 +1846,23 @@ function NovoContratoPageContent() {
   const validateHierarchyBeforeSubmit = (formData: NovoContratoForm): string | null => {
     for (const parcela of formData.parcelas) {
       if (!validateParcela(parcela)) {
-        return `Parcela ${parcela.numero} invalida. Preencha data prevista e valor maior que zero.`;
+        return `Parcela ${parcela.numero} inválida. Preencha data prevista e valor maior que zero.`;
       }
     }
 
     for (const meta of formData.metas) {
       if (!meta.titulo.trim()) {
-        return `Preencha o titulo da Meta ${meta.numero}.`;
+        return `Preencha o título da Meta ${meta.numero}.`;
       }
 
       for (const etapa of meta.etapas) {
         if (!etapa.titulo.trim()) {
-          return `Preencha o titulo da Etapa ${meta.numero}.${etapa.numero}.`;
+          return `Preencha o título da Etapa ${meta.numero}.${etapa.numero}.`;
         }
 
         for (const fase of etapa.fases) {
           if (!fase.titulo.trim()) {
-            return `Preencha o titulo da Fase ${meta.numero}.${etapa.numero}.${fase.numero}.`;
+            return `Preencha o título da Fase ${meta.numero}.${etapa.numero}.${fase.numero}.`;
           }
         }
       }
@@ -2055,14 +2042,12 @@ function NovoContratoPageContent() {
 
       setShowSuccessModal(true);
     } catch (error) {
-      const rootMessage =
-        error instanceof HttpError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : isEditMode
-              ? "Nao foi possivel atualizar o contrato."
-              : "Nao foi possivel concluir o cadastro do contrato.";
+      const rootMessage = getUserErrorMessage(
+        error,
+        isEditMode
+          ? "Não foi possível atualizar o contrato."
+          : "Não foi possível concluir o cadastro do contrato."
+      );
 
       const message = createdProjectId
         ? `${rootMessage} Projeto ${createdProjectId} foi criado, mas ocorreu erro ao salvar cronograma/metas.`
@@ -2183,7 +2168,7 @@ function NovoContratoPageContent() {
         <form onSubmit={handleSubmit}>
           {!loadingAccess && !canManageChildren && (
             <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              Seu perfil pode criar e editar as informacoes principais do contrato, mas metas, desembolsos e documentos ficam apenas para consulta nesta tela.
+              Seu perfil pode criar e editar as informações principais do contrato, mas metas, desembolsos e documentos ficam apenas para consulta nesta tela.
             </div>
           )}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -2382,7 +2367,7 @@ function NovoContratoPageContent() {
                           Projeto executado pela Innovatis
                         </Label>
                         <p className="text-xs text-gray-500">
-                          Se não marcar, o projeto sera executado pelo parceiro.
+                          Se não marcar, o projeto será executado pelo parceiro.
                         </p>
                       </div>
                     </div>
@@ -2445,7 +2430,7 @@ function NovoContratoPageContent() {
                     <p className="text-xs text-gray-500">
                       {!form.clientePrimarioId
                         ? "Escolha o cliente primario para cadastrar uma secretaria vinculada."
-                        : "A secretaria sera vinculada ao cliente primario selecionado."}
+                        : "A secretaria será vinculada ao cliente primario selecionado."}
                     </p>
                     <button
                       type="button"
@@ -2501,7 +2486,7 @@ function NovoContratoPageContent() {
                     value={form.dataInicio}
                     onChange={(value) => handleChange("dataInicio", value)}
                     onBlur={() => handleBlur("dataInicio")}
-                    placeholder="Selecione a data de inicio"
+                    placeholder="Selecione a data de início"
                     error={!!errors.dataInicio}
                   />
                 </FormField>
@@ -2536,7 +2521,7 @@ function NovoContratoPageContent() {
                     value={form.dataInicioEfetivo}
                     onChange={(value) => handleChange("dataInicioEfetivo", value)}
                     onBlur={() => handleBlur("dataInicioEfetivo")}
-                    placeholder="Selecione a data de inicio efetivo"
+                    placeholder="Selecione a data de início efetivo"
                     minDate={form.dataInicio || undefined}
                     error={!!errors.dataInicioEfetivo}
                   />
@@ -2673,7 +2658,7 @@ function NovoContratoPageContent() {
                   <span className="text-xs text-gray-500">(opcional)</span>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Os arquivos serão enviados automaticamente apos o cadastro do projeto.
+                  Os arquivos serão enviados automaticamente após o cadastro do projeto.
                   Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: 20MB por arquivo.
                 </p>
 
@@ -2862,7 +2847,7 @@ function NovoContratoPageContent() {
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Observacao</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Observação</label>
                             <input
                               type="text"
                               value={newParcela.observacao || ""}
@@ -3070,7 +3055,7 @@ function NovoContratoPageContent() {
                                 type="text"
                                 value={meta.titulo}
                                 onChange={(e) => updateMeta(meta.id, "titulo", e.target.value)}
-                                placeholder="Titulo da meta..."
+                                placeholder="Título da meta..."
                                 className="flex-1 px-2 py-1 text-sm bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                               />
                               <button
@@ -3173,7 +3158,7 @@ function NovoContratoPageContent() {
                                               onChange={(e) =>
                                                 updateEtapa(meta.id, etapa.id, "titulo", e.target.value)
                                               }
-                                              placeholder="Titulo da etapa..."
+                                              placeholder="Título da etapa..."
                                               className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                             />
                                             <button
@@ -3192,7 +3177,7 @@ function NovoContratoPageContent() {
                                               <div className="grid grid-cols-2 gap-2">
                                                 <div>
                                                   <label className="text-xs text-gray-500 mb-1 block">
-                                                    Data Inicio
+                                                    Data Início
                                                   </label>
                                                   <DatePicker
                                                     value={etapa.dataInicio || ""}
@@ -3260,7 +3245,7 @@ function NovoContratoPageContent() {
                                                               e.target.value
                                                             )
                                                           }
-                                                          placeholder="Titulo da fase..."
+                                                          placeholder="Título da fase..."
                                                           className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-500"
                                                         />
                                                         <div className="w-32">
@@ -3275,7 +3260,7 @@ function NovoContratoPageContent() {
                                                                 value
                                                               )
                                                             }
-                                                            placeholder="Inicio"
+                                                            placeholder="Início"
                                                           />
                                                         </div>
                                                         <div className="w-32">
@@ -3347,7 +3332,7 @@ function NovoContratoPageContent() {
                     Salvando...
                   </>
                 ) : (
-                  <>{isEditMode ? "Salvar Alteracoes" : "Criar Contrato"}</>
+                  <>{isEditMode ? "Salvar Alterações" : "Criar Contrato"}</>
                 )}
               </button>
             </div>
@@ -3357,31 +3342,35 @@ function NovoContratoPageContent() {
 
       {showPartnerModal && (
         <div
-          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
           onClick={closePartnerModal}
         >
-          <div
-            className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Cadastrar Parceiro</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  O parceiro criado sera selecionado automaticamente no campo atual.
-                </p>
+          <div className="flex min-h-full items-center justify-center py-4">
+            <div
+              className="w-full max-w-2xl max-h-[90vh] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Cadastrar Parceiro</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    O parceiro criado será selecionado automaticamente no campo atual.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePartnerModal}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Fechar popup de parceiro"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closePartnerModal}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Fechar popup de parceiro"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreatePartner} className="px-5 py-4 space-y-4">
+              <form
+                onSubmit={handleCreatePartner}
+                className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]"
+              >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -3505,7 +3494,7 @@ function NovoContratoPageContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Endereco
+                  Endereço
                 </label>
                 <input
                   type="text"
@@ -3513,7 +3502,7 @@ function NovoContratoPageContent() {
                   onChange={(event) =>
                     setPartnerForm((prev) => ({ ...prev, address: event.target.value }))
                   }
-                  placeholder="Endereco completo"
+                  placeholder="Endereço completo"
                   className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                 />
               </div>
@@ -3618,38 +3607,43 @@ function NovoContratoPageContent() {
                   )}
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {showClientModal && (
         <div
-          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
           onClick={closeClientModal}
         >
-          <div
-            className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Cadastrar Cliente</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  O cliente cadastrado sera selecionado como cliente primario.
-                </p>
+          <div className="flex min-h-full items-center justify-center py-4">
+            <div
+              className="w-full max-w-2xl max-h-[90vh] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Cadastrar Cliente</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    O cliente cadastrado será selecionado como cliente primario.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeClientModal}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Fechar popup de cliente"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closeClientModal}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Fechar popup de cliente"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateClient} className="px-5 py-4 space-y-4">
+              <form
+                onSubmit={handleCreateClient}
+                className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]"
+              >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -3689,7 +3683,7 @@ function NovoContratoPageContent() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Tipo de orgao <span className="text-red-500">*</span>
+                    Tipo de órgão <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={clientForm.publicAgencyType}
@@ -3801,14 +3795,14 @@ function NovoContratoPageContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereco</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
                 <input
                   type="text"
                   value={clientForm.address}
                   onChange={(event) =>
                     setClientForm((prev) => ({ ...prev, address: event.target.value }))
                   }
-                  placeholder="Endereco completo"
+                  placeholder="Endereço completo"
                   className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                 />
               </div>
@@ -3858,42 +3852,47 @@ function NovoContratoPageContent() {
                   )}
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {showSecretaryModal && (
         <div
-          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
           onClick={closeSecretaryModal}
         >
-          <div
-            className="w-full max-w-xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Cadastrar Secretaria</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Secretaria vinculada ao cliente primario:
-                  <span className="font-semibold text-gray-700">
-                    {" "}
-                    {selectedPrimaryClient?.name ?? "-"}
-                  </span>
-                </p>
+          <div className="flex min-h-full items-center justify-center py-4">
+            <div
+              className="w-full max-w-xl max-h-[90vh] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Cadastrar Secretaria</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Secretaria vinculada ao cliente primario:
+                    <span className="font-semibold text-gray-700">
+                      {" "}
+                      {selectedPrimaryClient?.name ?? "-"}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeSecretaryModal}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Fechar popup de secretaria"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closeSecretaryModal}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Fechar popup de secretaria"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateSecretary} className="px-5 py-4 space-y-4">
+              <form
+                onSubmit={handleCreateSecretary}
+                className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]"
+              >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Nome da secretaria <span className="text-red-500">*</span>
@@ -3961,7 +3960,7 @@ function NovoContratoPageContent() {
                     onChange={(event) =>
                       setSecretaryForm((prev) => ({ ...prev, email: event.target.value }))
                     }
-                    placeholder="secretaria@orgao.gov.br"
+                    placeholder="secretaria@órgão.gov.br"
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -3984,14 +3983,14 @@ function NovoContratoPageContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereco</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
                 <input
                   type="text"
                   value={secretaryForm.address}
                   onChange={(event) =>
                     setSecretaryForm((prev) => ({ ...prev, address: event.target.value }))
                   }
-                  placeholder="Endereco completo"
+                  placeholder="Endereço completo"
                   className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                 />
               </div>
@@ -4041,38 +4040,43 @@ function NovoContratoPageContent() {
                   )}
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {showCoordinatorModal && (
         <div
-          className="fixed inset-0 z-[80] bg-black/45 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
           onClick={closeCoordinatorModal}
         >
-          <div
-            className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Cadastrar Coordenador</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Cadastre uma pessoa e selecione como coordenador do projeto.
-                </p>
+          <div className="flex min-h-full items-center justify-center py-4">
+            <div
+              className="w-full max-w-lg max-h-[90vh] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Cadastrar Coordenador</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cadastre uma pessoa e selecione como coordenador do projeto.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeCoordinatorModal}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  aria-label="Fechar popup"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closeCoordinatorModal}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                aria-label="Fechar popup"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateCoordinator} className="px-5 py-4 space-y-4">
+              <form
+                onSubmit={handleCreateCoordinator}
+                className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]"
+              >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Nome completo <span className="text-red-500">*</span>
@@ -4142,13 +4146,12 @@ function NovoContratoPageContent() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Data de nascimento
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={coordinatorForm.birthDate}
-                  onChange={(event) =>
-                    setCoordinatorForm((prev) => ({ ...prev, birthDate: event.target.value }))
+                  onChange={(value) =>
+                    setCoordinatorForm((prev) => ({ ...prev, birthDate: value }))
                   }
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                  className="h-10 rounded-lg"
                 />
               </div>
 
@@ -4239,7 +4242,8 @@ function NovoContratoPageContent() {
                   )}
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

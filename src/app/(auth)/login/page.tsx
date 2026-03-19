@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
@@ -36,7 +37,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Erro ao fazer login");
+        setError(getUserErrorMessage(data?.error || data, "Não foi possível fazer login."));
         setIsLoading(false);
         return;
       }
@@ -44,15 +45,15 @@ export default function LoginPage() {
       const nextPath = new URLSearchParams(window.location.search).get("next");
       const redirectTo = nextPath && nextPath.startsWith("/") ? nextPath : "/";
       window.location.href = redirectTo;
-    } catch {
-      setError("Erro de conexao. Tente novamente.");
+    } catch (requestError) {
+      setError(getUserErrorMessage(requestError, "Não foi possível fazer login."));
       setIsLoading(false);
     }
   }
 
   return (
     <div className="flex h-full">
-      {/* Painel Esquerdo - Ãrea com Imagem de Fundo */}
+      {/* Painel Esquerdo - Área com Imagem de Fundo */}
       <div
         // Classes para layout, posicionamento e controle da imagem
         className="hidden lg:flex lg:w-1/2 relative bg-cover"
@@ -65,7 +66,7 @@ export default function LoginPage() {
         {/* 1. Overlay Escuro Semitransparente (para garantir a legibilidade do texto branco) */}
         <div className="absolute inset-0 bg-black/60"></div>
 
-        {/* 2. ConteÃºdo Original (posicionado acima da imagem/overlay) */}
+        {/* 2. Conteúdo Original (posicionado acima da imagem/overlay) */}
         <div className="relative z-10 flex flex-col justify-between text-white p-12 w-full h-full">
           <div className="flex items-center gap-2">
             <img src="/Logos/logo_innovatis.svg" alt="Logo Innovatis" className="h-6 w-6" />
@@ -75,7 +76,7 @@ export default function LoginPage() {
           <div className="space-y-8">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-sm backdrop-blur-sm">
-                <span className="text-zinc-300">Plataforma de gestao</span>
+                <span className="text-zinc-300">Plataforma de gestão</span>
               </div>
               <h2 className="text-4xl font-bold leading-tight">
                 Gerenciar projetos
@@ -88,14 +89,14 @@ export default function LoginPage() {
 
             <blockquote className="border-l-2 border-[#1F4E79] pl-6 space-y-3">
               <p className="text-lg text-zinc-300 leading-relaxed">
-                &ldquo;Voce nao precisa saber tudo, mas precisa saber fazer o que fazer com o que sabe.&rdquo;
+                “Você não precisa saber tudo, mas precisa saber fazer o que fazer com o que sabe.”
               </p>
               <footer className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#153653] flex items-center justify-center text-white font-semibold">
                   EB
                 </div>
                 <div>
-                  <p className="font-medium text-white">Epitacio Brito</p>
+                  <p className="font-medium text-white">Epitácio Brito</p>
                   <p className="text-sm text-zinc-400">Founder @innovatismc</p>
                 </div>
               </footer>
@@ -114,7 +115,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Painel Direito - FormulÃ¡rio de login */}
+      {/* Painel Direito - Formulário de login */}
       <div className="flex w-full lg:w-1/2 flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-zinc-100 p-8">
         <div className="w-full max-w-md space-y-8">
           {/* Card de Login */}
@@ -124,7 +125,7 @@ export default function LoginPage() {
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
                 }}>
             <CardContent className="p-8 space-y-6">
-              {/* CabeÃ§alho */}
+              {/* Cabeçalho */}
               <div className="text-center space-y-2">
                 {/* Logo Innovatis com cor controlada por CSS */}
                 <div className="text-sky-300 flex justify-center"> {/* Esta classe controla a cor do SVG */}
@@ -153,12 +154,12 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* FormulÃ¡rio de Email e Password */}
+              {/* Formulário de Email e Password */}
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Campo Email */}
                 <div className="space-y-2">
                   <Label htmlFor="identifier" className="text-zinc-700 font-medium text-sm">
-                    Email ou Nome de Usuario
+                    Email ou Nome de Usuário
                   </Label>
                   <div className="relative group">
                     <Input
@@ -225,15 +226,10 @@ export default function LoginPage() {
                       Lembrar de mim
                     </Label>
                   </div>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-zinc-600 hover:text-[#00C48B] font-medium hover:underline transition-colors"
-                  >
-                    Esqueceu a senha?
-                  </Link>
+                  
                 </div>
 
-                {/* BotÃ£o Sign In */}
+                {/* Botão Sign In */}
                 <Button
                   type="submit"
                   disabled={isLoading}
@@ -256,15 +252,15 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          {/* Termos e PolÃ­tica */}
+          {/* Termos e Política */}
           <p className="text-center text-xs text-zinc-400 leading-relaxed">
-            Ao continuar, voce concorda com nossos{" "}
+            Ao continuar, você concorda com nossos{" "}
             <Link href="/termos" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
-              Termos de Servico
+              Termos de Serviço
             </Link>{" "}
             e{" "}
             <Link href="/privacidade" className="text-zinc-600 hover:text-[#00C48B] underline underline-offset-2 transition-colors">
-              Politica de Privacidade
+              Política de Privacidade
             </Link>
           </p>
         </div>

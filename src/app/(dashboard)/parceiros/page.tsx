@@ -121,7 +121,7 @@ export default function ParceirosPage() {
     async (data: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">) => {
       const cnpjDigits = (data.cnpj ?? "").replace(/\D/g, "");
       if (cnpjDigits.length !== 14) {
-        throw new Error("Informe um CNPJ valido com 14 digitos.");
+        throw new Error("Informe um CNPJ válido com 14 dígitos.");
       }
 
       try {

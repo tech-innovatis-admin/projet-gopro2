@@ -27,6 +27,7 @@ export interface BffErrorEnvelope {
     message: string;
     code?: string;
     details?: unknown;
+    fieldErrors?: BackendFieldError[];
     timestamp?: string;
     path?: string;
   };
@@ -63,7 +64,7 @@ export class HttpError extends Error {
 }
 
 export type PartnersTypeEnum = 'FUNDACAO' | 'IF';
-export type PublicAgencyTypeEnum = 'PREFEITURA' | 'GOVERNO_ESTADUAL' | 'MINISTERIO';
+export type PublicAgencyTypeEnum = 'PREFEITURA' | 'GOVERNO_ESTADUAL' | 'MINISTERIO' | 'EMPRESA_PRIVADA';
 export type ProjectGovIfEnum = 'GOV' | 'IF';
 export type ProjectTypeEnum = 'PROJETO' | 'PRODUTO';
 export type ProjectStatusEnum =
@@ -687,6 +688,8 @@ export interface GoalResponseDTO {
   dataInicio: string | null;
   dataFim: string | null;
   dataConclusao: string | null;
+  hasFinancialValue: boolean;
+  financialAmount: number | null;
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -702,6 +705,8 @@ export interface GoalRequestDTO {
   dataInicio?: string;
   dataFim?: string;
   dataConclusao?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
   createdBy?: number;
 }
 
@@ -718,6 +723,8 @@ export interface StageResponseDTO {
   dataInicio: string | null;
   dataFim: string | null;
   dataConclusao: string | null;
+  hasFinancialValue: boolean;
+  financialAmount: number | null;
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -733,6 +740,8 @@ export interface StageRequestDTO {
   dataInicio?: string;
   dataFim?: string;
   dataConclusao?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
   createdBy?: number;
 }
 
@@ -929,9 +938,10 @@ export interface IncomeUpdateDTO extends Partial<IncomeRequestDTO> {
 
 export interface ExpenseResponseDTO {
   id: number;
+  projectId: number | null;
   budgetItemId: number;
   categoryId: number;
-  incomeId: number;
+  incomeId: number | null;
   expenseDate: string;
   quantity: number;
   amount: number;
@@ -949,9 +959,10 @@ export interface ExpenseResponseDTO {
 }
 
 export interface ExpenseRequestDTO {
+  projectId: number;
   budgetItemId: number;
   categoryId: number;
-  incomeId: number;
+  incomeId?: number | null;
   expenseDate: string;
   quantity: number;
   amount: number;

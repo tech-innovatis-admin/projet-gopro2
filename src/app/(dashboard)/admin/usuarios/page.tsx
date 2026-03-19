@@ -10,10 +10,10 @@ import {
 import { canManageAdminArea, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
   AdminUserResponseDTO,
-  HttpError,
   UserRoleEnum,
   UserStatusEnum,
 } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const roleOptions: UserRoleEnum[] = ["SUPERADMIN", "ADMIN", "ANALISTA", "ESTAGIARIO"];
 const statusOptions: UserStatusEnum[] = ["ACTIVE", "DISABLED", "PENDING"];
@@ -48,16 +48,6 @@ function formatDate(value: string | null): string {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Erro inesperado.";
 }
 
 export default function AdminUsuariosPage() {
@@ -95,7 +85,7 @@ export default function AdminUsuariosPage() {
       }
       setDrafts(nextDrafts);
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível carregar os usuários."));
       setUsers([]);
     } finally {
       setLoadingUsers(false);
@@ -167,7 +157,7 @@ export default function AdminUsuariosPage() {
     const roleChanged = draft.role !== user.role;
     const statusChanged = draft.status !== user.status;
     if (!roleChanged && !statusChanged) {
-      setFeedback("Nenhuma alteracao para salvar.");
+      setFeedback("Nenhuma alteração para salvar.");
       return;
     }
 
@@ -183,7 +173,7 @@ export default function AdminUsuariosPage() {
       setFeedback(`Usuário ${user.email} atualizado com sucesso.`);
       await loadUsers();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getUserErrorMessage(requestError, "Não foi possível atualizar o usuário."));
     } finally {
       setSavingUserId(null);
     }
@@ -202,7 +192,7 @@ export default function AdminUsuariosPage() {
 
         {loadingAccess && (
           <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-            Validando permissao...
+            Validando permissão...
           </div>
         )}
 

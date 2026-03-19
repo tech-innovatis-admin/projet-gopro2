@@ -61,7 +61,7 @@ function isLegacyAuditDescription(description: string): boolean {
   const normalized = normalizeAuditText(description);
   return (
     normalized.startsWith("TELA ") ||
-    normalized.includes("ALTERACAO REGISTRADA NA ABA") ||
+    normalized.includes("ALTERAÇÃO REGISTRADA NA ABA") ||
     normalized.includes("CAMPOS ALTERADOS") ||
     normalized.includes("SEM DETALHAMENTO DE CAMPOS ALTERADOS")
   );

@@ -72,7 +72,7 @@ export function ProjectCreatedModal({
                 Projeto cadastrado com sucesso
               </h2>
               <p className="mt-1 text-sm text-gray-600">
-                {message ?? "O cadastro foi concluido com sucesso."}
+                {message ?? "O cadastro foi concluído com sucesso."}
               </p>
               {createdProjectId ? (
                 <p className="mt-2 text-xs text-gray-500">

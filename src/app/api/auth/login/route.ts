@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     if (!login || !password) {
       return NextResponse.json(
-        { error: 'Email ou usuario e senha sao obrigatorios' },
+        { error: 'Email ou usuário e senha são obrigatórios' },
         { status: 400 }
       );
     }
@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
         payload !== null &&
         'message' in payload &&
         typeof (payload as { message?: unknown }).message === 'string'
-          ? ((payload as { message: string }).message || 'Credenciais invalidas')
-          : 'Credenciais invalidas';
+          ? ((payload as { message: string }).message || 'Credenciais inválidas')
+          : 'Credenciais inválidas';
 
       return NextResponse.json({ error: message }, { status: backendResponse.status });
     }

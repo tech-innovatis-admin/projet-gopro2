@@ -11,8 +11,8 @@ import {
   listProjects,
   updateProject,
 } from "@/src/lib/api/endpoints";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
-  HttpError,
   type DocumentResponseDTO,
   type ProjectResponseDTO,
 } from "@/src/lib/api/types";
@@ -66,7 +66,7 @@ type SortConfig = {
   direction: "asc" | "desc";
 };
 
-const NO_INFO_LABEL = "Nao informado";
+const NO_INFO_LABEL = "Não informado";
 const PAGE_SIZE = 20;
 
 function normalizeMoneyValue(value: number | string | null | undefined): number {
@@ -163,10 +163,7 @@ function mapDocumentsToPreProjeto(
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof HttpError && error.message) {
-    return error.message;
-  }
-  return fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 function buildPartnerOptions(items: PreProjeto[]): string[] {
@@ -269,11 +266,7 @@ export default function PreProjetosPage() {
       setPreProjetos(mappedPreProjetos);
       setAvailablePartners(buildPartnerOptions(mappedPreProjetos));
     } catch (fetchError) {
-      const message =
-        fetchError instanceof HttpError
-          ? fetchError.message
-          : "Nao foi possivel carregar os pre-contratos.";
-      setError(message);
+      setError(getUserErrorMessage(fetchError, "Não foi possível carregar os pre-contratos."));
       setPreProjetos([]);
       setAvailablePartners([]);
     } finally {
@@ -310,7 +303,7 @@ export default function PreProjetosPage() {
 
       const novoPreProjeto: PreProjeto = {
         id: data.id ?? String(Date.now()),
-        titulo: data.titulo ?? "Sem titulo",
+        titulo: data.titulo ?? "Sem título",
         govIf: data.govIf || "IF",
         tipo: data.tipo === "PRODUTO" ? "PRODUTO" : "PROJETO",
         parceiro: data.parceiro || NO_INFO_LABEL,
@@ -435,7 +428,7 @@ export default function PreProjetosPage() {
         setActionMessage("Pre-contrato movido para planejamento com sucesso.");
       } catch (actionErr) {
         setActionError(
-          extractErrorMessage(actionErr, "Nao foi possivel mover o pre-contrato para planejamento.")
+          extractErrorMessage(actionErr, "Não foi possível mover o pre-contrato para planejamento.")
         );
       } finally {
         setProcessingAction(null);
@@ -457,9 +450,9 @@ export default function PreProjetosPage() {
       try {
         await deleteProject(preProjeto.id);
         removeItemFromState(preProjeto.id);
-        setActionMessage("Pre-contrato excluido com sucesso.");
+        setActionMessage("Pre-contrato excluído com sucesso.");
       } catch (actionErr) {
-        setActionError(extractErrorMessage(actionErr, "Nao foi possivel excluir o pre-contrato."));
+        setActionError(extractErrorMessage(actionErr, "Não foi possível excluir o pre-contrato."));
       } finally {
         setProcessingAction(null);
       }

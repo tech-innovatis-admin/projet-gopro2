@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Upload, FileText, Trash2, AlertCircle, Loader2 } from "lucide-react";
 import { listPartners, listPublicAgencies } from "@/src/lib/api/endpoints";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import type {
   PageResponseDTO,
   PartnerResponseDTO,
@@ -63,11 +64,7 @@ interface NovoPreProjetoModalProps {
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-
-  return fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 async function fetchAllPages<T>(
@@ -140,7 +137,7 @@ export default function NovoPreProjetoModal({
       );
     } catch (loadError) {
       setOptionsError(
-        extractErrorMessage(loadError, "Nao foi possivel carregar parceiros e clientes.")
+        extractErrorMessage(loadError, "Não foi possível carregar parceiros e clientes.")
       );
       setPartnerOptions([]);
       setClientOptions([]);
@@ -213,7 +210,7 @@ export default function NovoPreProjetoModal({
     if (file.size > MAX_FILE_SIZE) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Maximo: 20MB.",
+        [tipo]: "Arquivo muito grande. Máximo: 20MB.",
       }));
       return;
     }
@@ -221,7 +218,7 @@ export default function NovoPreProjetoModal({
     if (!ALLOWED_TYPES.includes(file.type)) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Formato invalido. Aceitos: PDF, PNG, JPG ou JPEG.",
+        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG ou JPEG.",
       }));
       return;
     }
@@ -246,19 +243,19 @@ export default function NovoPreProjetoModal({
     const newErrors: PreProjetoFormErrors = {};
 
     if (!formData.titulo.trim()) {
-      newErrors.titulo = "Titulo obrigatorio.";
+      newErrors.titulo = "Título obrigatório.";
     } else if (formData.titulo.trim().length > 200) {
-      newErrors.titulo = "Titulo deve ter no maximo 200 caracteres.";
+      newErrors.titulo = "Título deve ter no máximo 200 caracteres.";
     }
 
     if (!formData.objeto.trim()) {
-      newErrors.objeto = "Objeto obrigatorio.";
+      newErrors.objeto = "Objeto obrigatório.";
     } else if (formData.objeto.trim().length < 10) {
       newErrors.objeto = "Objeto deve ter pelo menos 10 caracteres.";
     }
 
     if (!formData.govIf || (formData.govIf !== "IF" && formData.govIf !== "Gov")) {
-      newErrors.govIf = "Selecione uma opcao.";
+      newErrors.govIf = "Selecione uma opção.";
     }
 
     if (!formData.tipo) {
@@ -274,15 +271,15 @@ export default function NovoPreProjetoModal({
     }
 
     if (!formData.localidade.trim()) {
-      newErrors.localidade = "Localidade obrigatoria.";
+      newErrors.localidade = "Localidade obrigatória.";
     }
 
     if (!formData.valorTotal) {
-      newErrors.valorTotal = "Valor total obrigatorio.";
+      newErrors.valorTotal = "Valor total obrigatório.";
     } else {
       const numericValue = parseFloat(formData.valorTotal.replace(/\./g, "").replace(",", "."));
       if (!Number.isFinite(numericValue) || numericValue <= 0) {
-        newErrors.valorTotal = "Valor invalido.";
+        newErrors.valorTotal = "Valor inválido.";
       }
     }
 
@@ -328,7 +325,7 @@ export default function NovoPreProjetoModal({
       handleReset();
       onClose();
     } catch (submitErr) {
-      setSubmitError(extractErrorMessage(submitErr, "Nao foi possivel criar o pre-contrato."));
+      setSubmitError(extractErrorMessage(submitErr, "Não foi possível criar o pre-contrato."));
     } finally {
       setIsSubmitting(false);
     }
@@ -373,7 +370,7 @@ export default function NovoPreProjetoModal({
             )}
 
             <FormField
-              label="Titulo do Projeto"
+              label="Título do Projeto"
               required
               error={errors.titulo}
               description="Nome descritivo do pre-contrato"
@@ -389,7 +386,7 @@ export default function NovoPreProjetoModal({
                   }
                 }}
                 className={inputClassName(Boolean(errors.titulo))}
-                placeholder="Ex: Sistema de Gestao Academica"
+                placeholder="Ex: Sistema de Gestão Academica"
                 maxLength={200}
                 disabled={isSubmitting}
               />
@@ -559,7 +556,7 @@ export default function NovoPreProjetoModal({
                 <h3 className="text-sm font-semibold text-gray-900">Documentos (opcional)</h3>
               </div>
               <p className="text-xs text-gray-500">
-                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho maximo: 20MB por arquivo.
+                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho máximo: 20MB por arquivo.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

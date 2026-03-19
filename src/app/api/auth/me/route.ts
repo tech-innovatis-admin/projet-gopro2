@@ -115,9 +115,9 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('[Auth/Me] Erro ao verificar autenticacao:', error);
+    console.error('[Auth/Me] Erro ao verificar autenticação:', error);
     return NextResponse.json(
-      { isAuthenticated: false, error: 'Erro ao verificar autenticacao' },
+      { isAuthenticated: false, error: 'Erro ao verificar autenticação' },
       { status: 500 }
     );
   }

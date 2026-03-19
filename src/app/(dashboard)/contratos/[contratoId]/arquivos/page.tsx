@@ -29,7 +29,8 @@ import {
   canManageContractChildren,
   fetchCurrentUser,
 } from "@/src/lib/auth/session";
-import { HttpError, type DocumentResponseDTO } from "@/src/lib/api/types";
+import { type DocumentResponseDTO } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
 
@@ -66,12 +67,12 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
   PLANO_TRABALHO: "Plano de Trabalho",
   TERMO_REFERENCIA: "Termo de Referencia",
   ATA_REUNIAO: "Ata de Reuniao",
-  RELATORIO_TECNICO: "Relatorio Tecnico",
-  RELATORIO_FINANCEIRO: "Relatorio Financeiro",
+  RELATORIO_TECNICO: "Relatório Técnico",
+  RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
   PROPOSTA_COMERCIAL: "Proposta Comercial",
   ETP: "ETP",
-  RELATORIO_INCUBADAS: "Relatorio de Incubadas",
+  RELATORIO_INCUBADAS: "Relatório de Incubadas",
   NOTA_FISCAL: "Nota Fiscal",
   TED: "TED",
   COMPROVANTES: "Comprovantes",
@@ -153,10 +154,7 @@ function getFileIcon(contentType: string) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof HttpError && error.message) {
-    return error.message;
-  }
-  return fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 type UploadPayload = {
@@ -230,7 +228,7 @@ export default function ArquivosPage() {
 
   const loadDocuments = useCallback(async () => {
     if (!hasValidOwner) {
-      setError("ID de contrato invalido para buscar documentos.");
+      setError("ID de contrato inválido para buscar documentos.");
       setDocuments([]);
       return;
     }
@@ -257,7 +255,7 @@ export default function ArquivosPage() {
       });
     } catch (loadError) {
       setError(
-        getErrorMessage(loadError, "Nao foi possivel carregar os documentos.")
+        getErrorMessage(loadError, "Não foi possível carregar os documentos.")
       );
       setDocuments([]);
     } finally {
@@ -330,7 +328,7 @@ export default function ArquivosPage() {
       }
     } catch (actionError) {
       setError(
-        getErrorMessage(actionError, "Nao foi possivel abrir o arquivo selecionado.")
+        getErrorMessage(actionError, "Não foi possível abrir o arquivo selecionado.")
       );
     } finally {
       setBusyDocumentId(null);
@@ -356,7 +354,7 @@ export default function ArquivosPage() {
       await loadDocuments();
     } catch (uploadError) {
       setError(
-        getErrorMessage(uploadError, "Nao foi possivel enviar o arquivo.")
+        getErrorMessage(uploadError, "Não foi possível enviar o arquivo.")
       );
     } finally {
       setIsUploading(false);
@@ -390,7 +388,7 @@ export default function ArquivosPage() {
       await loadDocuments();
     } catch (replaceError) {
       setError(
-        getErrorMessage(replaceError, "Nao foi possivel substituir o arquivo.")
+        getErrorMessage(replaceError, "Não foi possível substituir o arquivo.")
       );
     } finally {
       setIsReplacing(false);
@@ -407,11 +405,11 @@ export default function ArquivosPage() {
 
     try {
       await deleteDocument(documentId);
-      setMessage("Arquivo excluido com sucesso.");
+      setMessage("Arquivo excluído com sucesso.");
       setDocuments((current) => current.filter((item) => item.id !== documentId));
     } catch (deleteError) {
       setError(
-        getErrorMessage(deleteError, "Nao foi possivel excluir o arquivo.")
+        getErrorMessage(deleteError, "Não foi possível excluir o arquivo.")
       );
     } finally {
       setBusyDocumentId(null);
@@ -459,7 +457,7 @@ export default function ArquivosPage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Seu perfil pode consultar e baixar arquivos, mas nao pode enviar, substituir ou excluir documentos.
+          Seu perfil pode consultar e baixar arquivos, mas não pode enviar, substituir ou excluir documentos.
         </div>
       )}
 
@@ -505,7 +503,7 @@ export default function ArquivosPage() {
           </p>
           <p className="mt-1 text-sm text-gray-500">
             {canManageChildren
-              ? "Envie documentos para este contrato usando o botao Novo Arquivo."
+              ? "Envie documentos para este contrato usando o botão Novo Arquivo."
               : "Nenhum documento foi encontrado para este contrato."}
           </p>
         </div>

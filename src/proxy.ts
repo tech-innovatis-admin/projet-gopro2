@@ -51,7 +51,7 @@ export function proxy(request: NextRequest) {
     }
 
     if (!authenticated) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
     return NextResponse.next();

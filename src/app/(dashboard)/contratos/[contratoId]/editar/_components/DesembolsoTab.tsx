@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X, Calendar, AlertCircle, TrendingUp } from 'lucide-react';
+import { DatePicker } from '@/components/ui/DatePicker';
 
 // Props
 interface DesembolsoTabProps {
@@ -288,11 +289,11 @@ export default function DesembolsoTab({ contratoId }: DesembolsoTabProps) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Data Prevista *</label>
-              <input
-                type="date"
+              <DatePicker
                 value={newParcela.dataPrevista || ''}
-                onChange={(e) => setNewParcela({ ...newParcela, dataPrevista: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                onChange={(value) => setNewParcela({ ...newParcela, dataPrevista: value })}
+                placeholder="Selecione a data"
+                className="w-full"
               />
             </div>
             <div>
@@ -441,19 +442,21 @@ export default function DesembolsoTab({ contratoId }: DesembolsoTabProps) {
                         </select>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <input
-                          type="date"
+                        <DatePicker
                           value={editForm.dataPrevista}
-                          onChange={(e) => setEditForm({ ...editForm, dataPrevista: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          onChange={(value) => setEditForm({ ...editForm, dataPrevista: value })}
+                          placeholder="Selecione a data"
+                          className="w-full min-w-[150px]"
                         />
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <input
-                          type="date"
+                        <DatePicker
                           value={editForm.dataEfetiva || ''}
-                          onChange={(e) => setEditForm({ ...editForm, dataEfetiva: e.target.value || null })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          onChange={(value) =>
+                            setEditForm({ ...editForm, dataEfetiva: value || null })
+                          }
+                          placeholder="Selecione a data"
+                          className="w-full min-w-[150px]"
                         />
                       </td>
                       <td className="py-3 px-4">

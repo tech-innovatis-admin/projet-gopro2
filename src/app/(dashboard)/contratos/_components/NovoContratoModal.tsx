@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { X, FileText, Calendar, MapPin, User, Building2, Tag, AlertCircle, DollarSign, FileText as FileTextIcon } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { getOrganizationsFinanciadoras, getOrganizationsParceiras } from "../mockData";
 
 // Tipos
@@ -593,16 +594,12 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                 error={errors.dataInicio}
                 icon={<Calendar className="h-4 w-4" />}
               >
-                <input
-                  type="date"
+                <DatePicker
                   value={form.dataInicio}
-                  onChange={(e) => handleChange("dataInicio", e.target.value)}
+                  onChange={(value) => handleChange("dataInicio", value)}
                   onBlur={() => handleBlur("dataInicio")}
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.dataInicio
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
+                  error={Boolean(errors.dataInicio)}
+                  className="h-11 rounded-lg"
                 />
               </FormField>
 
@@ -612,17 +609,13 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
                 error={errors.dataFim}
                 icon={<Calendar className="h-4 w-4" />}
               >
-                <input
-                  type="date"
+                <DatePicker
                   value={form.dataFim}
-                  onChange={(e) => handleChange("dataFim", e.target.value)}
+                  onChange={(value) => handleChange("dataFim", value)}
                   onBlur={() => handleBlur("dataFim")}
-                  min={form.dataInicio || undefined}
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.dataFim
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
+                  minDate={form.dataInicio || undefined}
+                  error={Boolean(errors.dataFim)}
+                  className="h-11 rounded-lg"
                 />
               </FormField>
             </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Calendar, Clock, X } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { Calendar, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 // =============================================================================
 // DATE TIME PICKER - Seletor de data e hora profissional
@@ -14,17 +15,22 @@ type DateTimePickerProps = {
 
 export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedTime, setSelectedTime] = useState<string>("09:00");
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Parse do valor inicial
-  useEffect(() => {
-    if (value) {
-      const date = new Date(value);
-      setSelectedDate(date.toISOString().split("T")[0]);
-      setSelectedTime(date.toTimeString().slice(0, 5));
+  const { selectedDate, selectedTime } = useMemo(() => {
+    if (!value) {
+      return { selectedDate: "", selectedTime: "09:00" };
     }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return { selectedDate: "", selectedTime: "09:00" };
+    }
+
+    return {
+      selectedDate: parsed.toISOString().split("T")[0],
+      selectedTime: parsed.toTimeString().slice(0, 5),
+    };
   }, [value]);
 
   // Fechar picker ao clicar fora
@@ -45,15 +51,16 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
   }, [isOpen]);
 
   const handleDateChange = (date: string) => {
-    setSelectedDate(date);
-    if (date) {
-      const datetime = new Date(`${date}T${selectedTime}`).toISOString();
-      onChange(datetime);
+    if (!date) {
+      onChange("");
+      return;
     }
+
+    const datetime = new Date(`${date}T${selectedTime}`).toISOString();
+    onChange(datetime);
   };
 
   const handleTimeChange = (time: string) => {
-    setSelectedTime(time);
     if (selectedDate) {
       const datetime = new Date(`${selectedDate}T${time}`).toISOString();
       onChange(datetime);
@@ -61,8 +68,6 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
   };
 
   const handleClear = () => {
-    setSelectedDate("");
-    setSelectedTime("09:00");
     onChange("");
     setIsOpen(false);
   };
@@ -145,11 +150,10 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
               <label className="block text-xs text-gray-600 font-medium mb-2">
                 Data
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                onChange={handleDateChange}
+                className="rounded-lg"
               />
             </div>
 

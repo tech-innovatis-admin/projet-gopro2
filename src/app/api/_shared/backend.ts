@@ -70,14 +70,14 @@ function getProxyConfig(): ProxyConfig {
 
   if (!baseUrl) {
     throw new Error(
-      'API_BASE_URL nao configurada. Defina API_BASE_URL (ou BACKEND_API_BASE_URL) com URL absoluta do backend.'
+      'API_BASE_URL não configurada. Defina API_BASE_URL (ou BACKEND_API_BASE_URL) com URL absoluta do backend.'
     );
   }
 
   try {
     new URL(baseUrl);
   } catch {
-    throw new Error(`API_BASE_URL invalida: ${baseUrl}`);
+    throw new Error(`API_BASE_URL inválida: ${baseUrl}`);
   }
 
   proxyConfig = {
@@ -239,7 +239,7 @@ export async function proxyToJava(
 
   if (!endpoint || !endpoint.startsWith('/')) {
     const error: ApiError = {
-      message: 'Endpoint invalido. Deve comecar com "/"',
+      message: 'Endpoint inválido. Deve comecar com "/"',
       code: 'INVALID_ENDPOINT',
       timestamp: new Date().toISOString(),
       path: endpoint,

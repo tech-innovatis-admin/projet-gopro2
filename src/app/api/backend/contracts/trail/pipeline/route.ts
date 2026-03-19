@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   // Quando implementado, usar: return proxyToJava(req, '/contracts/trail/pipeline');
   // Tabela: contract_initiation_stages
   return NextResponse.json(
-    { message: 'Not Implemented - Aguardando implementaÃ§Ã£o no backend Java' },
+    { message: 'Not Implemented - Aguardando implementação no backend Java' },
     { status: 501 }
   );
 }

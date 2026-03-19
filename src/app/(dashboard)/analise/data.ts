@@ -258,7 +258,7 @@ export const mockSLAComparison = [
   { label: "Aprovação Diretoria", sla: 5, actual: 4, isViolated: false },
   { label: "Recebimento", sla: 3, actual: 2, isViolated: false },
   { label: "Assinatura", sla: 3, actual: 3, isViolated: false },
-  { label: "Publicação", sla: 2, actual: 1, isViolated: false },
+  { label: "Públicação", sla: 2, actual: 1, isViolated: false },
 ];
 
 // -----------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
+import { DatePicker } from "@/components/ui/DatePicker";
 import {
   getPartnerById,
   getPeopleById,
@@ -18,13 +19,13 @@ import {
 } from "@/src/lib/api/endpoints";
 import { canViewContractAudit, fetchCurrentUser } from "@/src/lib/auth/session";
 import {
-  HttpError,
   type ProjectGovIfEnum,
   type ProjectResponseDTO,
   type ProjectStatusEnum,
   type ProjectTypeEnum,
   type ProjectUpdateDTO,
 } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -424,11 +425,9 @@ export default function ContratoLayout({
       setContratoBase(mapped);
       setEditContrato(mapped);
     } catch (error) {
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel carregar os detalhes do contrato.";
-      setLoadContratoError(message);
+      setLoadContratoError(
+        getUserErrorMessage(error, "Não foi possível carregar os detalhes do contrato.")
+      );
       setProjectSnapshot(null);
       setEditRelations(toEditRelations(null));
       setContratoBase({ ...EMPTY_CONTRATO, id: contratoId });
@@ -485,12 +484,12 @@ export default function ContratoLayout({
     {
       label: "Rubricas",
       href: `/contratos/${contratoId}/rubricas`,
-      description: "Orcamento e execucao financeira",
+      description: "Orcamento e execução financeira",
     },
     {
       label: "Pagamentos",
       href: `/contratos/${contratoId}/pagamentos`,
-      description: "Historico de pagamentos",
+      description: "Histórico de pagamentos",
     },
     {
       label: "Pessoas",
@@ -507,7 +506,7 @@ export default function ContratoLayout({
           {
             label: "Auditoria",
             href: `/contratos/${contratoId}/auditoria`,
-            description: "Trilha de alteracoes do contrato",
+            description: "Trilha de alterações do contrato",
           },
         ]
       : []),
@@ -654,11 +653,7 @@ export default function ContratoLayout({
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel salvar as alteracoes do contrato.";
-      setSaveError(message);
+      setSaveError(getUserErrorMessage(error, "Não foi possível salvar as alterações do contrato."));
     } finally {
       setIsSaving(false);
     }
@@ -699,11 +694,7 @@ export default function ContratoLayout({
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      const message =
-        error instanceof HttpError
-          ? error.message
-          : "Nao foi possivel atualizar o status do projeto.";
-      setSaveError(message);
+      setSaveError(getUserErrorMessage(error, "Não foi possível atualizar o status do projeto."));
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -1179,11 +1170,10 @@ export default function ContratoLayout({
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Início</p>
                   {isEditing ? (
-                    <input
-                      type="date"
+                    <DatePicker
                       value={editContrato.dataInicio}
-                      onChange={(e) => handleChange({ dataInicio: e.target.value })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                      onChange={(value) => handleChange({ dataInicio: value })}
+                      className="h-9 rounded-lg px-2 py-1 text-sm"
                     />
                   ) : (
                     <p className="text-sm font-medium text-gray-900">
@@ -1197,11 +1187,10 @@ export default function ContratoLayout({
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Término</p>
                   {isEditing ? (
-                    <input
-                      type="date"
+                    <DatePicker
                       value={editContrato.dataFim}
-                      onChange={(e) => handleChange({ dataFim: e.target.value })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                      onChange={(value) => handleChange({ dataFim: value })}
+                      className="h-9 rounded-lg px-2 py-1 text-sm"
                     />
                   ) : (
                     <p className="text-sm font-medium text-gray-900">
@@ -1343,11 +1332,10 @@ export default function ContratoLayout({
                       <div className="flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Início</p>
                         {isEditing ? (
-                          <input
-                            type="date"
+                          <DatePicker
                             value={editContrato.dataRealInicio || ""}
-                            onChange={(e) => handleChange({ dataRealInicio: e.target.value || undefined })}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                            onChange={(value) => handleChange({ dataRealInicio: value || undefined })}
+                            className="h-9 rounded-lg px-2 py-1 text-sm"
                           />
                         ) : (
                           <p className="text-sm font-medium text-gray-900">
@@ -1361,11 +1349,10 @@ export default function ContratoLayout({
                       <div className="flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Término</p>
                         {isEditing ? (
-                          <input
-                            type="date"
+                          <DatePicker
                             value={editContrato.dataRealTermino || ""}
-                            onChange={(e) => handleChange({ dataRealTermino: e.target.value || undefined })}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                            onChange={(value) => handleChange({ dataRealTermino: value || undefined })}
+                            className="h-9 rounded-lg px-2 py-1 text-sm"
                           />
                         ) : (
                           <p className="text-sm font-medium text-gray-900">
@@ -1465,14 +1452,14 @@ export default function ContratoLayout({
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Editar Contrato</h2>
                   <p className="text-sm text-gray-500">
-                    Atualize as informacoes principais usando o mesmo formulario de cadastro.
+                    Atualize as informações principais usando o mesmo formulário de cadastro.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowEditPopup(false)}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
-                  aria-label="Fechar edicao do contrato"
+                  aria-label="Fechar edição do contrato"
                 >
                   <X className="h-4 w-4" />
                 </button>

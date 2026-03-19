@@ -497,6 +497,60 @@ tests.splice(9, 0,
   }
 );
 
+tests.push(
+  {
+    name: "usa texto mais claro quando um pagamento fica sem v\u00EDnculo",
+    run: () => {
+      const item = presentAuditChange(
+        createChange({
+          label: "organizationId",
+          de: 81,
+          para: null,
+          tipo: "Editado",
+        }),
+        0,
+        { operationKind: "changed" }
+      );
+
+      assert.equal(item.label, "Empresa vinculada");
+      assert.equal(item.sections[0]?.text, "ID 81");
+      assert.equal(item.sections[1]?.text, "Sem v\u00EDnculo");
+      assert.equal(item.afterText, "Sem v\u00EDnculo");
+    },
+  },
+  {
+    name: "usa texto mais claro quando a meta deixa de ter valor financeiro",
+    run: () => {
+      const diffs = buildBusinessAuditDiffs(
+        [
+          createChange({
+            label: "financialAmount",
+            de: "5000",
+            para: null,
+            tipo: "Editado",
+          }),
+        ],
+        { operationKind: "changed" }
+      );
+
+      assert.deepEqual(
+        diffs.map((item) => ({
+          label: item.label,
+          oldValue: item.oldValue,
+          newValue: item.newValue,
+        })),
+        [
+          {
+            label: "Valor financeiro da meta",
+            oldValue: "R$ 5.000,00",
+            newValue: "Sem valor financeiro",
+          },
+        ]
+      );
+    },
+  }
+);
+
 let failed = 0;
 
 for (const testCase of tests) {

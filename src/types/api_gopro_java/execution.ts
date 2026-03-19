@@ -33,6 +33,8 @@ export interface Goal extends AuditFields {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
 }
 
 export interface CreateGoal {
@@ -42,6 +44,8 @@ export interface CreateGoal {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
 }
 
 export interface UpdateGoal extends Partial<Omit<CreateGoal, 'project'>> {}
@@ -61,6 +65,8 @@ export interface Stage extends AuditFields {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
 }
 
 export interface CreateStage {
@@ -71,6 +77,8 @@ export interface CreateStage {
   descricao?: string;
   dataInicio?: string;
   dataFim?: string;
+  hasFinancialValue?: boolean;
+  financialAmount?: number;
 }
 
 export interface UpdateStage extends Partial<Omit<CreateStage, 'project' | 'goal'>> {}

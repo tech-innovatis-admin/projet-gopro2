@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import {
   createCompany,
   createProjectCompany,
@@ -17,7 +18,8 @@ import {
   fetchCurrentUser,
   requireCurrentUserId,
 } from "@/src/lib/auth/session";
-import { HttpError, type CompanyResponseDTO } from "@/src/lib/api/types";
+import { type CompanyResponseDTO } from "@/src/lib/api/types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const BriefcaseBusinessIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase-business">
@@ -105,7 +107,7 @@ async function fetchViaCep(zipCode: string) {
 
   const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
   if (!response.ok) {
-    throw new Error("Nao foi possivel consultar o CEP.");
+    throw new Error("Não foi possível consultar o CEP.");
   }
 
   const data = (await response.json()) as ViaCepResponse;
@@ -171,9 +173,7 @@ function getCompanyLabel(company: CompanyResponseDTO) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof HttpError) return error.message;
-  if (error instanceof Error) return error.message;
-  return fallback;
+  return getUserErrorMessage(error, fallback);
 }
 
 export default function EmpresasPage() {
@@ -241,13 +241,13 @@ export default function EmpresasPage() {
       return true;
     }
 
-    setActionError("Seu perfil pode apenas visualizar esta area do contrato.");
+    setActionError("Seu perfil pode apenas visualizar esta área do contrato.");
     return false;
   };
 
   const loadProjectCompanies = async () => {
     if (!projectId) {
-      setLoadError("ID do contrato invalido.");
+      setLoadError("ID do contrato inválido.");
       setEmpresas([]);
       setIsLoading(false);
       return;
@@ -351,24 +351,24 @@ export default function EmpresasPage() {
       setSelectedCompanyId(selectableCompanies[0]?.id ?? "");
       setIsLinkModalOpen(true);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel carregar empresas existentes."));
+      setActionError(getErrorMessage(error, "Não foi possível carregar empresas existentes."));
     }
   };
 
   const saveEmpresa = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato invalido.");
+      setActionError("ID do contrato inválido.");
       return;
     }
     if (!hasRequiredCompanyFields(formData)) {
-      setActionError("Preencha os campos obrigatorios: razao social, nome fantasia, CNPJ, e-mail, telefone, endereco, cidade e UF.");
+      setActionError("Preencha os campos obrigatórios: razão social, nome fantasia, CNPJ, e-mail, telefone, endereço, cidade e UF.");
       return;
     }
 
     const cnpjDigits = digits(formData.cnpj);
     if (cnpjDigits.length !== 14) {
-      setActionError("Informe um CNPJ valido com 14 digitos.");
+      setActionError("Informe um CNPJ válido com 14 dígitos.");
       return;
     }
 
@@ -421,7 +421,7 @@ export default function EmpresasPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel salvar a empresa."));
+      setActionError(getErrorMessage(error, "Não foi possível salvar a empresa."));
     } finally {
       setIsSaving(false);
     }
@@ -429,22 +429,22 @@ export default function EmpresasPage() {
 
   const removeEmpresa = async (empresaId: string) => {
     if (!ensureCanManageChildren()) return;
-    if (!confirm("Deseja realmente excluir este vinculo da empresa com o projeto?")) return;
+    if (!confirm("Deseja realmente excluir este vínculo da empresa com o projeto?")) return;
     try {
       setActionError(null);
       const empresa = empresas.find((item) => item.id === empresaId);
-      if (!empresa?.projectCompanyId) throw new Error("Vinculo da empresa nao encontrado.");
+      if (!empresa?.projectCompanyId) throw new Error("Vínculo da empresa não encontrado.");
       await deleteProjectCompany(empresa.projectCompanyId);
       await loadProjectCompanies();
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel excluir a empresa."));
+      setActionError(getErrorMessage(error, "Não foi possível excluir a empresa."));
     }
   };
 
   const linkExistingCompany = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato invalido.");
+      setActionError("ID do contrato inválido.");
       return;
     }
     if (!selectedCompanyId || typeof selectedCompanyId !== "number") {
@@ -468,7 +468,7 @@ export default function EmpresasPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Nao foi possivel vincular a empresa."));
+      setActionError(getErrorMessage(error, "Não foi possível vincular a empresa."));
     } finally {
       setIsLinking(false);
     }
@@ -507,7 +507,7 @@ export default function EmpresasPage() {
       {actionError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>}
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Seu perfil pode consultar as empresas vinculadas, mas nao pode criar, vincular, editar ou remover empresas.
+          Seu perfil pode consultar as empresas vinculadas, mas não pode criar, vincular, editar ou remover empresas.
         </div>
       )}
 
@@ -560,7 +560,7 @@ export default function EmpresasPage() {
               </div>
 
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                <div className="text-xs text-gray-500">{empresa.dataInicio && empresa.dataFim ? `${formatDateBr(empresa.dataInicio)} ate ${formatDateBr(empresa.dataFim)}` : "Periodo nao informado"}</div>
+                <div className="text-xs text-gray-500">{empresa.dataInicio && empresa.dataFim ? `${formatDateBr(empresa.dataInicio)} ate ${formatDateBr(empresa.dataFim)}` : "Período não informado"}</div>
                 <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
               </div>
             </div>
@@ -624,7 +624,7 @@ function CompanyFormModal({
   const handleLookupZipCode = async (rawZipCode?: string) => {
     const normalizedZipCode = digits(rawZipCode ?? formData.cep);
     if (normalizedZipCode.length !== 8) {
-      setZipCodeLookupError("CEP deve conter 8 digitos.");
+      setZipCodeLookupError("CEP deve conter 8 dígitos.");
       return;
     }
 
@@ -634,7 +634,7 @@ function CompanyFormModal({
       const viaCepData = await fetchViaCep(normalizedZipCode);
 
       if (!viaCepData) {
-        setZipCodeLookupError("CEP nao encontrado.");
+        setZipCodeLookupError("CEP não encontrado.");
         return;
       }
 
@@ -652,7 +652,7 @@ function CompanyFormModal({
         };
       });
     } catch {
-      setZipCodeLookupError("Nao foi possivel consultar o CEP.");
+      setZipCodeLookupError("Não foi possível consultar o CEP.");
     } finally {
       setIsResolvingZipCode(false);
     }
@@ -671,8 +671,8 @@ function CompanyFormModal({
 
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Razao Social" required>
-              <input type="text" value={formData.razaoSocial || ""} onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razao social da empresa" />
+            <Field label="Razão Social" required>
+              <input type="text" value={formData.razaoSocial || ""} onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razão social da empresa" />
             </Field>
             <Field label="Nome Fantasia" required>
               <input type="text" value={formData.nomeFantasia || ""} onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia" />
@@ -740,8 +740,8 @@ function CompanyFormModal({
                 ) : null}
               </div>
             </Field>
-            <Field label="Endereco" required className="md:col-span-2">
-              <input type="text" value={formData.endereco || ""} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Rua, numero e bairro" />
+            <Field label="Endereço" required className="md:col-span-2">
+              <input type="text" value={formData.endereco || ""} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Rua, número e bairro" />
             </Field>
             <Field label="Cidade" required>
               <input type="text" value={formData.cidade || ""} onChange={(e) => setFormData({ ...formData, cidade: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
@@ -756,7 +756,7 @@ function CompanyFormModal({
                 maxLength={2}
               />
             </Field>
-            <Field label="Tipo de Servico" className="md:col-span-2">
+            <Field label="Tipo de Serviço" className="md:col-span-2">
               <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
             </Field>
             <Field label="Tipo de Empresa">
@@ -768,14 +768,14 @@ function CompanyFormModal({
             <Field label="Valor do Contrato (R$)">
               <input type="text" inputMode="numeric" value={formatCurrencyInput(formData.valorContrato)} onChange={(e) => setFormData({ ...formData, valorContrato: parseCurrencyInput(e.target.value) })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="R$ 0,00" />
             </Field>
-            <Field label="Data de Inicio">
-              <input type="date" value={formData.dataInicio || ""} onChange={(e) => setFormData({ ...formData, dataInicio: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" />
+            <Field label="Data de Início">
+              <DatePicker value={formData.dataInicio || ""} onChange={(value) => setFormData({ ...formData, dataInicio: value })} />
             </Field>
-            <Field label="Data de Termino">
-              <input type="date" value={formData.dataFim || ""} onChange={(e) => setFormData({ ...formData, dataFim: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" />
+            <Field label="Data de Término">
+              <DatePicker value={formData.dataFim || ""} onChange={(value) => setFormData({ ...formData, dataFim: value })} />
             </Field>
-            <Field label="Observacoes" className="md:col-span-2">
-              <textarea value={formData.observacao || ""} onChange={(e) => setFormData({ ...formData, observacao: e.target.value })} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none" placeholder="Observacoes adicionais" />
+            <Field label="Observações" className="md:col-span-2">
+              <textarea value={formData.observacao || ""} onChange={(e) => setFormData({ ...formData, observacao: e.target.value })} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none" placeholder="Observações adicionais" />
             </Field>
           </div>
         </div>
@@ -784,14 +784,14 @@ function CompanyFormModal({
           <div>
             {isEditingItem && onDelete && (
               <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); onClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
-                <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vinculo
+                <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vínculo
               </button>
             )}
           </div>
           <div className="flex items-center gap-3">
             <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
             <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || digits(formData.cnpj).length !== 14} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alteracoes" : "Adicionar Empresa"}
+              {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
             </button>
           </div>
         </div>
@@ -825,7 +825,7 @@ function LinkExistingCompanyModal({
 
         <div className="p-6 space-y-4">
           {companies.length === 0 ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Nao ha empresas disponiveis para vincular.</div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Não ha empresas disponiveis para vincular.</div>
           ) : (
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">Empresa</label>

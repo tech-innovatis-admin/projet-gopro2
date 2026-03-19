@@ -6,6 +6,7 @@ import { NavBar } from "@/components/ui/NavBar";
 import { PeopleTable } from "./_components";
 import { fetchPeopleWithProjects, formatDate, formatCurrency } from "./data";
 import { type PersonWithProjects, PROJECT_PERSON_STATUS_CONFIG, CONTRACT_TYPE_LABELS } from "./types";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   ChevronRight,
   Home,
@@ -55,7 +56,7 @@ export default function PessoasPage() {
         }
       } catch (loadError) {
         if (isMounted) {
-          setError(loadError instanceof Error ? loadError.message : "Falha ao carregar pessoas.");
+          setError(getUserErrorMessage(loadError, "Falha ao carregar pessoas."));
           setPeople([]);
         }
       } finally {

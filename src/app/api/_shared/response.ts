@@ -21,7 +21,7 @@ export function createCreatedResponse<T>(
   const response = NextResponse.json<ApiResponse<T>>(
     {
       data,
-      message: 'Recurso criado com sucesso',
+      message: 'Recurso criado com sucesso.',
     },
     { status: 201 }
   );
@@ -37,7 +37,7 @@ export function createUpdatedResponse<T>(data: T): NextResponse<ApiResponse<T>> 
   return NextResponse.json<ApiResponse<T>>(
     {
       data,
-      message: 'Recurso atualizado com sucesso',
+      message: 'Recurso atualizado com sucesso.',
     },
     { status: 200 }
   );
@@ -48,7 +48,7 @@ export function createDeletedResponse(includeBody: boolean = false): NextRespons
     return NextResponse.json<ApiResponse<null>>(
       {
         data: null,
-        message: 'Recurso excluído com sucesso',
+        message: 'Recurso excluído com sucesso.',
       },
       { status: 200 }
     );

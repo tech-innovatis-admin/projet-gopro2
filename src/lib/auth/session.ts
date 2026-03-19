@@ -89,7 +89,7 @@ export function toSessionUserId(user: SessionUser | null): number | null {
 export async function requireCurrentUserId(): Promise<number> {
   const userId = toSessionUserId(await fetchCurrentUser());
   if (!userId) {
-    throw new Error("Sessao invalida. Faca login novamente.");
+    throw new Error("Sessão inválida. Faça login novamente.");
   }
   return userId;
 }

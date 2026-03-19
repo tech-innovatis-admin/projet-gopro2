@@ -6,6 +6,7 @@ import { Activity, AlertTriangle, ArrowRight, Bell, Check, CheckCheck, FileText 
 import { cn } from "@/lib/utils";
 import { NavBar } from "@/components/ui/NavBar";
 import { listMyNotifications } from "@/src/lib/api/endpoints";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { type AuthNotificationResponseDTO } from "@/src/lib/api/types";
 import {
   loadReadNotificationIds,
@@ -175,7 +176,7 @@ function EmptyState({ filter }: { filter: FilterType }) {
       <p className="max-w-[320px] text-sm text-zinc-500">
         {filter === "all"
           ? "Quando houver novos eventos de contratos, eles serao exibidos aqui."
-          : "Nao ha notificacoes que correspondam ao filtro selecionado."}
+          : "Não ha notificacoes que correspondam ao filtro selecionado."}
       </p>
     </div>
   );
@@ -209,11 +210,7 @@ export default function NotificacoesPage() {
       setNotifications(allNotifications);
     } catch (requestError) {
       setNotifications([]);
-      if (requestError instanceof Error) {
-        setError(requestError.message || "Falha ao carregar notificacoes.");
-      } else {
-        setError("Falha ao carregar notificacoes.");
-      }
+      setError(getUserErrorMessage(requestError, "Falha ao carregar notificacoes."));
     } finally {
       setLoading(false);
     }
@@ -283,7 +280,7 @@ export default function NotificacoesPage() {
             </h1>
             <p className="mt-1 text-sm text-zinc-500">
               {unreadCount > 0
-                ? `Voce tem ${unreadCount} notificacao${unreadCount > 1 ? "oes" : ""} nao lida${unreadCount > 1 ? "s" : ""}.`
+                ? `Você tem ${unreadCount} notificacao${unreadCount > 1 ? "oes" : ""} não lida${unreadCount > 1 ? "s" : ""}.`
                 : "Todas as notificacoes estao lidas."}
             </p>
           </div>
@@ -327,7 +324,7 @@ export default function NotificacoesPage() {
                 filter === "unread" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
               )}
             >
-              Nao lidas ({unreadCount})
+              Não lidas ({unreadCount})
             </button>
             <button
               onClick={() => setFilter("read")}

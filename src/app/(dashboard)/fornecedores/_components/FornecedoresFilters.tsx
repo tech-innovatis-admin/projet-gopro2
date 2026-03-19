@@ -402,7 +402,7 @@ export function FornecedoresFilters({
               </label>
               <button
                 onClick={() =>
-                  setOpenDropdown(openDropdown === "servicos" ? null : "servicos")
+                  setOpenDropdown(openDropdown === "serviços" ? null : "serviços")
                 }
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border border-gray-300 bg-white hover:bg-gray-50 text-left",
@@ -421,7 +421,7 @@ export function FornecedoresFilters({
                   )}
                 />
               </button>
-              {openDropdown === "servicos" && (
+              {openDropdown === "serviços" && (
                 <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
                   {(Object.keys(SERVICO_LABELS) as FornecedorServico[]).map(
                     (serv) => (

@@ -53,6 +53,11 @@ type ResolvedDisplayValue = {
 
 const EMPTY_BUSINESS_VALUE = "Não informado";
 
+const EMPTY_LINK_VALUE = "Sem v\u00EDnculo";
+const EMPTY_GOAL_LINK_VALUE = "Sem v\u00EDnculo com metas";
+const EMPTY_FINANCIAL_VALUE = "Sem valor financeiro";
+const EMPTY_NOTES_VALUE = "Sem observa\u00E7\u00F5es";
+
 const CURRENCY_FIELD_TOKENS = [
   "amount",
   "budget",
@@ -185,12 +190,14 @@ const CHANGE_LABEL_OVERRIDES: Record<string, string> = {
   file: "Arquivo",
   filename: "Nome do arquivo",
   nomedoarquivo: "Nome do arquivo",
+  financialamount: "Valor financeiro da meta",
   goalid: "Meta",
+  hasfinancialvalue: "Meta com valor financeiro",
   income: "Receita",
   incomedate: "Data da receita",
   incomeid: "Receita",
-  organization: "Organização vinculada",
-  organizationid: "Organização vinculada",
+  organization: "Empresa vinculada",
+  organizationid: "Empresa vinculada",
   ownerid: "Registro relacionado",
   ownertype: "Tipo de vínculo",
   person: "Pessoa vinculada",
@@ -250,6 +257,8 @@ const CHANGE_LABEL_OVERRIDES: Record<string, string> = {
   vinculoinstitucional: "Vínculo institucional",
   cargahoraria: "Carga horária",
   localdeexecucao: "Local de execução",
+  metasvinculadas: "Metas vinculadas",
+  observacoesemetasvinculadas: "Observa\u00E7\u00F5es e metas vinculadas",
 };
 
 function correctAuditLabelText(value: string): string {
@@ -410,6 +419,64 @@ function looksLikeIdentifier(value: string): boolean {
 function isIdentifierField(change: AuditChange): boolean {
   const candidates = getRawLabelCandidates(change);
   return candidates.some((candidate) => candidate.endsWith("id"));
+}
+
+function isLinkField(change: AuditChange): boolean {
+  const candidates = getRawLabelCandidates(change);
+  return candidates.some((candidate) =>
+    [
+      "company",
+      "companyid",
+      "empresa",
+      "empresavinculada",
+      "organization",
+      "organizationid",
+      "organizacao",
+      "organizacaovinculada",
+      "person",
+      "personid",
+      "pessoa",
+      "pessoavinculada",
+    ].includes(candidate)
+  );
+}
+
+function isGoalLinkField(change: AuditChange): boolean {
+  const candidates = getRawLabelCandidates(change);
+  return candidates.some((candidate) =>
+    [
+      "metasvinculadas",
+      "goalid",
+    ].includes(candidate)
+  );
+}
+
+function isFinancialValueField(change: AuditChange): boolean {
+  const candidates = getRawLabelCandidates(change);
+  return candidates.includes("financialamount");
+}
+
+function isNotesField(change: AuditChange): boolean {
+  const candidates = getRawLabelCandidates(change);
+  return candidates.some((candidate) =>
+    ["observacoes", "observacoesemetasvinculadas", "notes"].includes(candidate)
+  );
+}
+
+function resolveEmptyFieldText(change: AuditChange, fallback: string): string {
+  if (isLinkField(change)) {
+    return EMPTY_LINK_VALUE;
+  }
+  if (isGoalLinkField(change)) {
+    return EMPTY_GOAL_LINK_VALUE;
+  }
+  if (isFinancialValueField(change)) {
+    return EMPTY_FINANCIAL_VALUE;
+  }
+  if (isNotesField(change)) {
+    return EMPTY_NOTES_VALUE;
+  }
+  return fallback;
 }
 
 function businessTextAlreadyContainsId(businessText: string, technicalText: string): boolean {
@@ -650,7 +717,7 @@ function formatBusinessValue(change: AuditChange, side: "before" | "after"): str
       collapseWhitespace(String(getExplicitFriendlyValue(change, side))));
 
   if (rawValue === null || rawValue === undefined) {
-    return EMPTY_BUSINESS_VALUE;
+    return resolveEmptyFieldText(change, EMPTY_BUSINESS_VALUE);
   }
 
   if (typeof rawValue === "boolean") {
@@ -667,7 +734,7 @@ function formatBusinessValue(change: AuditChange, side: "before" | "after"): str
   if (typeof rawValue === "string") {
     const trimmed = collapseWhitespace(rawValue);
     if (!trimmed) {
-      return EMPTY_BUSINESS_VALUE;
+      return resolveEmptyFieldText(change, EMPTY_BUSINESS_VALUE);
     }
 
     if (shouldFormatAsDate(change)) {
@@ -696,7 +763,7 @@ function formatBusinessValue(change: AuditChange, side: "before" | "after"): str
     return structured;
   }
 
-  return EMPTY_BUSINESS_VALUE;
+  return resolveEmptyFieldText(change, EMPTY_BUSINESS_VALUE);
 }
 
 function hasMeaningfulBusinessDiff(change: AuditChange): boolean {
@@ -835,6 +902,7 @@ function resolveTechnicalText(change: AuditChange): string | null {
 function buildSections(change: AuditChange, kind: AuditChangeKind): PresentedAuditChangeSection[] {
   const before = resolveDisplayedValue(change, "before");
   const after = resolveDisplayedValue(change, "after");
+  const emptyText = resolveEmptyFieldText(change, "Sem valor");
 
   switch (kind) {
     case "added":
@@ -842,7 +910,7 @@ function buildSections(change: AuditChange, kind: AuditChangeKind): PresentedAud
         {
           key: "single",
           title: "Valor definido",
-          text: after.text || "Sem valor",
+          text: after.text || emptyText,
           technicalText: after.technicalText,
         },
       ];
@@ -851,7 +919,7 @@ function buildSections(change: AuditChange, kind: AuditChangeKind): PresentedAud
         {
           key: "single",
           title: "Último valor",
-          text: before.text || "Sem valor",
+          text: before.text || emptyText,
           technicalText: before.technicalText,
         },
       ];
@@ -860,18 +928,18 @@ function buildSections(change: AuditChange, kind: AuditChangeKind): PresentedAud
         {
           key: "before",
           title: "Valor anterior",
-          text: before.text || "Sem valor",
+          text: before.text || emptyText,
           technicalText: before.technicalText,
         },
         {
           key: "after",
           title: "Novo valor",
-          text: after.text || "Sem valor",
+          text: after.text || emptyText,
           technicalText: after.technicalText,
         },
       ];
     default: {
-      const singleText = after.text || before.text || "Sem valor";
+      const singleText = after.text || before.text || emptyText;
       const singleTechnical = after.technicalText || before.technicalText || null;
 
       return [
@@ -923,17 +991,18 @@ export function presentAuditChange(
   const before = resolveDisplayedValue(change, "before");
   const after = resolveDisplayedValue(change, "after");
   const sections = buildSections(change, kind);
+  const emptyText = resolveEmptyFieldText(change, "Sem valor");
 
   return {
     label: resolveAuditChangeLabel(change),
     kind,
     kindLabel: resolveKindLabel(kind),
     tone: resolveKindTone(kind),
-    beforeText: kind === "added" ? "Sem valor" : before.text || "Sem valor",
+    beforeText: kind === "added" ? emptyText : before.text || emptyText,
     afterText:
       kind === "removed"
         ? "Removido"
-        : after.text || (kind === "added" ? "Sem valor" : "Sem valor"),
+        : after.text || emptyText,
     technicalBeforeText: before.technicalText,
     technicalAfterText: after.technicalText,
     technicalText: resolveTechnicalText(change),

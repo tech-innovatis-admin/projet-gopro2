@@ -1,19 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { ApiError, RequestContext } from './types';
-
-const ERROR_MESSAGES: Record<number, string> = {
-  400: 'Requisicao invalida. Verifique os dados enviados.',
-  401: 'Nao autorizado. Faca login novamente.',
-  403: 'Acesso negado. Voce nao tem permissao para esta acao.',
-  404: 'Recurso nao encontrado.',
-  409: 'Conflito. O recurso ja existe ou esta em uso.',
-  422: 'Dados invalidos. Verifique os campos obrigatorios.',
-  429: 'Muitas requisicoes. Tente novamente em alguns instantes.',
-  500: 'Erro interno do servidor. Tente novamente mais tarde.',
-  502: 'Servico temporariamente indisponivel. Tente novamente mais tarde.',
-  503: 'Servico em manutencao. Tente novamente mais tarde.',
-  504: 'Timeout da requisicao. Tente novamente mais tarde.',
-};
+import {
+  getCodeErrorMessage,
+  getStatusErrorMessage,
+} from '@/src/lib/feedback/user-messages';
 
 export function normalizeApiError(
   error: unknown,
@@ -35,12 +25,14 @@ export function normalizeApiError(
 
   if (error && typeof error === 'object') {
     const errorObj = error as Record<string, unknown>;
+    const fieldErrors = extractFieldErrors(errorObj);
     return {
       message: (errorObj.message as string) || getDefaultErrorMessage(statusCode),
       code: (errorObj.code as string) || `HTTP_${statusCode}`,
       details: errorObj.details || errorObj,
       timestamp: (errorObj.timestamp as string) || new Date().toISOString(),
       path: (errorObj.path as string) || context?.endpoint,
+      fieldErrors,
     };
   }
 
@@ -63,7 +55,33 @@ function isApiError(error: unknown): error is ApiError {
 }
 
 function getDefaultErrorMessage(statusCode: number): string {
-  return ERROR_MESSAGES[statusCode] || `Erro ${statusCode}: Requisicao falhou`;
+  return getStatusErrorMessage(statusCode) || `Erro ${statusCode}: Requisição falhou`;
+}
+
+function isApiFieldError(item: unknown): item is { field: string; message: string } {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    typeof (item as { field?: unknown }).field === 'string' &&
+    typeof (item as { message?: unknown }).message === 'string'
+  );
+}
+
+function extractFieldErrors(errorObj: Record<string, unknown>) {
+  if (Array.isArray(errorObj.fieldErrors)) {
+    return errorObj.fieldErrors
+      .filter(isApiFieldError)
+      .map((item) => ({ field: item.field, message: item.message }));
+  }
+
+  const details = errorObj.details;
+  if (details && typeof details === 'object' && Array.isArray((details as { fieldErrors?: unknown[] }).fieldErrors)) {
+    return (details as { fieldErrors: unknown[] }).fieldErrors
+      .filter(isApiFieldError)
+      .map((item) => ({ field: item.field, message: item.message }));
+  }
+
+  return undefined;
 }
 
 export function createErrorResponse(
@@ -87,6 +105,14 @@ export function createErrorResponse(
         ...(process.env.NODE_ENV === 'development' || statusCode >= 500
           ? { details: error.details }
           : {}),
+        ...(error.fieldErrors?.length
+          ? {
+              fieldErrors: error.fieldErrors,
+              ...(process.env.NODE_ENV === 'development' || statusCode >= 500
+                ? {}
+                : { details: { fieldErrors: error.fieldErrors } }),
+            }
+          : {}),
         timestamp: error.timestamp,
         path: error.path,
       },
@@ -100,7 +126,9 @@ export function createConnectionErrorResponse(
   originalError: unknown
 ): NextResponse {
   const error: ApiError = {
-    message: 'Erro ao conectar com o servidor. Tente novamente mais tarde.',
+    message:
+      getCodeErrorMessage('CONNECTION_ERROR') ||
+      'Erro ao conectar com o servidor. Tente novamente mais tarde.',
     code: 'CONNECTION_ERROR',
     details: originalError instanceof Error ? originalError.message : String(originalError),
     timestamp: new Date().toISOString(),
@@ -131,7 +159,9 @@ export function createTimeoutErrorResponse(
   timeoutMs: number
 ): NextResponse {
   const error: ApiError = {
-    message: `A requisicao demorou mais de ${timeoutMs / 1000}s para responder. Tente novamente.`,
+    message:
+      getCodeErrorMessage('TIMEOUT_ERROR') ||
+      `A requisição demorou mais de ${timeoutMs / 1000}s para responder. Tente novamente.`,
     code: 'TIMEOUT_ERROR',
     timestamp: new Date().toISOString(),
     path: endpoint,

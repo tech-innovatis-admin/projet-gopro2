@@ -21,12 +21,12 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
   PLANO_TRABALHO: "Plano de Trabalho",
   TERMO_REFERENCIA: "Termo de Referencia",
   ATA_REUNIAO: "Ata de Reuniao",
-  RELATORIO_TECNICO: "Relatorio Tecnico",
-  RELATORIO_FINANCEIRO: "Relatorio Financeiro",
+  RELATORIO_TECNICO: "Relatório Técnico",
+  RELATORIO_FINANCEIRO: "Relatório Financeiro",
   COMPROVANTE_DESPESA: "Comprovante de Despesa",
   PROPOSTA_COMERCIAL: "Proposta Comercial",
   ETP: "ETP",
-  RELATORIO_INCUBADAS: "Relatorio de Incubadas",
+  RELATORIO_INCUBADAS: "Relatório de Incubadas",
   NOTA_FISCAL: "Nota Fiscal",
   TED: "TED",
   COMPROVANTES: "Comprovantes",
@@ -143,7 +143,7 @@ export function NovoArquivoModal({
             />
             <p className="text-xs text-gray-500">
               Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, JPEG.
-              Tamanho maximo: {formatFileSize(MAX_FILE_SIZE)}.
+              Tamanho máximo: {formatFileSize(MAX_FILE_SIZE)}.
             </p>
             {currentFileName && (
               <div className="inline-flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700">

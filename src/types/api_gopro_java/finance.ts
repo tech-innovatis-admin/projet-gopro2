@@ -143,7 +143,7 @@ export interface Expense extends AuditFields {
   projectId: number;
   budgetItemId: number;
   categoryId: number;
-  incomeId: number;
+  incomeId?: number;
   expenseDate: string;
   quantity: number;
   amount: number;
@@ -159,7 +159,6 @@ export interface CreateExpense {
   project: IdRef;
   budgetItem: IdRef;
   category: IdRef;
-  income: IdRef;
   expenseDate: string;
   quantity: number;
   amount: number;

@@ -60,18 +60,18 @@ export const getCPFErrorMessage = (
   const required = options.required ?? false
 
   if (!trimmed) {
-    return required ? 'CPF e obrigatorio' : ''
+    return required ? 'CPF é obrigatório' : ''
   }
 
   const numbers = unformatCPF(cpf)
 
   if (numbers.length !== 11) {
-    return 'CPF deve conter 11 digitos'
+    return 'CPF deve conter 11 dígitos'
   }
 
   if (!/^(\d)\1{10}$/.test(numbers)) {
     if (!isValidCPF(cpf)) {
-      return 'CPF invalido. Verifique os digitos informados.'
+      return 'CPF inválido. Verifique os dígitos informados.'
     }
   }
 
@@ -96,7 +96,7 @@ export const validateCPFComplete = (
   if (!unformatted) {
     return {
       isValid: !required,
-      errorMessage: required ? 'CPF e obrigatorio' : '',
+      errorMessage: required ? 'CPF é obrigatório' : '',
       formatted,
       unformatted,
     }

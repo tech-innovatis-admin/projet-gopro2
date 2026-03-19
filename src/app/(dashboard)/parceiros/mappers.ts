@@ -4,6 +4,7 @@ import type {
   ProjectResponseDTO,
   ProjectStatusEnum,
 } from '@/src/lib/api/types';
+import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 import type {
   Parceiro,
   ParceiroContratoVinculado,
@@ -128,9 +129,5 @@ export function mapParceiroFormToPartnerRequestDTO(
 }
 
 export function getFriendlyApiError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Nao foi possivel concluir a operacao. Tente novamente.';
+  return getUserErrorMessage(error, 'Não foi possível concluir a operação. Tente novamente.');
 }

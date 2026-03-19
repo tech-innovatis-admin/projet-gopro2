@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import type { Contrato } from "../page";
 
 interface InformacoesContratoTabProps {
@@ -248,11 +249,9 @@ export function InformacoesContratoTab({ contrato, onChange }: InformacoesContra
           <label className="block text-sm font-medium text-gray-700">
             Data de Início <span className="text-red-500">*</span>
           </label>
-          <input
-            type="date"
+          <DatePicker
             value={contrato.dataInicio}
-            onChange={(e) => onChange({ dataInicio: e.target.value })}
-            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+            onChange={(value) => onChange({ dataInicio: value })}
           />
         </div>
 
@@ -261,11 +260,9 @@ export function InformacoesContratoTab({ contrato, onChange }: InformacoesContra
           <label className="block text-sm font-medium text-gray-700">
             Data de Término <span className="text-red-500">*</span>
           </label>
-          <input
-            type="date"
+          <DatePicker
             value={contrato.dataFim}
-            onChange={(e) => onChange({ dataFim: e.target.value })}
-            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+            onChange={(value) => onChange({ dataFim: value })}
           />
         </div>
 

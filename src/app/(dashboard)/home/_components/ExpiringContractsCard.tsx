@@ -77,7 +77,7 @@ function diffDays(start: Date, end: Date): number {
 function formatDate(value: string): string {
   const date = parseDateOnly(value);
   if (!date) {
-    return "Data invalida";
+    return "Data inválida";
   }
 
   return new Intl.DateTimeFormat("pt-BR", {
@@ -199,7 +199,7 @@ function emptyBuckets(): Record<WindowKey, ProjectDashboardExpiringContractDTO[]
 
 function getMetricDescription(key: WindowKey): string {
   if (key === "ONE_MONTH") {
-    return "de hoje ate 1 mes";
+    return "de hoje até 1 mes";
   }
   if (key === "THREE_MONTHS") {
     return "entre 1 e 3 meses";
@@ -440,7 +440,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
                 type="button"
                 onClick={() => setActiveWindow(null)}
                 className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                aria-label="Fechar lista de contratos proximos do vencimento"
+                aria-label="Fechar lista de contratos próximos do vencimento"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -465,8 +465,8 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
                             {contract.projectName}
                           </p>
                           <p className="mt-1 line-clamp-2 text-xs text-zinc-500 sm:truncate">
-                            Código: {contract.projectCode || "Nao informado"} | Cliente:{" "}
-                            {contract.primaryClientName || "Nao informado"}
+                            Código: {contract.projectCode || "Não informado"} | Cliente:{" "}
+                            {contract.primaryClientName || "Não informado"}
                           </p>
                         </div>
                         <span className="inline-flex items-center gap-1 self-start text-xs font-medium text-[#004225]">
@@ -489,7 +489,7 @@ export function ExpiringContractsCard({ data, isLoading = false }: ExpiringContr
                           </span>
                         </div>
                         <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
-                          <span className="block text-zinc-500">Contagem ate o vencimento</span>
+                          <span className="block text-zinc-500">Contagem até o vencimento</span>
                           <span className="font-semibold text-zinc-800">
                             {data?.referenceDate
                               ? formatCountdown(contract.endDate, data.referenceDate)

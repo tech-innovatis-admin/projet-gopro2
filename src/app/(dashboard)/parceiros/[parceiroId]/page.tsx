@@ -27,7 +27,7 @@ import { TIPO_CONFIG, STATUS_CONFIG, type ParceiroContratoVinculado } from "../t
 import type { Parceiro } from "../types";
 
 // =============================================================================
-// PÃGINA DE DETALHES DO PARCEIRO
+// PÁGINA DE DETALHES DO PARCEIRO
 // =============================================================================
 
 export default function ParceiroDetalhePage() {
@@ -108,10 +108,10 @@ export default function ParceiroDetalhePage() {
           <Users className="h-8 w-8 text-red-600" />
         </div>
         <h1 className="text-xl font-semibold text-gray-900">
-          Parceiro nÃ£o encontrado
+          Parceiro não encontrado
         </h1>
         <p className="text-gray-500">
-          {error || "O parceiro que voce esta procurando nao existe ou foi removido."}
+          {error || "O parceiro que você está procurando não existe ou foi removido."}
         </p>
         <Button
           onClick={() => router.push("/parceiros")}
@@ -156,7 +156,7 @@ export default function ParceiroDetalhePage() {
           <div className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
-                {/* Ãcone */}
+                {/* Ícone */}
                 <div
                   className={cn(
                     "p-4 rounded-xl",
@@ -207,7 +207,7 @@ export default function ParceiroDetalhePage() {
                       {statusConfig?.label}
                     </span>
 
-                    {/* LocalizaÃ§Ã£o */}
+                    {/* Localização */}
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm">
                       <MapPin className="h-4 w-4" />
                       <span>
@@ -218,7 +218,7 @@ export default function ParceiroDetalhePage() {
                 </div>
               </div>
 
-              {/* AÃ§Ãµes */}
+              {/* Ações */}
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -288,7 +288,7 @@ export default function ParceiroDetalhePage() {
                               {formatCurrency(contrato.valor)}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {contrato.dataInicio} {contrato.dataFim ? `atÃ© ${contrato.dataFim}` : ""}
+                              {contrato.dataInicio} {contrato.dataFim ? `até ${contrato.dataFim}` : ""}
                             </p>
                           </div>
                           <span
@@ -301,7 +301,7 @@ export default function ParceiroDetalhePage() {
                                 : "bg-yellow-100 text-yellow-700"
                             )}
                           >
-                            {contrato.status === "EM_ANDAMENTO" ? "Em Andamento" : contrato.status === "CONCLUIDO" ? "ConcluÃ­do" : contrato.status}
+                            {contrato.status === "EM_ANDAMENTO" ? "Em Andamento" : contrato.status === "CONCLUÍDO" ? "Concluído" : contrato.status}
                           </span>
                           <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-[#004225]" />
                         </div>
@@ -312,12 +312,12 @@ export default function ParceiroDetalhePage() {
               </div>
             </div>
 
-            {/* ObservaÃ§Ãµes */}
+            {/* Observações */}
             {parceiro.observacoes && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-lg font-semibold text-gray-900">
-                    ObservaÃ§Ãµes
+                    Observações
                   </h2>
                 </div>
                 <div className="p-6">
@@ -369,7 +369,7 @@ export default function ParceiroDetalhePage() {
               </div>
             </div>
 
-            {/* InformaÃ§Ãµes de Contato */}
+            {/* Informações de Contato */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">
@@ -409,17 +409,17 @@ export default function ParceiroDetalhePage() {
                 )}
                 {!parceiro.email && !parceiro.telefone && !parceiro.site && (
                   <p className="text-sm text-gray-400 italic">
-                    Nenhuma informaÃ§Ã£o de contato cadastrada.
+                    Nenhuma informação de contato cadastrada.
                   </p>
                 )}
               </div>
             </div>
 
-            {/* EndereÃ§o */}
+            {/* Endereço */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  EndereÃ§o
+                  Endereço
                 </h2>
               </div>
               <div className="p-6">
