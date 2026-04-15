@@ -64,7 +64,12 @@ export class HttpError extends Error {
 }
 
 export type PartnersTypeEnum = 'FUNDACAO' | 'IF';
-export type PublicAgencyTypeEnum = 'PREFEITURA' | 'GOVERNO_ESTADUAL' | 'MINISTERIO' | 'EMPRESA_PRIVADA';
+export type PublicAgencyTypeEnum =
+  | 'PREFEITURA'
+  | 'GOVERNO_ESTADUAL'
+  | 'MINISTERIO'
+  | 'EMPRESA_PUBLICA'
+  | 'EMPRESA_PRIVADA';
 export type ProjectGovIfEnum = 'GOV' | 'IF';
 export type ProjectTypeEnum = 'PROJETO' | 'PRODUTO';
 export type ProjectStatusEnum =
@@ -95,7 +100,7 @@ export type DocumentOwnerTypeEnum =
   | 'COMPANY'
   | 'USER';
 export type DocumentStatusEnum = 'UPLOADING' | 'AVAILABLE' | 'DELETED';
-export type UserRoleEnum = 'SUPERADMIN' | 'ADMIN' | 'ANALISTA' | 'ESTAGIARIO';
+export type UserRoleEnum = 'OWNER' | 'SUPERADMIN' | 'ADMIN' | 'ANALISTA' | 'ESTAGIARIO';
 export type UserStatusEnum = 'ACTIVE' | 'DISABLED' | 'PENDING';
 export type AllowedRegistrationStatusEnum = 'PENDING' | 'USED' | 'EXPIRED' | 'CANCELLED';
 export type AuditScopeEnum = 'SYSTEM' | 'CONTRACTS' | 'USERS' | 'PEOPLE_COMPANIES';

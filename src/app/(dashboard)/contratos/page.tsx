@@ -203,6 +203,22 @@ const segmentoOptions = [
 ];
 
 const NO_INFO_LABEL = "Não informado";
+const API_PAGE_SIZE = 20;
+
+async function fetchAllPages<T>(
+  fetchPage: (params: { page: number; size: number }) => Promise<{
+    content: T[];
+    totalPages: number;
+  }>
+): Promise<T[]> {
+  const firstPage = await fetchPage({ page: 0, size: API_PAGE_SIZE });
+  const requests = Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+    fetchPage({ page: index + 1, size: API_PAGE_SIZE })
+  );
+  const otherPages = await Promise.all(requests);
+
+  return [firstPage, ...otherPages].flatMap((pageResponse) => pageResponse.content);
+}
 
 function normalizeMoneyValue(value: number | string | null | undefined): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -484,20 +500,21 @@ export default function ContratosPage() {
       label: loc,
     })),
   ], [localidades]);
+
   const loadContratos = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [projectsPage, partnersPage, clientsPage, peoplePage] = await Promise.all([
-        listProjects({ page: 0, size: 20 }),
-        listPartners({ page: 0, size: 20 }),
+      const [allProjects, allPartners, clientsPage, allPeople] = await Promise.all([
+        fetchAllPages(listProjects),
+        fetchAllPages(listPartners),
         listAllPublicAgencies(100),
-        listPeople({ page: 0, size: 20 }),
+        fetchAllPages(listPeople),
       ]);
 
       const partnersById: Record<number, string> = {};
-      partnersPage.content.forEach((partner) => {
+      allPartners.forEach((partner) => {
         partnersById[partner.id] = partner.name;
       });
 
@@ -507,11 +524,11 @@ export default function ContratosPage() {
       });
 
       const peopleById: Record<number, string> = {};
-      peoplePage.content.forEach((person) => {
+      allPeople.forEach((person) => {
         peopleById[person.id] = person.fullName;
       });
 
-      const mappedProjects = projectsPage.content
+      const mappedProjects = allProjects
         .map((project) => mapProjectToContrato(project, partnersById, clientsById, peopleById))
         .sort((a, b) => {
           if (!a.dataCriacao) return 1;
@@ -520,7 +537,7 @@ export default function ContratosPage() {
         });
 
       setAvailablePartners(
-        [...new Set(partnersPage.content.map((partner) => partner.name).filter(Boolean))].sort((a, b) =>
+        [...new Set(allPartners.map((partner) => partner.name).filter(Boolean))].sort((a, b) =>
           a.localeCompare(b)
         )
       );

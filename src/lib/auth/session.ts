@@ -1,4 +1,4 @@
-export type SessionRole = "superadmin" | "admin" | "analista" | "estagiario";
+export type SessionRole = "owner" | "superadmin" | "admin" | "analista" | "estagiario";
 
 export interface SessionUser {
   id: string;
@@ -94,12 +94,16 @@ export async function requireCurrentUserId(): Promise<number> {
   return userId;
 }
 
+export function isOwner(user: SessionUser | null): boolean {
+  return user?.role === "owner";
+}
+
 export function isSuperAdmin(user: SessionUser | null): boolean {
-  return user?.role === "superadmin";
+  return isOwner(user) || user?.role === "superadmin";
 }
 
 export function isAdmin(user: SessionUser | null): boolean {
-  return user?.role === "superadmin" || user?.role === "admin";
+  return isSuperAdmin(user) || user?.role === "admin";
 }
 
 export function isIntern(user: SessionUser | null): boolean {

@@ -458,6 +458,14 @@ export default function PerfilPage() {
     }
     return getHealthScore(currentUser);
   }, [currentUser]);
+  const isProtectedOwner = currentUser?.role === "OWNER";
+  const visibleQuickActions = useMemo(
+    () =>
+      quickActions.filter(
+        (action) => !(isProtectedOwner && action.href === "/perfil/seguranca")
+      ),
+    [isProtectedOwner]
+  );
 
   const avatarPreviewUrl = useMemo(() => {
     if (!avatarFile) {
@@ -477,6 +485,10 @@ export default function PerfilPage() {
   const profileAvatarPreview = avatarPreviewUrl || avatarImageUrl;
 
   const openEditProfile = () => {
+    if (currentUser?.role === "OWNER") {
+      setProfileActionMessage("Conta Owner protegida. Edicao de perfil e troca de senha estao bloqueadas.");
+      return;
+    }
     setProfileFormError(null);
     setProfileActionMessage(null);
     setAvatarFile(null);
@@ -512,6 +524,11 @@ export default function PerfilPage() {
   };
 
   const saveProfilePhoto = async () => {
+    if (currentUser?.role === "OWNER") {
+      setProfileFormError("Conta Owner protegida. A foto de perfil nao pode ser alterada.");
+      return;
+    }
+
     if (!avatarFile) {
       setProfileFormError("Selecione uma foto para salvar.");
       return;
@@ -585,10 +602,16 @@ export default function PerfilPage() {
             </div>
           ) : null}
 
+          {isProtectedOwner ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              Contas Owner sao protegidas. Edicao de perfil e alteracao de senha ficam bloqueadas.
+            </div>
+          ) : null}
+
           <ProfileHeader
             user={currentUser}
             avatarImageUrl={avatarImageUrl}
-            onEditProfile={openEditProfile}
+            onEditProfile={isProtectedOwner ? undefined : openEditProfile}
           />
 
           <section className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
@@ -634,7 +657,7 @@ export default function PerfilPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {quickActions.map((action) => {
+                  {visibleQuickActions.map((action) => {
                     const Icon = action.icon;
                     return (
                       <Link

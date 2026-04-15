@@ -40,6 +40,22 @@ interface HistoricoRemanejamentosProps {
   onComeback?: (remanejamentoId: string) => Promise<void> | void;
 }
 
+function normalizeText(value?: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getRubricaFilterValue(
+  rubrica?: Pick<NonNullable<Remanejamento['itemOrigem']>, 'rubricaCodigo' | 'rubricaNome'>
+) {
+  const code = rubrica?.rubricaCodigo?.trim() ?? '';
+  const name = rubrica?.rubricaNome?.trim() ?? '';
+  return normalizeText(code || name);
+}
+
 export function HistoricoRemanejamentos({
   isOpen,
   onClose,
@@ -67,49 +83,66 @@ export function HistoricoRemanejamentos({
     [remanejamentos]
   );
 
-  const remanejamentosFiltrados = remanejamentosOrdenados.filter((remanejamento) => {
-    const normalizedSearch = searchTerm.toLowerCase();
-    const originDescription = remanejamento.itemOrigem?.descricao?.toLowerCase() || '';
-    const destinationDescription = remanejamento.itemDestino?.descricao?.toLowerCase() || '';
-    const reason = remanejamento.motivo.toLowerCase();
+  const rubricaOptions = useMemo(() => {
+    const options = new Map<string, { value: string; label: string }>();
 
-    const matchSearch =
-      originDescription.includes(normalizedSearch) ||
-      destinationDescription.includes(normalizedSearch) ||
-      reason.includes(normalizedSearch);
+    for (const remanejamento of remanejamentos) {
+      for (const rubrica of [remanejamento.itemOrigem, remanejamento.itemDestino]) {
+        const value = getRubricaFilterValue(rubrica);
+        if (!value) continue;
 
-    const matchRubrica =
-      !filterRubrica ||
-      remanejamento.itemOrigem?.rubricaCodigo === filterRubrica ||
-      remanejamento.itemDestino?.rubricaCodigo === filterRubrica;
+        const code = rubrica?.rubricaCodigo?.trim() ?? '';
+        const name = rubrica?.rubricaNome?.trim() ?? '';
+        const label = code && name ? `${code} - ${name}` : code || name;
 
-    return matchSearch && matchRubrica;
-  });
+        if (!options.has(value)) {
+          options.set(value, { value, label });
+        }
+      }
+    }
 
-  const rubricasUnicas = Array.from(
-    new Set(
-      remanejamentos.flatMap((remanejamento) =>
-        [remanejamento.itemOrigem?.rubricaCodigo, remanejamento.itemDestino?.rubricaCodigo].filter(
-          Boolean
-        )
-      )
-    )
-  );
+    return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [remanejamentos]);
 
-  const totalRemanejado = remanejamentosFiltrados.reduce(
-    (accumulator, remanejamento) => accumulator + remanejamento.valor,
-    0
-  );
+  const remanejamentosFiltrados = useMemo(() => {
+    const normalizedSearch = normalizeText(searchTerm);
+    const normalizedRubricaFilter = normalizeText(filterRubrica);
+
+    return remanejamentosOrdenados.filter((remanejamento) => {
+      const searchableContent = [
+        remanejamento.itemOrigem?.descricao,
+        remanejamento.itemOrigem?.codigo,
+        remanejamento.itemOrigem?.rubricaCodigo,
+        remanejamento.itemOrigem?.rubricaNome,
+        remanejamento.itemDestino?.descricao,
+        remanejamento.itemDestino?.codigo,
+        remanejamento.itemDestino?.rubricaCodigo,
+        remanejamento.itemDestino?.rubricaNome,
+        remanejamento.motivo,
+        remanejamento.createdBy,
+      ]
+        .map((value) => normalizeText(value))
+        .join(' ');
+
+      const matchSearch =
+        !normalizedSearch || searchableContent.includes(normalizedSearch);
+
+      const originRubrica = getRubricaFilterValue(remanejamento.itemOrigem);
+      const destinationRubrica = getRubricaFilterValue(remanejamento.itemDestino);
+      const matchRubrica =
+        !normalizedRubricaFilter ||
+        originRubrica === normalizedRubricaFilter ||
+        destinationRubrica === normalizedRubricaFilter;
+
+      return matchSearch && matchRubrica;
+    });
+  }, [filterRubrica, remanejamentosOrdenados, searchTerm]);
+
   const remanejamentosComComeback = new Set(
     remanejamentos
       .map((remanejamento) => parseBudgetTransferComeback(remanejamento.motivo).originalTransferId)
       .filter((transferId): transferId is number => transferId !== null)
   );
-
-  const totalRegistradosLabel =
-    remanejamentos.length === 1
-      ? '1 remanejamento registrado'
-      : `${remanejamentos.length} remanejamentos registrados`;
   const totalExibidosLabel =
     remanejamentosFiltrados.length === 1
       ? `Mostrando 1 de ${remanejamentos.length} remanejamento`
@@ -143,7 +176,7 @@ export function HistoricoRemanejamentos({
         }
       >
         <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_240px_220px]">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_280px]">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -151,7 +184,7 @@ export function HistoricoRemanejamentos({
                   type="text"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Buscar por item ou motivo..."
+                  placeholder="Buscar por item, rubrica ou motivo..."
                   className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
                 />
               </div>
@@ -164,22 +197,12 @@ export function HistoricoRemanejamentos({
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
               >
                 <option value="">Todas as rubricas</option>
-                {rubricasUnicas.map((codigo) => (
-                  <option key={codigo} value={codigo}>
-                    {codigo}
+                {rubricaOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                Total filtrado
-              </p>
-              <p className="mt-1 text-lg font-semibold text-emerald-950">
-                {formatCurrency(totalRemanejado)}
-              </p>
-              <p className="text-xs text-emerald-800/80">{totalRegistradosLabel}</p>
             </div>
           </div>
 

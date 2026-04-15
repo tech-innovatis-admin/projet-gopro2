@@ -21,6 +21,7 @@ const scopeOptions: Array<{ value: AuditScopeEnum | ""; label: string }> = [
 ];
 
 const roleLabels: Record<string, string> = {
+  OWNER: "Owner",
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",
@@ -155,7 +156,7 @@ export default function AdminAuditoriaPage() {
 
         {!loadingAccess && !canManage && (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-            <p className="text-sm text-amber-800">Acesso permitido apenas para admin e superadmin.</p>
+            <p className="text-sm text-amber-800">Acesso permitido apenas para owner, superadmin e admin.</p>
           </section>
         )}
 
