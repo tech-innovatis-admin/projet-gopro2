@@ -176,6 +176,15 @@ const baseNavigationItems: NavItem[] = [
       { label: "Pré-Contratos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
     ],
   },
+  {
+    label: "Gestão",
+    href: "/gestão",
+    icon: Users,
+    children: [
+      { label: "Parceiros", href: "/parceiros", icon: FolderOpen },
+      { label: "Fornecedores", href: "/fornecedores", icon: FileText },
+    ],
+  },
 ];
 
 function isItemActive(pathname: string, href: string): boolean {
