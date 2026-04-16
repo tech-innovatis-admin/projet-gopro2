@@ -461,11 +461,11 @@ export default function ContratoLayout({
   }, [editRelations.secundaryClientId, filteredSecondaryClientOptions]);
 
   const tabs: TabItem[] = [
-    // {
-    //   label: "Visao Geral",
-    //   href: `/contratos/${contratoId}`,
-    //   description: "Resumo e informacoes principais",
-    // },
+    {
+      label: "Visão Geral",
+      href: `/contratos/${contratoId}`,
+      description: "Resumo e informacoes principais",
+    },
     // {
     //   label: "Trilha",
     //   href: `/contratos/${contratoId}/trilha`,

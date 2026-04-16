@@ -1174,9 +1174,7 @@ export default function ContratosPage() {
                     <tr
                       key={contrato.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() =>
-                        (window.location.href = `/contratos/${contrato.id}/meta-etapa-fase`)
-                      }
+                      onClick={() => (window.location.href = `/contratos/${contrato.id}`)}
                     >
                       <Td className="font-mono text-sm text-center">{contrato.codigo}</Td>
                       <Td className="font-medium text-gray-900 max-w-[200px] truncate">

@@ -13,7 +13,7 @@ import {
 } from './errors';
 
 let proxyConfig: ProxyConfig | null = null;
-const DEFAULT_DEV_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_DEV_API_BASE_URL = 'http://localhost:8081';
 const DEFAULT_API_TIMEOUT_MS = 30000;
 const DEFAULT_PAGE_SIZE = 20;
 const MIN_PAGE_SIZE = 1;
