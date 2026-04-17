@@ -96,7 +96,7 @@ export default function LoginPage() {
                   EB
                 </div>
                 <div>
-                  <p className="font-medium text-white">Epitácio Brito</p>
+                  <p className="font-medium text-white">Epitacio Brito</p>
                   <p className="text-sm text-zinc-400">Founder @innovatismc</p>
                 </div>
               </footer>
@@ -126,7 +126,7 @@ export default function LoginPage() {
                 }}>
             <CardContent className="p-8 space-y-6">
               {/* Cabeçalho */}
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-2"> 
                 {/* Logo Innovatis com cor controlada por CSS */}
                 <div className="text-sky-300 flex justify-center"> {/* Esta classe controla a cor do SVG */}
                   <Image

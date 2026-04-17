@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -12,11 +12,11 @@ import {
   AlertCircle,
   Pencil,
   Save,
+  Info,
 } from 'lucide-react';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { DatePicker } from '@/components/ui/DatePicker';
-import { ResizableTable } from '@/components/ui/resizable-table';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 import {
   createCompany,
@@ -47,6 +47,8 @@ import type {
   BudgetTransferResponseDTO,
   CompanyResponseDTO,
   CompanyRequestDTO,
+  ExpensePaidByEnum,
+  ExpensePaymentStatusEnum,
   ExpenseRequestDTO,
   ExpenseResponseDTO,
   ExpenseUpdateDTO,
@@ -70,6 +72,8 @@ type Lancamento = {
   id: ID;
   valor: number;
   dataPag: string;
+  paymentStatus: ExpensePaymentStatusEnum;
+  paidBy: ExpensePaidByEnum;
   expenseId?: ID;
 };
 
@@ -103,6 +107,48 @@ type Rubrica = {
   nome: string;
   expanded: boolean;
   itens: ItemRubrica[];
+};
+
+type PaymentViewModel = {
+  key: ID;
+  itemId: ID;
+  itemDescricao: string;
+  payment: Subitem;
+  quantidade: number;
+  totalComprometido: number;
+  totalPago: number;
+  totalReservado: number;
+  totalSubitem: number;
+  ultimaDataPagamentoPago: string;
+  lancamentosParaExibir: Lancamento[];
+  hasLancamentos: boolean;
+  isExpanded: boolean;
+  isEditingLancamentos: boolean;
+  vinculoLabel: string;
+};
+
+type ItemViewModel = {
+  item: ItemRubrica;
+  totalItem: number;
+  comprometidoItem: number;
+  pagoItem: number;
+  reservadoItem: number;
+  saldoItem: number;
+  totalLancamentosItem: number;
+  totalPagamentosItem: number;
+  paymentViews: PaymentViewModel[];
+};
+
+type RubricaViewModel = {
+  rubrica: Rubrica;
+  orcadoRubrica: number;
+  comprometidoRubrica: number;
+  pagoRubrica: number;
+  reservadoRubrica: number;
+  saldoRubrica: number;
+  totalPagamentosRubrica: number;
+  totalLancamentosRubrica: number;
+  itemViews: ItemViewModel[];
 };
 
 type Parcela = {
@@ -202,12 +248,11 @@ function ordinal(n: number) {
   return `${n}°`;
 }
 
-const STICKY_ITEM_HEADER_CLASS =
-  '!sticky left-0 z-30 bg-white shadow-[6px_0_10px_-8px_rgba(15,23,42,0.25)]';
-const STICKY_ITEM_PARENT_CELL_CLASS =
-  'sticky left-0 z-20 bg-gray-50 shadow-[6px_0_10px_-8px_rgba(15,23,42,0.18)]';
-const STICKY_ITEM_SUBITEM_CELL_CLASS =
-  'sticky left-0 z-10 bg-white shadow-[6px_0_10px_-8px_rgba(15,23,42,0.12)] group-hover:bg-gray-50';
+function MetaBullet() {
+  return (
+    <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-gray-300" />
+  );
+}
 
 function safeNumber(value: unknown) {
   const parsed = Number(value);
@@ -252,6 +297,8 @@ function createDraftLancamento(): Lancamento {
     id: createDraftId('lanc'),
     valor: 0,
     dataPag: '',
+    paymentStatus: 'PAGO',
+    paidBy: 'EMPRESA',
     expenseId: undefined,
   };
 }
@@ -268,8 +315,32 @@ function companyNameLabel(company: Pick<CompanyResponseDTO, 'tradeName' | 'name'
   return company.tradeName?.trim() || company.name?.trim() || 'Empresa sem nome';
 }
 
-function calculateContractBalance(totalRecebido: number, totalPago: number) {
+function calculateRealBalance(totalRecebido: number, totalPago: number) {
   return Number((totalRecebido - totalPago).toFixed(2));
+}
+
+function calculateProjectBalance(saldoReal: number, totalReservado: number) {
+  return Number((saldoReal - totalReservado).toFixed(2));
+}
+
+function getPaymentStatusLabel(status: ExpensePaymentStatusEnum) {
+  return status === 'RESERVADO' ? 'Reservado' : 'Pago';
+}
+
+function getPaymentStatusBadgeClassName(status: ExpensePaymentStatusEnum) {
+  return status === 'RESERVADO'
+    ? 'border-amber-200 bg-amber-50 text-amber-700'
+    : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function getPaidByLabel(value: ExpensePaidByEnum) {
+  return value === 'PARCEIRO' ? 'Parceiro' : 'Empresa';
+}
+
+function getPaidByBadgeClassName(value: ExpensePaidByEnum) {
+  return value === 'PARCEIRO'
+    ? 'border-sky-200 bg-sky-50 text-sky-700'
+    : 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
 function sortLancamentos(lancamentos: Lancamento[]) {
@@ -356,6 +427,8 @@ export default function PagamentosPlanilhaPage() {
     itemDescricao: string;
     subitem: Subitem;
   } | null>(null);
+  const [rubricaPendingPaymentSelectionId, setRubricaPendingPaymentSelectionId] =
+    useState<ID | null>(null);
   const [lancamentoPendingDeletion, setLancamentoPendingDeletion] = useState<{
     itemId: ID;
     itemDescricao: string;
@@ -376,6 +449,10 @@ export default function PagamentosPlanilhaPage() {
 
   const closeDeleteSubitemModal = () => {
     setSubitemPendingDeletion(null);
+  };
+
+  const closeRubricaPaymentSelectionModal = () => {
+    setRubricaPendingPaymentSelectionId(null);
   };
 
   const closeDeleteLancamentoModal = () => {
@@ -501,7 +578,7 @@ export default function PagamentosPlanilhaPage() {
     if (!Number.isFinite(projectId)) {
       setProjectPeople([]);
       setProjectCompanies([]);
-      setProjectLinksError('ID do contrato inválido para carregar vinculos do projeto.');
+      setProjectLinksError('ID do contrato inválido para carregar vínculos do projeto.');
       return;
     }
 
@@ -723,6 +800,8 @@ export default function PagamentosPlanilhaPage() {
             id: `lanc-${expense.id}`,
             valor: toMoneyValue(expense.amount),
             dataPag: expense.expenseDate || '',
+            paymentStatus: expense.paymentStatus ?? 'PAGO',
+            paidBy: expense.paidBy ?? 'EMPRESA',
             expenseId: String(expense.id),
           },
         ]);
@@ -805,25 +884,55 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const calcularTotalPagoSubitem = (subitem: Subitem) =>
-    (subitem.lancamentos ?? []).reduce((acc, lancamento) => acc + safeNumber(lancamento.valor), 0);
+    (subitem.lancamentos ?? []).reduce(
+      (acc, lancamento) =>
+        lancamento.paymentStatus === 'PAGO' ? acc + safeNumber(lancamento.valor) : acc,
+      0
+    );
+
+  const calcularTotalReservadoSubitem = (subitem: Subitem) =>
+    (subitem.lancamentos ?? []).reduce(
+      (acc, lancamento) =>
+        lancamento.paymentStatus === 'RESERVADO' ? acc + safeNumber(lancamento.valor) : acc,
+      0
+    );
+
+  const calcularTotalComprometidoSubitem = (subitem: Subitem) =>
+    Number((calcularTotalPagoSubitem(subitem) + calcularTotalReservadoSubitem(subitem)).toFixed(2));
 
   const obterResumoLancamentosSubitem = (subitem: Subitem) => {
     const lancamentosOrdenados = sortLancamentos(subitem.lancamentos ?? []);
-    const ultimaDataPagamento = lancamentosOrdenados.reduce(
+    const ultimaDataLancamento = lancamentosOrdenados.reduce(
       (latest, lancamento) => (lancamento.dataPag && lancamento.dataPag > latest ? lancamento.dataPag : latest),
+      ''
+    );
+    const ultimaDataPagamentoPago = lancamentosOrdenados.reduce(
+      (latest, lancamento) =>
+        lancamento.paymentStatus === 'PAGO' && lancamento.dataPag && lancamento.dataPag > latest
+          ? lancamento.dataPag
+          : latest,
       ''
     );
 
     return {
       lancamentosOrdenados,
       quantidade: lancamentosOrdenados.length,
-      totalPago: lancamentosOrdenados.reduce((acc, lancamento) => acc + safeNumber(lancamento.valor), 0),
-      ultimaDataPagamento,
+      totalPago: calcularTotalPagoSubitem(subitem),
+      totalReservado: calcularTotalReservadoSubitem(subitem),
+      totalComprometido: calcularTotalComprometidoSubitem(subitem),
+      ultimaDataLancamento,
+      ultimaDataPagamentoPago,
     };
   };
 
   const calcularTotalPagoItem = (item: ItemRubrica) =>
     (item.subitens ?? []).reduce((acc, subitem) => acc + calcularTotalPagoSubitem(subitem), 0);
+
+  const calcularTotalReservadoItem = (item: ItemRubrica) =>
+    (item.subitens ?? []).reduce((acc, subitem) => acc + calcularTotalReservadoSubitem(subitem), 0);
+
+  const calcularTotalComprometidoItem = (item: ItemRubrica) =>
+    Number((calcularTotalPagoItem(item) + calcularTotalReservadoItem(item)).toFixed(2));
 
   const contarLancamentosItem = (item: ItemRubrica) =>
     (item.subitens ?? []).reduce((acc, subitem) => acc + (subitem.lancamentos?.length ?? 0), 0);
@@ -834,6 +943,12 @@ export default function PagamentosPlanilhaPage() {
   const calcularTotalPagoRubrica = (rubrica: Rubrica) =>
     rubrica.itens.reduce((acc, item) => acc + calcularTotalPagoItem(item), 0);
 
+  const calcularTotalReservadoRubrica = (rubrica: Rubrica) =>
+    rubrica.itens.reduce((acc, item) => acc + calcularTotalReservadoItem(item), 0);
+
+  const calcularTotalComprometidoRubrica = (rubrica: Rubrica) =>
+    Number((calcularTotalPagoRubrica(rubrica) + calcularTotalReservadoRubrica(rubrica)).toFixed(2));
+
   const totalRecebido = useMemo(
     () => parcelas.reduce((acc, parcela) => acc + safeNumber(parcela.valorRecebido), 0),
     [parcelas]
@@ -841,12 +956,144 @@ export default function PagamentosPlanilhaPage() {
 
   const totalPago = rubricas.reduce(
     (accRubrica, rubrica) =>
-      accRubrica +
-      rubrica.itens.reduce((accItem, item) => accItem + calcularTotalPagoItem(item), 0),
+      accRubrica + rubrica.itens.reduce((accItem, item) => accItem + calcularTotalPagoItem(item), 0),
     0
   );
 
-  const saldoTotalContrato = calculateContractBalance(totalRecebido, totalPago);
+  const totalReservado = rubricas.reduce(
+    (accRubrica, rubrica) =>
+      accRubrica +
+      rubrica.itens.reduce((accItem, item) => accItem + calcularTotalReservadoItem(item), 0),
+    0
+  );
+
+  const saldoRealContrato = calculateRealBalance(totalRecebido, totalPago);
+  const saldoProjetoContrato = calculateProjectBalance(saldoRealContrato, totalReservado);
+
+  const rubricaViews = useMemo<RubricaViewModel[]>(
+    () =>
+      rubricas.map((rubrica) => {
+        const itemViews = rubrica.itens.map((item) => {
+          const totalItem = calcularTotalOrcadoItem(item);
+          const comprometidoItem = calcularTotalComprometidoItem(item);
+          const pagoItem = calcularTotalPagoItem(item);
+          const reservadoItem = calcularTotalReservadoItem(item);
+          const saldoItem = totalItem - comprometidoItem;
+          const totalLancamentosItem = contarLancamentosItem(item);
+
+          const paymentViews = (item.subitens ?? []).map((subitem) => {
+            const subitemKey = createSubitemKey(item.id, subitem.id);
+            const {
+              lancamentosOrdenados,
+              quantidade,
+              totalComprometido,
+              totalPago,
+              totalReservado,
+              ultimaDataPagamentoPago,
+            } = obterResumoLancamentosSubitem(subitem);
+            const isEditingLancamentos =
+              isEditingSubitens &&
+              editingSubitemSession?.subitemKey === subitemKey &&
+              editingLancamentosSubitemKey === subitemKey;
+
+            return {
+              key: subitemKey,
+              itemId: item.id,
+              itemDescricao: item.descricao,
+              payment: subitem,
+              quantidade,
+              totalComprometido,
+              totalPago,
+              totalReservado,
+              totalSubitem: calcularTotalComprometidoSubitem(subitem),
+              ultimaDataPagamentoPago,
+              lancamentosParaExibir: isEditingLancamentos
+                ? subitem.lancamentos ?? []
+                : lancamentosOrdenados,
+              hasLancamentos: quantidade > 0,
+              isExpanded: expandedSubitemKey === subitemKey,
+              isEditingLancamentos,
+              vinculoLabel: getSubitemVinculoLabel(subitem),
+            } satisfies PaymentViewModel;
+          });
+
+          return {
+            item,
+            totalItem,
+            comprometidoItem,
+            pagoItem,
+            reservadoItem,
+            saldoItem,
+            totalLancamentosItem,
+            totalPagamentosItem: paymentViews.length,
+            paymentViews,
+          } satisfies ItemViewModel;
+        });
+
+        return {
+          rubrica,
+          orcadoRubrica: calcularTotalOrcadoRubrica(rubrica),
+          comprometidoRubrica: calcularTotalComprometidoRubrica(rubrica),
+          pagoRubrica: calcularTotalPagoRubrica(rubrica),
+          reservadoRubrica: calcularTotalReservadoRubrica(rubrica),
+          saldoRubrica: calcularTotalOrcadoRubrica(rubrica) - calcularTotalComprometidoRubrica(rubrica),
+          totalPagamentosRubrica: itemViews.reduce((acc, itemView) => acc + itemView.totalPagamentosItem, 0),
+          totalLancamentosRubrica: itemViews.reduce((acc, itemView) => acc + itemView.totalLancamentosItem, 0),
+          itemViews,
+        } satisfies RubricaViewModel;
+      }),
+    // The helper callbacks above are pure derivations from current render state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      rubricas,
+      isEditingSubitens,
+      editingSubitemSession,
+      editingLancamentosSubitemKey,
+      expandedSubitemKey,
+      getSubitemVinculoLabel,
+    ]
+  );
+
+  const rubricaPendingPaymentSelectionView = useMemo(
+    () =>
+      rubricaPendingPaymentSelectionId != null
+        ? rubricaViews.find((entry) => entry.rubrica.id === rubricaPendingPaymentSelectionId) ?? null
+        : null,
+    [rubricaViews, rubricaPendingPaymentSelectionId]
+  );
+
+  const handleStartAddPaymentFromRubrica = (rubricaId: ID) => {
+    if (!ensureCanManageChildren()) return;
+    if (isPersisting) return;
+    if (editingSubitemSession) {
+      setActionError('Salve ou cancele o pagamento em edição antes de criar outro.');
+      return;
+    }
+
+    const rubrica = rubricas.find((entry) => entry.id === rubricaId);
+    if (!rubrica) {
+      setActionError('Rubrica inválida para adicionar pagamento.');
+      return;
+    }
+
+    if (rubrica.itens.length === 0) {
+      setActionError(`A rubrica "${rubrica.nome}" não possui itens para receber pagamentos.`);
+      return;
+    }
+
+    if (rubrica.itens.length === 1) {
+      handleStartAddSubitem(rubrica.itens[0].id);
+      return;
+    }
+
+    setActionError(null);
+    setRubricaPendingPaymentSelectionId(rubrica.id);
+  };
+
+  const handleSelectItemForRubricaPayment = (itemId: ID) => {
+    closeRubricaPaymentSelectionModal();
+    handleStartAddSubitem(itemId);
+  };
 
   const toggleRubrica = (rubricaId: ID) => {
     setRubricas((previous) =>
@@ -1093,7 +1340,7 @@ export default function PagamentosPlanilhaPage() {
     if (!editParcelaForm.dataRecebimento) return;
     if (!editParcelaForm.valorRecebido || editParcelaForm.valorRecebido <= 0) return;
     if (!isPersistedId(editParcelaForm.id)) {
-      setActionError('Parcela inválida para atualizacao.');
+      setActionError('Parcela inválida para atualização.');
       return;
     }
 
@@ -1126,7 +1373,7 @@ export default function PagamentosPlanilhaPage() {
     }
     if (parcelaPendingDeletion?.id === parcelaId) {
       if (!isPersistedId(parcelaId)) {
-        setActionError('Parcela invÃ¡lida para remocao.');
+        setActionError('Parcela inválida para remoção.');
         closeDeleteParcelaModal();
         return;
       }
@@ -1139,14 +1386,14 @@ export default function PagamentosPlanilhaPage() {
         closeDeleteParcelaModal();
         showSavedMessage('Parcela removida com sucesso.');
       } catch (error) {
-        setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel remover a parcela.'));
+        setActionError(toErrorMessage(error, 'Não foi possível remover a parcela.'));
       } finally {
         setIsPersisting(false);
       }
       return;
     }
     if (!isPersistedId(parcelaId)) {
-      setActionError('Parcela inválida para remocao.');
+      setActionError('Parcela inválida para remoção.');
       return;
     }
 
@@ -1172,7 +1419,7 @@ export default function PagamentosPlanilhaPage() {
 
     const nome = subitemModalForm.nome.trim();
     if (!nome) {
-      setSubitemModalError('Informe o nome do subitem.');
+      setSubitemModalError('Informe o nome do pagamento.');
       return;
     }
 
@@ -1215,7 +1462,7 @@ export default function PagamentosPlanilhaPage() {
     setIsEditingSubitens(false);
     setEditingLancamentosSubitemKey(null);
     closeSubitemModal({ discardTransientDraft: false });
-    showSavedMessage('Subitem criado. Adicione um lançamento para persisti-lo.');
+    showSavedMessage('Pagamento criado. Adicione um lançamento para persisti-lo.');
   };
 
   const handleStartAddSubitem = (itemId: ID) => {
@@ -1413,13 +1660,13 @@ export default function PagamentosPlanilhaPage() {
   const handleSaveSubitemModal = async () => {
     const itemId = subitemModalItemId;
     if (!itemId) {
-      setSubitemModalError('Item inválido para salvar o subitem.');
+      setSubitemModalError('Item inválido para salvar o pagamento.');
       return;
     }
 
     const nome = subitemModalForm.nome.trim();
     if (!nome) {
-      setSubitemModalError('Informe o nome do subitem.');
+      setSubitemModalError('Informe o nome do pagamento.');
       return;
     }
 
@@ -1465,13 +1712,13 @@ export default function PagamentosPlanilhaPage() {
 
     if (expenseIds.length === 0) {
       closeSubitemModal({ discardTransientDraft: false });
-      showSavedMessage('Subitem atualizado com sucesso.');
+      showSavedMessage('Pagamento atualizado com sucesso.');
       return;
     }
 
     const budgetItemId = parsePersistedId(selected.item.id);
     if (budgetItemId == null) {
-      setSubitemModalError('Item inválido para persistir o subitem.');
+      setSubitemModalError('Item inválido para persistir o pagamento.');
       return;
     }
 
@@ -1493,6 +1740,7 @@ export default function PagamentosPlanilhaPage() {
           expenseDate: currentExpense.expenseDate || '',
           quantity: toPositiveInt(currentExpense.quantity, 1),
           amount: toMoneyValue(currentExpense.amount),
+          paymentStatus: currentExpense.paymentStatus ?? 'PAGO',
           personId: nextPersonId ? Number.parseInt(nextPersonId, 10) : undefined,
           organizationId: nextOrganizationId ? Number.parseInt(nextOrganizationId, 10) : undefined,
           description: nome,
@@ -1504,9 +1752,9 @@ export default function PagamentosPlanilhaPage() {
 
       await loadData();
       closeSubitemModal({ discardTransientDraft: false });
-      showSavedMessage('Subitem atualizado com sucesso.');
+      showSavedMessage('Pagamento atualizado com sucesso.');
     } catch (error) {
-      setSubitemModalError(toErrorMessage(error, 'Não foi possível atualizar o subitem.'));
+      setSubitemModalError(toErrorMessage(error, 'Não foi possível atualizar o pagamento.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1548,7 +1796,7 @@ export default function PagamentosPlanilhaPage() {
         applySubitemEditingState();
       }
       closeDeleteSubitemModal();
-      showSavedMessage('Subitem removido com sucesso.');
+      showSavedMessage('Pagamento removido com sucesso.');
       return;
     }
 
@@ -1565,7 +1813,7 @@ export default function PagamentosPlanilhaPage() {
         applySubitemEditingState();
       }
       closeDeleteSubitemModal();
-      showSavedMessage('Subitem removido com sucesso.');
+      showSavedMessage('Pagamento removido com sucesso.');
     } catch (error) {
       setActionError(toErrorMessage(error, 'Não foi possível remover o subitem.'));
     } finally {
@@ -1678,7 +1926,7 @@ export default function PagamentosPlanilhaPage() {
     itemId: ID,
     subitemId: ID,
     lancamentoId: ID,
-    patch: Partial<Pick<Lancamento, 'valor' | 'dataPag'>>
+    patch: Partial<Pick<Lancamento, 'valor' | 'dataPag' | 'paymentStatus' | 'paidBy'>>
   ) => {
     if (!canManageChildren) return;
 
@@ -1702,6 +1950,9 @@ export default function PagamentosPlanilhaPage() {
                         ...lancamento,
                         valor: patch.valor != null ? Math.max(0, safeNumber(patch.valor)) : lancamento.valor,
                         dataPag: patch.dataPag != null ? patch.dataPag : lancamento.dataPag,
+                        paymentStatus:
+                          patch.paymentStatus != null ? patch.paymentStatus : lancamento.paymentStatus,
+                        paidBy: patch.paidBy != null ? patch.paidBy : lancamento.paidBy,
                       }
                     : lancamento
                 ),
@@ -1711,6 +1962,80 @@ export default function PagamentosPlanilhaPage() {
         }),
       }))
     );
+  };
+
+  const handleMarkLancamentoAsPaid = async (itemId: ID, subitemId: ID, lancamentoId: ID) => {
+    if (!ensureCanManageChildren()) return;
+
+    if (editingSubitemSession) {
+      setActionError('Salve ou cancele a edição atual antes de alterar outro lançamento.');
+      return;
+    }
+
+    const selected = findItemAndSubitem(itemId, subitemId);
+    if (!selected) {
+      setActionError('Lançamento inválido para atualização rápida.');
+      return;
+    }
+
+    const { item, subitem } = selected;
+    const lancamento = (subitem.lancamentos ?? []).find((entry) => entry.id === lancamentoId);
+    if (!lancamento) {
+      setActionError('Lançamento inválido para atualização rápida.');
+      return;
+    }
+
+    if (lancamento.paymentStatus === 'PAGO') {
+      return;
+    }
+
+    const expenseId = parsePersistedId(lancamento.expenseId);
+    if (expenseId == null) {
+      updateLancamentoCampo(itemId, subitemId, lancamentoId, { paymentStatus: 'PAGO' });
+      showSavedMessage('Lançamento marcado como pago. Salve as alterações para persistir.');
+      return;
+    }
+
+    const currentExpense = backendExpenses.find((expense) => expense.id === expenseId);
+    if (!currentExpense) {
+      setActionError('Não foi possível localizar o lançamento no backend para marcá-lo como pago.');
+      return;
+    }
+
+    const description = subitem.empresaRh.trim();
+    const personId = subitem.vinculoTipo === 'person' ? parsePersistedId(subitem.personId) : null;
+    const organizationId =
+      subitem.vinculoTipo === 'company' ? parsePersistedId(subitem.organizationId) : null;
+
+    const payload: ExpenseUpdateDTO = {
+      projectId,
+      budgetItemId: parsePersistedId(item.id) ?? currentExpense.budgetItemId,
+      categoryId: item.categoryId,
+      expenseDate: (lancamento.dataPag || currentExpense.expenseDate || '').trim() || currentExpense.expenseDate,
+      quantity: toPositiveInt(currentExpense.quantity, 1),
+      amount: toMoneyValue(lancamento.valor),
+      paymentStatus: 'PAGO',
+      paidBy: lancamento.paidBy ?? currentExpense.paidBy ?? 'EMPRESA',
+      personId: personId ?? undefined,
+      organizationId: organizationId ?? undefined,
+      description: description || currentExpense.description || undefined,
+      invoiceNumber: currentExpense.invoiceNumber ?? undefined,
+      invoiceDate: currentExpense.invoiceDate ?? undefined,
+      documentId: currentExpense.documentId ?? undefined,
+    };
+
+    setIsPersisting(true);
+    setActionError(null);
+
+    try {
+      await updateExpense(expenseId, payload);
+      await loadData();
+      showSavedMessage('Lançamento reservado marcado como pago.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível marcar o lançamento como pago.'));
+    } finally {
+      setIsPersisting(false);
+    }
   };
 
   const applySubitemEditingState = ({
@@ -1735,7 +2060,7 @@ export default function PagamentosPlanilhaPage() {
     }
 
     if (!editingSubitemSession) {
-      setActionError('Selecione um subitem para salvar.');
+      setActionError('Selecione um pagamento para salvar.');
       return;
     }
 
@@ -1772,6 +2097,8 @@ export default function PagamentosPlanilhaPage() {
     for (const lancamento of subitem.lancamentos ?? []) {
       const amount = toMoneyValue(lancamento.valor);
       const expenseDate = (lancamento.dataPag || '').trim();
+      const paymentStatus = lancamento.paymentStatus ?? 'PAGO';
+      const paidBy = lancamento.paidBy ?? 'EMPRESA';
       const hasAmount = amount > 0;
       const hasDate = expenseDate.length > 0;
       const expenseId = parsePersistedId(lancamento.expenseId);
@@ -1788,7 +2115,7 @@ export default function PagamentosPlanilhaPage() {
       }
 
       if (!description) {
-        setActionError(`Informe o nome do subitem no item "${item.descricao}".`);
+        setActionError(`Informe o nome do pagamento no item "${item.descricao}".`);
         return;
       }
 
@@ -1814,6 +2141,8 @@ export default function PagamentosPlanilhaPage() {
             expenseDate,
             quantity: 1,
             amount,
+            paymentStatus,
+            paidBy,
             personId: personId ?? undefined,
             organizationId: organizationId ?? undefined,
             description,
@@ -1829,6 +2158,8 @@ export default function PagamentosPlanilhaPage() {
             expenseDate,
             quantity: toPositiveInt(currentExpense.quantity, 1),
             amount,
+            paymentStatus,
+            paidBy,
             personId: personId ?? undefined,
             organizationId: organizationId ?? undefined,
             description,
@@ -1844,6 +2175,8 @@ export default function PagamentosPlanilhaPage() {
             (currentExpense.expenseDate || '') !== payload.expenseDate ||
             toPositiveInt(currentExpense.quantity, 1) !== payload.quantity ||
             toMoneyValue(currentExpense.amount) !== payload.amount ||
+            (currentExpense.paymentStatus ?? 'PAGO') !== payload.paymentStatus ||
+            (currentExpense.paidBy ?? 'EMPRESA') !== payload.paidBy ||
             (currentExpense.personId ?? null) !== (payload.personId ?? null) ||
             (currentExpense.organizationId ?? null) !== (payload.organizationId ?? null) ||
             (currentExpense.description || '') !== (payload.description || '');
@@ -1860,6 +2193,8 @@ export default function PagamentosPlanilhaPage() {
           expenseDate,
           quantity: 1,
           amount,
+          paymentStatus,
+          paidBy,
           personId: personId ?? undefined,
           organizationId: organizationId ?? undefined,
           description,
@@ -1912,7 +2247,7 @@ export default function PagamentosPlanilhaPage() {
       });
       showSavedMessage('Subitem salvo com sucesso.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível salvar o subitem.'));
+      setActionError(toErrorMessage(error, 'Não foi possível salvar o pagamento.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1923,7 +2258,7 @@ export default function PagamentosPlanilhaPage() {
       for (const item of rubrica.itens) {
         const budgetItemId = parsePersistedId(item.id);
         if (!budgetItemId) {
-          validationErrors.push(`Item "${item.descricao}" inválido para persistencia.`);
+          validationErrors.push(`Item "${item.descricao}" inválido para persistência.`);
           continue;
         }
 
@@ -1961,7 +2296,7 @@ export default function PagamentosPlanilhaPage() {
             }
 
             if (!description) {
-              validationErrors.push(`Informe o nome do subitem no item "${item.descricao}".`);
+              validationErrors.push(`Informe o nome do pagamento no item "${item.descricao}".`);
               continue;
             }
 
@@ -2142,25 +2477,13 @@ export default function PagamentosPlanilhaPage() {
         </div>
       )}
 
-      <div className="rounded-lg bg-gray-50 p-4">
-        <h4 className="mb-3 font-medium text-gray-900">Resumo Financeiro</h4>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-500">Total Recebido</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(totalRecebido)}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-500">Total Pago</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(totalPago)}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-500">Saldo Total do Contrato</p>
-            <p className={`text-xl font-semibold ${saldoTotalContrato < 0 ? 'text-red-600' : 'text-blue-600'}`}>
-              {formatCurrency(saldoTotalContrato)}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PaymentsFinancialSummarySection
+        totalRecebido={totalRecebido}
+        totalPago={totalPago}
+        totalReservado={totalReservado}
+        saldoRealContrato={saldoRealContrato}
+        saldoProjetoContrato={saldoProjetoContrato}
+      />
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <div className="flex items-center justify-between bg-gray-50 px-4 py-3">
@@ -2360,437 +2683,43 @@ export default function PagamentosPlanilhaPage() {
         </div>
       </div>
 
-      {rubricas.length === 0 && !isLoading && !loadError ? (
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
-          Nenhuma rubrica encontrada para montar a planilha de pagamentos.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {rubricas.map((rubrica) => {
-            const orcadoRubrica = calcularTotalOrcadoRubrica(rubrica);
-            const pagoRubrica = calcularTotalPagoRubrica(rubrica);
-            const saldoRubrica = orcadoRubrica - pagoRubrica;
+      <RubricasHierarchySection
+        rubricaViews={rubricaViews}
+        isLoading={isLoading}
+        loadError={loadError}
+        canManageChildren={canManageChildren}
+        loadingAccess={loadingAccess}
+        isPersisting={isPersisting}
+        onToggleRubrica={toggleRubrica}
+        onStartAddPaymentFromRubrica={handleStartAddPaymentFromRubrica}
+        onStartAddPayment={handleStartAddSubitem}
+        onStartEditPayment={handleStartEditSubitem}
+        onRemovePayment={handleRemoveSubitem}
+        onTogglePaymentLaunches={toggleExpandedSubitem}
+        onEditLaunches={handleEditLancamentos}
+        onSaveLaunches={() => {
+          void handleSaveSubitens();
+        }}
+        onCancelLaunchEditing={() => {
+          void cancelEditingSubitem();
+        }}
+        onAddLaunch={handleAddLancamento}
+        onUpdateLaunch={updateLancamentoCampo}
+        onRemoveLaunch={handleRemoveLancamento}
+        onMarkLaunchPaid={handleMarkLancamentoAsPaid}
+      />
 
-            return (
-              <div key={rubrica.id} className="overflow-hidden rounded-lg border border-gray-200">
-                <div className="flex items-center justify-between bg-gray-50 px-4 py-3 hover:bg-gray-100">
-                  <div
-                    className="flex flex-1 cursor-pointer items-center gap-3"
-                    onClick={() => toggleRubrica(rubrica.id)}
-                  >
-                    {rubrica.expanded ? (
-                      <ChevronDown className="h-5 w-5 text-gray-500" />
-                    ) : (
-                      <ChevronRight className="h-5 w-5 text-gray-500" />
-                    )}
-                    <div className="flex flex-col">
-                      <span className="font-medium text-gray-900">{rubrica.nome}</span>
-                      <span className="text-xs text-gray-500">
-                        Orcado: {formatCurrency(orcadoRubrica)} • Pago: {formatCurrency(pagoRubrica)} •{' '}
-                        <span className={saldoRubrica < 0 ? 'font-semibold text-red-600' : 'font-semibold text-blue-600'}>
-                          Saldo: {formatCurrency(saldoRubrica)}
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {rubrica.expanded && (
-                  <div className="bg-white px-2 py-3 sm:px-3 lg:px-4">
-                    {rubrica.itens.length === 0 ? (
-                      <div className="flex justify-center gap-2 py-6 text-gray-500">
-                        <AlertCircle className="h-5 w-5" />
-                        <span>Nenhum item cadastrado nesta rubrica</span>
-                      </div>
-                    ) : (
-                      <ResizableTable
-                        columnCount={5}
-                        defaultWidths={[160, 220, 260, 160, 170]}
-                        minColumnWidth={80}
-                        className="divide-y divide-gray-200"
-                      >
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className={`px-2 py-2 text-center font-medium text-gray-600 ${STICKY_ITEM_HEADER_CLASS}`}>
-                              Item
-                            </th>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600">Subitem</th>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600">Lançamentos</th>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600">Pago</th>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600">Saldo</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {rubrica.itens.map((item) => {
-                            const totalItem = calcularTotalOrcadoItem(item);
-                            const pagoItem = calcularTotalPagoItem(item);
-                            const saldoItem = totalItem - pagoItem;
-                            const totalLancamentosItem = contarLancamentosItem(item);
-
-                            return (
-                              <Fragment key={item.id}>
-                                <tr className="border-b border-gray-100 bg-gray-50">
-                                  <td className={`px-2 py-2 text-left font-medium text-gray-900 ${STICKY_ITEM_PARENT_CELL_CLASS}`}>
-                                    {item.descricao}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {canManageChildren ? (
-                                      <button
-                                        onClick={() => handleStartAddSubitem(item.id)}
-                                        disabled={isPersisting}
-                                        className="inline-flex items-center gap-1 rounded-md px-3 py-1 text-sm text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                                      >
-                                        <Plus className="h-4 w-4" />
-                                        Novo subitem
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs text-gray-400">Somente leitura</span>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2 text-center text-sm text-gray-600">
-                                    <div className="font-medium text-gray-800">
-                                      {totalLancamentosItem}{' '}
-                                      {totalLancamentosItem === 1 ? 'lançamento' : 'lançamentos'}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      Detalhes distribuidos pelos subitens abaixo.
-                                    </div>
-                                  </td>
-                                  <td className="px-2 py-2 text-center font-semibold text-gray-900">
-                                    {formatCurrency(pagoItem)}
-                                  </td>
-                                  <td className={`px-2 py-2 text-center font-semibold ${saldoItem < 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                                    {formatCurrency(saldoItem)}
-                                  </td>
-                                </tr>
-
-                                {!item.subitens || item.subitens.length === 0 ? (
-                                  <tr className="border-b border-gray-100">
-                                    <td colSpan={5} className="py-4 text-center text-gray-500">
-                                      Nenhum subitem cadastrado para este item
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  item.subitens.map((subitem) => {
-                                    const subitemKey = createSubitemKey(item.id, subitem.id);
-                                    const { lancamentosOrdenados, quantidade, totalPago, ultimaDataPagamento } =
-                                      obterResumoLancamentosSubitem(subitem);
-                                    const totalSubitem = calcularTotalPagoSubitem(subitem);
-                                    const isSubitemExpanded = expandedSubitemKey === subitemKey;
-                                    const isEditingLancamentos =
-                                      isEditingSubitens &&
-                                      editingSubitemSession?.subitemKey === subitemKey &&
-                                      editingLancamentosSubitemKey === subitemKey;
-                                    const lancamentosParaExibir = isEditingLancamentos
-                                      ? subitem.lancamentos ?? []
-                                      : lancamentosOrdenados;
-                                    const hasLancamentos = quantidade > 0;
-                                    const handlePrimaryLancamentoAction = () => {
-                                      if (isEditingLancamentos) {
-                                        void handleSaveSubitens();
-                                        return;
-                                      }
-
-                                      if (hasLancamentos) {
-                                        handleEditLancamentos(item.id, subitem.id);
-                                        return;
-                                      }
-
-                                      handleAddLancamento(item.id, subitem.id);
-                                    };
-
-                                    return (
-                                      <Fragment key={subitem.id}>
-                                        <tr
-                                          className={`group hover:bg-gray-50 ${
-                                            isSubitemExpanded ? '' : 'border-b border-gray-100'
-                                          }`}
-                                        >
-                                        <td className={`px-2 py-2 text-left text-sm text-gray-600 ${STICKY_ITEM_SUBITEM_CELL_CLASS}`}>
-                                          <span className="block truncate font-medium text-gray-700">
-                                            {item.descricao}
-                                          </span>
-                                        </td>
-                                        <td className="px-2 py-2">
-                                          <div className="space-y-1">
-                                            <div className="flex items-start justify-between gap-2">
-                                              <span className="block min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
-                                                {subitem.empresaRh || '-'}
-                                              </span>
-                                              {canManageChildren ? (
-                                                <div className="flex shrink-0 items-center gap-1">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleStartEditSubitem(item.id, subitem.id)}
-                                                    disabled={isPersisting}
-                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                                                    aria-label="Editar subitem"
-                                                    title="Editar subitem"
-                                                  >
-                                                    <Pencil className="h-4 w-4" />
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => void handleRemoveSubitem(item.id, subitem.id)}
-                                                    disabled={isPersisting}
-                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                                                    aria-label="Excluir subitem"
-                                                    title="Excluir subitem"
-                                                  >
-                                                    <Trash2 className="h-4 w-4" />
-                                                  </button>
-                                                </div>
-                                              ) : null}
-                                            </div>
-                                            <span className="block text-xs text-gray-500">
-                                              {getSubitemVinculoLabel(subitem)}
-                                            </span>
-                                          </div>
-                                        </td>
-                                        <td className="px-2 py-2">
-                                          <div className="flex flex-col items-center gap-2 text-center">
-                                            <div className="space-y-1 text-sm">
-                                              <div className="font-medium text-gray-800">
-                                                {quantidade} {quantidade === 1 ? 'lançamento' : 'lançamentos'}
-                                              </div>
-                                              <div className="text-xs text-gray-500">
-                                                Total pago: {formatCurrency(totalPago)}
-                                              </div>
-                                              <div className="text-xs text-gray-500">
-                                                Último pagamento:{' '}
-                                                {ultimaDataPagamento ? formatDate(ultimaDataPagamento) : '-'}
-                                              </div>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={() => toggleExpandedSubitem(subitemKey)}
-                                              aria-expanded={isSubitemExpanded}
-                                              className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                                            >
-                                              {isSubitemExpanded ? (
-                                                <ChevronDown className="h-4 w-4" />
-                                              ) : (
-                                                <ChevronRight className="h-4 w-4" />
-                                              )}
-                                              {isSubitemExpanded ? 'Ocultar' : 'Ver'} lançamentos
-                                            </button>
-                                          </div>
-                                        </td>
-                                        <td className="px-2 py-2 text-center font-medium text-gray-900">
-                                          {formatCurrency(totalSubitem)}
-                                        </td>
-                                        <td className="px-2 py-2 text-center text-gray-400">-</td>
-                                      </tr>
-
-                                      {isSubitemExpanded && (
-                                        <tr className="border-b border-gray-100 bg-gray-50/60">
-                                          <td colSpan={5} className="px-4 py-4">
-                                            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                                              <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 md:flex-row md:items-start md:justify-between">
-                                                <div className="space-y-1">
-                                                  <div className="text-sm font-semibold text-gray-900">
-                                                    Lançamentos do subitem
-                                                  </div>
-                                                  <div className="text-sm text-gray-700">
-                                                    {subitem.empresaRh || item.descricao}
-                                                  </div>
-                                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                                                    <span>
-                                                      {quantidade} {quantidade === 1 ? 'lançamento' : 'lançamentos'}
-                                                    </span>
-                                                    <span>{getSubitemVinculoLabel(subitem)}</span>
-                                                    <span>Total pago: {formatCurrency(totalPago)}</span>
-                                                    <span>
-                                                      Último pagamento:{' '}
-                                                      {ultimaDataPagamento ? formatDate(ultimaDataPagamento) : '-'}
-                                                    </span>
-                                                  </div>
-                                                </div>
-
-                                                {canManageChildren && (
-                                                  <div className="flex w-full min-w-0 items-center justify-end gap-2">
-                                                    {isEditingLancamentos && (
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          void cancelEditingSubitem();
-                                                        }}
-                                                        disabled={isPersisting}
-                                                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-300"
-                                                      >
-                                                        <X className="h-4 w-4" />
-                                                        <span className="truncate">Cancelar edição</span>
-                                                      </button>
-                                                    )}
-                                                    <button
-                                                      type="button"
-                                                      onClick={handlePrimaryLancamentoAction}
-                                                      disabled={isPersisting}
-                                                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-[#004225] bg-[#004225] px-3 py-2 text-sm font-semibold text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
-                                                    >
-                                                      {isEditingLancamentos ? (
-                                                        <Save className="h-4 w-4" />
-                                                      ) : hasLancamentos ? (
-                                                        <Pencil className="h-4 w-4" />
-                                                      ) : (
-                                                        <Plus className="h-4 w-4" />
-                                                      )}
-                                                      <span className="truncate">
-                                                        {isEditingLancamentos
-                                                          ? 'Salvar lançamentos'
-                                                          : hasLancamentos
-                                                            ? 'Editar lançamentos'
-                                                            : 'Adicionar lançamento'}
-                                                      </span>
-                                                    </button>
-                                                  </div>
-                                                )}
-                                              </div>
-
-                                              <div className="mt-4 space-y-3">
-                                                {lancamentosParaExibir.length === 0 ? (
-                                                  <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500">
-                                                    Nenhum lançamento cadastrado
-                                                  </div>
-                                                ) : (
-                                                  lancamentosParaExibir.map((lancamento, index) => (
-                                                    <div
-                                                      key={lancamento.id}
-                                                      className="rounded-lg border border-gray-200 bg-gray-50 p-3"
-                                                    >
-                                                      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                                                        Lançamento {index + 1}
-                                                      </div>
-                                                      {canManageChildren && isEditingLancamentos ? (
-                                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto]">
-                                                          <MoneyInput
-                                                            valueCents={Math.round(lancamento.valor * 100)}
-                                                            onValueChange={(cents) =>
-                                                              updateLancamentoCampo(
-                                                                item.id,
-                                                                subitem.id,
-                                                                lancamento.id,
-                                                                {
-                                                                  valor: cents / 100,
-                                                                }
-                                                              )
-                                                            }
-                                                            disabled={isPersisting}
-                                                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-center text-sm"
-                                                          />
-                                                          <DatePicker
-                                                            value={lancamento.dataPag || ''}
-                                                            onChange={(value) =>
-                                                              updateLancamentoCampo(
-                                                                item.id,
-                                                                subitem.id,
-                                                                lancamento.id,
-                                                                {
-                                                                  dataPag: value,
-                                                                }
-                                                              )
-                                                            }
-                                                            placeholder="Selecionar data"
-                                                            disabled={isPersisting}
-                                                            className="h-9 min-w-[220px] rounded border-gray-300 bg-white px-2 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
-                                                          />
-                                                          <div className="flex items-center justify-end gap-2">
-                                                            <button
-                                                              type="button"
-                                                              onClick={() =>
-                                                                handleRemoveLancamento(
-                                                                  item.id,
-                                                                  subitem.id,
-                                                                  lancamento.id
-                                                                )
-                                                              }
-                                                              disabled={isPersisting}
-                                                              className="inline-flex items-center justify-center rounded border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                                                              aria-label="Excluir lançamento"
-                                                              title="Excluir lançamento"
-                                                            >
-                                                              <Trash2 className="h-4 w-4" />
-                                                            </button>
-                                                          </div>
-                                                        </div>
-                                                      ) : (
-                                                        <div className="flex flex-col gap-2 text-sm text-gray-700 sm:flex-row sm:items-center sm:justify-between">
-                                                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                                                            <span className="font-semibold text-gray-900">
-                                                              {formatCurrency(lancamento.valor)}
-                                                            </span>
-                                                            <span className="inline-flex w-fit items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600">
-                                                              {formatDate(lancamento.dataPag)}
-                                                            </span>
-                                                          </div>
-                                                          {canManageChildren ? (
-                                                            <div className="flex items-center gap-2 self-end sm:self-auto">
-                                                              <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                  handleRemoveLancamento(
-                                                                    item.id,
-                                                                    subitem.id,
-                                                                    lancamento.id
-                                                                  )
-                                                                }
-                                                                disabled={isPersisting}
-                                                                className="inline-flex items-center justify-center rounded border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                                                                aria-label="Excluir lançamento"
-                                                                title="Excluir lançamento"
-                                                              >
-                                                                <Trash2 className="h-4 w-4" />
-                                                              </button>
-                                                            </div>
-                                                          ) : null}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  ))
-                                                )}
-
-                                                {canManageChildren && isEditingLancamentos && (
-                                                  <div className="flex justify-center pt-1">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleAddLancamento(item.id, subitem.id)}
-                                                      disabled={isPersisting}
-                                                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-[#004225] bg-white text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
-                                                      aria-label="Adicionar outro lançamento"
-                                                      title="Adicionar outro lançamento"
-                                                    >
-                                                      <Plus className="h-5 w-5" />
-                                                    </button>
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </Fragment>
-                                    );
-                                  })
-                                )}
-                              </Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </ResizableTable>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
+      <BudgetItemPickerModal
+        isOpen={Boolean(rubricaPendingPaymentSelectionView)}
+        rubricaView={rubricaPendingPaymentSelectionView}
+        isPersisting={isPersisting}
+        onClose={closeRubricaPaymentSelectionModal}
+        onSelectItem={handleSelectItemForRubricaPayment}
+      />
       <AppModalShell
         isOpen={Boolean(parcelaPendingDeletion)}
         title="Excluir parcela"
-        description="Confirme a exclusao da parcela antes de continuar."
+        description="Confirme a exclusão da parcela antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteParcelaModal}
@@ -2829,7 +2758,7 @@ export default function PagamentosPlanilhaPage() {
                 Tem certeza de que deseja excluir esta parcela?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta acao remove a parcela do contrato e nao pode ser desfeita.
+                Esta ação remove a parcela do contrato e não pode ser desfeita.
               </p>
             </div>
 
@@ -2851,8 +2780,8 @@ export default function PagamentosPlanilhaPage() {
 
       <AppModalShell
         isOpen={Boolean(subitemPendingDeletion)}
-        title="Excluir subitem"
-        description="Confirme a exclusao do subitem antes de continuar."
+        title="Excluir pagamento"
+        description="Confirme a exclusão do pagamento antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteSubitemModal}
@@ -2882,7 +2811,7 @@ export default function PagamentosPlanilhaPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
-              Excluir subitem
+              Excluir pagamento
             </button>
           </div>
         }
@@ -2891,16 +2820,16 @@ export default function PagamentosPlanilhaPage() {
           <div className="space-y-4">
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-sm font-medium text-red-800">
-                Tem certeza de que deseja excluir este subitem?
+                Tem certeza de que deseja excluir este pagamento?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta acao remove o subitem e todos os lancamentos dele na edicao atual.
+                Esta ação remove o pagamento e todos os lançamentos dele na edição atual.
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Subitem selecionado
+                Pagamento selecionado
               </p>
               <p className="mt-1 font-medium text-slate-900">
                 {subitemPendingDeletion.subitem.empresaRh || subitemPendingDeletion.itemDescricao}
@@ -2908,7 +2837,7 @@ export default function PagamentosPlanilhaPage() {
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>Item: {subitemPendingDeletion.itemDescricao}</span>
                 <span>
-                  Lancamentos: {subitemPendingDeletion.subitem.lancamentos.length}
+                  Lançamentos: {subitemPendingDeletion.subitem.lancamentos.length}
                 </span>
                 <span>{getSubitemVinculoLabel(subitemPendingDeletion.subitem)}</span>
               </div>
@@ -2919,8 +2848,8 @@ export default function PagamentosPlanilhaPage() {
 
       <AppModalShell
         isOpen={Boolean(lancamentoPendingDeletion)}
-        title="Excluir lancamento"
-        description="Confirme a exclusao do lancamento antes de continuar."
+        title="Excluir lançamento"
+        description="Confirme a exclusão do lançamento antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteLancamentoModal}
@@ -2951,7 +2880,7 @@ export default function PagamentosPlanilhaPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
-              Excluir lancamento
+              Excluir lançamento
             </button>
           </div>
         }
@@ -2960,16 +2889,16 @@ export default function PagamentosPlanilhaPage() {
           <div className="space-y-4">
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-sm font-medium text-red-800">
-                Tem certeza de que deseja excluir este lancamento?
+                Tem certeza de que deseja excluir este lançamento?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta acao remove o lancamento da edicao atual do subitem.
+                Esta ação remove o lançamento da edição atual do pagamento.
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Lancamento selecionado
+                Lançamento selecionado
               </p>
               <p className="mt-1 font-medium text-slate-900">
                 {lancamentoPendingDeletion.subitemNome || lancamentoPendingDeletion.itemDescricao}
@@ -2977,6 +2906,9 @@ export default function PagamentosPlanilhaPage() {
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>Item: {lancamentoPendingDeletion.itemDescricao}</span>
                 <span>Valor: {formatCurrency(lancamentoPendingDeletion.lancamento.valor)}</span>
+                <span>
+                  Status: {getPaymentStatusLabel(lancamentoPendingDeletion.lancamento.paymentStatus)}
+                </span>
                 <span>
                   Data: {formatDate(lancamentoPendingDeletion.lancamento.dataPag)}
                 </span>
@@ -2988,13 +2920,13 @@ export default function PagamentosPlanilhaPage() {
 
       <SubitemModal
         isOpen={isSubitemModalOpen}
-        title={subitemModalEditingContext ? 'Editar subitem' : 'Novo subitem'}
+        title={subitemModalEditingContext ? 'Editar pagamento' : 'Novo pagamento'}
         subtitle={
           subitemModalEditingContext
-            ? 'Atualize o nome do subitem e o vinculo dele dentro do projeto.'
-            : 'Cadastre o nome do subitem e escolha como ele sera vinculado dentro do projeto.'
+            ? 'Atualize o nome do pagamento e o vínculo dele dentro do projeto.'
+            : 'Cadastre o nome do pagamento e escolha como ele será vinculado dentro do projeto.'
         }
-        submitLabel={subitemModalEditingContext ? 'Salvar subitem' : 'Adicionar subitem'}
+        submitLabel={subitemModalEditingContext ? 'Salvar pagamento' : 'Adicionar pagamento'}
         form={subitemModalForm}
         error={subitemModalError}
         linksError={projectLinksError}
@@ -3033,7 +2965,7 @@ export default function PagamentosPlanilhaPage() {
         }}
         onSubmit={() => {
           if (!subitemModalItemId) {
-            setSubitemModalError('Item inválido para criar subitem.');
+            setSubitemModalError('Item inválido para criar pagamento.');
             return;
           }
 
@@ -3072,6 +3004,931 @@ export default function PagamentosPlanilhaPage() {
   );
 }
 
+
+type LaunchUpdatePatch = Partial<Pick<Lancamento, 'valor' | 'dataPag' | 'paymentStatus' | 'paidBy'>>;
+
+type SharedPaymentPresentationHandlers = {
+  canManageChildren: boolean;
+  loadingAccess: boolean;
+  isPersisting: boolean;
+  onStartAddPayment: (itemId: ID) => void;
+  onStartEditPayment: (itemId: ID, paymentId: ID) => void;
+  onRemovePayment: (itemId: ID, paymentId: ID) => void;
+  onTogglePaymentLaunches: (paymentKey: ID) => void;
+  onEditLaunches: (itemId: ID, paymentId: ID) => void;
+  onSaveLaunches: () => void;
+  onCancelLaunchEditing: () => void;
+  onAddLaunch: (itemId: ID, paymentId: ID) => void;
+  onUpdateLaunch: (itemId: ID, paymentId: ID, launchId: ID, patch: LaunchUpdatePatch) => void;
+  onRemoveLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
+  onMarkLaunchPaid: (itemId: ID, paymentId: ID, launchId: ID) => Promise<void>;
+};
+
+type RubricasHierarchySectionProps = SharedPaymentPresentationHandlers & {
+  rubricaViews: RubricaViewModel[];
+  isLoading: boolean;
+  loadError: string | null;
+  onToggleRubrica: (rubricaId: ID) => void;
+  onStartAddPaymentFromRubrica: (rubricaId: ID) => void;
+};
+
+type RubricaCardProps = SharedPaymentPresentationHandlers & {
+  view: RubricaViewModel;
+  onToggleRubrica: (rubricaId: ID) => void;
+  onStartAddPaymentFromRubrica: (rubricaId: ID) => void;
+};
+
+type BudgetItemSectionProps = SharedPaymentPresentationHandlers & {
+  view: ItemViewModel;
+};
+
+type PaymentCardProps = Omit<SharedPaymentPresentationHandlers, 'onStartAddPayment'> & {
+  view: PaymentViewModel;
+};
+
+type PaymentLaunchListProps = Pick<
+  SharedPaymentPresentationHandlers,
+  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+> & {
+  view: PaymentViewModel;
+};
+
+type LaunchRowProps = Pick<
+  SharedPaymentPresentationHandlers,
+  'canManageChildren' | 'isPersisting' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+> & {
+  itemId: ID;
+  paymentId: ID;
+  launch: Lancamento;
+  index: number;
+  isEditing: boolean;
+};
+
+function SummaryMetricCard({
+  label,
+  value,
+  description,
+  tooltip,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string;
+  description: string;
+  tooltip: string;
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+}) {
+  const toneStyles = {
+    emerald: {
+      surface: 'border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white',
+      accent: 'from-emerald-500 to-teal-500',
+      eyebrow: 'text-emerald-900/80',
+      value: 'text-emerald-950',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800',
+    },
+    slate: {
+      surface: 'border-slate-200 bg-gradient-to-br from-slate-100 via-white to-white',
+      accent: 'from-slate-500 to-slate-700',
+      eyebrow: 'text-slate-700',
+      value: 'text-slate-950',
+      dot: 'bg-slate-500',
+      tooltipButton:
+        'border-slate-200 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-800',
+    },
+    amber: {
+      surface: 'border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white',
+      accent: 'from-amber-400 to-orange-500',
+      eyebrow: 'text-amber-900/80',
+      value: 'text-amber-700',
+      dot: 'bg-amber-500',
+      tooltipButton:
+        'border-amber-200 bg-white/80 text-amber-700 hover:border-amber-300 hover:text-amber-800',
+    },
+    green: {
+      surface: 'border-lime-200/80 bg-gradient-to-br from-lime-50 via-white to-white',
+      accent: 'from-lime-500 to-emerald-500',
+      eyebrow: 'text-lime-900/80',
+      value: 'text-emerald-700',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-lime-200 bg-white/80 text-emerald-700 hover:border-lime-300 hover:text-emerald-800',
+    },
+    blue: {
+      surface: 'border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-white',
+      accent: 'from-blue-500 to-indigo-500',
+      eyebrow: 'text-blue-900/80',
+      value: 'text-blue-700',
+      dot: 'bg-blue-500',
+      tooltipButton:
+        'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+  }[tone];
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${toneStyles.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${toneStyles.dot}`} />
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneStyles.eyebrow}`}>
+              {label}
+            </p>
+          </div>
+          <p className={`mt-3 text-xl font-semibold tracking-tight ${toneStyles.value}`}>{value}</p>
+          <p className="mt-2 text-sm text-slate-500">{description}</p>
+        </div>
+
+        <div className="group/tooltip relative shrink-0">
+          <button
+            type="button"
+            aria-label={tooltip}
+            title={tooltip}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${toneStyles.tooltipButton}`}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-56 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white shadow-xl group-hover/tooltip:block group-focus-within/tooltip:block">
+            {tooltip}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompactMetricCard({
+  label,
+  value,
+  toneClassName = 'text-slate-900',
+}: {
+  label: string;
+  value: string;
+  toneClassName?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 text-sm font-semibold ${toneClassName}`}>{value}</p>
+    </div>
+  );
+}
+
+function getPaymentRollupStatus(view: PaymentViewModel) {
+  const lancamentos = view.payment.lancamentos ?? [];
+  const hasPaid = lancamentos.some((lancamento) => lancamento.paymentStatus === 'PAGO');
+  const hasReserved = lancamentos.some((lancamento) => lancamento.paymentStatus === 'RESERVADO');
+
+  if (lancamentos.length === 0) {
+    return {
+      label: 'Sem lançamentos',
+      className: 'border-slate-200 bg-slate-50 text-slate-600',
+    };
+  }
+
+  if (hasPaid && hasReserved) {
+    return {
+      label: 'Misto',
+      className: 'border-blue-200 bg-blue-50 text-blue-700',
+    };
+  }
+
+  if (hasReserved) {
+    return {
+      label: 'Reservado',
+      className: 'border-amber-200 bg-amber-50 text-amber-700',
+    };
+  }
+
+  return {
+    label: 'Pago',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  };
+}
+
+function PaymentsFinancialSummarySection({
+  totalRecebido,
+  totalPago,
+  totalReservado,
+  saldoRealContrato,
+  saldoProjetoContrato,
+}: {
+  totalRecebido: number;
+  totalPago: number;
+  totalReservado: number;
+  saldoRealContrato: number;
+  saldoProjetoContrato: number;
+}) {
+  const metrics: Array<{
+    label: string;
+    value: string;
+    description: string;
+    tooltip: string;
+    tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+  }> = [
+    {
+      label: 'Receitas recebidas',
+      value: formatCurrency(totalRecebido),
+      description: 'Entradas financeiras confirmadas',
+      tooltip: 'Soma de todas as entradas já recebidas no projeto.',
+      tone: 'emerald' as const,
+    },
+    {
+      label: 'Pagamentos efetivados',
+      value: formatCurrency(totalPago),
+      description: 'Saídas já realizadas',
+      tooltip: 'Considera apenas lançamentos marcados como pagos.',
+      tone: 'slate' as const,
+    },
+    {
+      label: 'Reservas pendentes',
+      value: formatCurrency(totalReservado),
+      description: 'Valores separados para pagamentos futuros',
+      tooltip: 'Valores reservados para pagamentos futuros, ainda não efetivados.',
+      tone: 'amber' as const,
+    },
+    {
+      label: 'Caixa disponível',
+      value: formatCurrency(saldoRealContrato),
+      description: 'Disponível antes das reservas',
+      tooltip: 'Receitas recebidas menos pagamentos efetivados.',
+      tone: saldoRealContrato < 0 ? 'amber' : 'green',
+    },
+    {
+      label: 'Disponível após reservas',
+      value: formatCurrency(saldoProjetoContrato),
+      description: 'Saldo realmente livre do projeto',
+      tooltip: 'Caixa disponível menos os valores reservados para pagamentos futuros.',
+      tone: saldoProjetoContrato < 0 ? 'amber' : 'blue',
+    },
+  ];
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-5 shadow-sm md:p-6">
+      <div className="flex flex-col gap-1.5">
+        <h4 className="text-lg font-semibold text-slate-900">Posição financeira do projeto</h4>
+        <p className="text-sm text-slate-500">
+          Acompanhe o que já entrou, o que já saiu, o que está reservado e o saldo realmente disponível.
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {metrics.map((metric) => (
+          <SummaryMetricCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            description={metric.description}
+            tooltip={metric.tooltip}
+            tone={metric.tone}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RubricasHierarchySection({
+  rubricaViews,
+  isLoading,
+  loadError,
+  onToggleRubrica,
+  ...handlers
+}: RubricasHierarchySectionProps) {
+  if (rubricaViews.length === 0 && !isLoading && !loadError) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+        Nenhuma rubrica encontrada para montar a tela de pagamentos.
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-5">
+      {rubricaViews.map((view) => (
+        <RubricaCard key={view.rubrica.id} view={view} onToggleRubrica={onToggleRubrica} {...handlers} />
+      ))}
+    </section>
+  );
+}
+
+function RubricaCard({
+  view,
+  canManageChildren,
+  loadingAccess,
+  onToggleRubrica,
+  onStartAddPaymentFromRubrica,
+  ...handlers
+}: RubricaCardProps) {
+  const canShowManageActions = canManageChildren && !loadingAccess;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-white p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <button
+            type="button"
+            onClick={() => onToggleRubrica(view.rubrica.id)}
+            className="flex flex-1 items-start gap-3 text-left"
+          >
+            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
+              {view.rubrica.expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </span>
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold text-slate-900">{view.rubrica.nome}</h3>
+                {view.rubrica.codigo ? (
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {view.rubrica.codigo}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+                <span>{view.totalPagamentosRubrica} pagamentos</span>
+                <MetaBullet />
+                <span>{view.totalLancamentosRubrica} lançamentos</span>
+                <MetaBullet />
+                <span>{view.itemViews.length} itens de apoio</span>
+              </div>
+            </div>
+          </button>
+
+          {canShowManageActions ? (
+            <button
+              type="button"
+              onClick={() => onStartAddPaymentFromRubrica(view.rubrica.id)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#004225] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#003319]"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar pagamento
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <CompactMetricCard label="Orçado" value={formatCurrency(view.orcadoRubrica)} />
+          <CompactMetricCard label="Comprometido" value={formatCurrency(view.comprometidoRubrica)} />
+          <CompactMetricCard label="Pago" value={formatCurrency(view.pagoRubrica)} />
+          <CompactMetricCard
+            label="Reservado"
+            value={formatCurrency(view.reservadoRubrica)}
+            toneClassName="text-amber-600"
+          />
+          <CompactMetricCard
+            label="Saldo"
+            value={formatCurrency(view.saldoRubrica)}
+            toneClassName={view.saldoRubrica < 0 ? 'text-red-600' : 'text-blue-600'}
+          />
+        </div>
+      </div>
+
+      {view.rubrica.expanded ? (
+        <div className="space-y-4 p-4">
+          {view.itemViews.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+              <AlertCircle className="h-5 w-5" />
+              <span>Nenhum item cadastrado nesta rubrica.</span>
+            </div>
+          ) : (
+            view.itemViews.map((itemView) => (
+              <BudgetItemSection
+                key={itemView.item.id}
+                view={itemView}
+                canManageChildren={canManageChildren}
+                loadingAccess={loadingAccess}
+                {...handlers}
+              />
+            ))
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function BudgetItemSection({
+  view,
+  canManageChildren,
+  loadingAccess,
+  onStartAddPayment,
+  ...handlers
+}: BudgetItemSectionProps) {
+  const canShowManageActions = canManageChildren && !loadingAccess;
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-slate-100/80 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Item de apoio da rubrica</div>
+          <h4 className="text-base font-semibold text-slate-900">{view.item.descricao}</h4>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+            <span>Valor {formatCurrency(view.totalItem)}</span>
+            <MetaBullet />
+            <span>{view.totalPagamentosItem} pagamentos</span>
+            <MetaBullet />
+            <span>{view.totalLancamentosItem} lançamentos</span>
+          </div>
+        </div>
+
+        {canShowManageActions ? (
+          <button
+            type="button"
+            onClick={() => onStartAddPayment(view.item.id)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-medium text-[#004225] transition-colors hover:bg-emerald-50"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar pagamento neste item
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CompactMetricCard label="Pago" value={formatCurrency(view.pagoItem)} />
+        <CompactMetricCard
+          label="Reservado"
+          value={formatCurrency(view.reservadoItem)}
+          toneClassName="text-amber-600"
+        />
+        <CompactMetricCard label="Comprometido" value={formatCurrency(view.comprometidoItem)} />
+        <CompactMetricCard
+          label="Saldo"
+          value={formatCurrency(view.saldoItem)}
+          toneClassName={view.saldoItem < 0 ? 'text-red-600' : 'text-blue-600'}
+        />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {view.paymentViews.length === 0 ? (
+          <EmptyPaymentsState canShowManageActions={canShowManageActions} onAddPayment={() => onStartAddPayment(view.item.id)} />
+        ) : (
+          view.paymentViews.map((paymentView) => (
+            <PaymentCard
+              key={paymentView.key}
+              view={paymentView}
+              canManageChildren={canManageChildren}
+              loadingAccess={loadingAccess}
+              {...handlers}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PaymentCard({
+  view,
+  canManageChildren,
+  loadingAccess,
+  isPersisting,
+  onStartEditPayment,
+  onRemovePayment,
+  onTogglePaymentLaunches,
+  onEditLaunches,
+  onSaveLaunches,
+  onCancelLaunchEditing,
+  ...handlers
+}: PaymentCardProps) {
+  const canShowManageActions = canManageChildren && !loadingAccess;
+  const status = getPaymentRollupStatus(view);
+  const PrimaryActionIcon = view.isEditingLancamentos ? Save : view.hasLancamentos ? Pencil : Plus;
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pagamento</span>
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${status.className}`}>
+                {status.label}
+              </span>
+            </div>
+            <h5 className="text-base font-semibold text-slate-900">{view.payment.empresaRh || view.itemDescricao}</h5>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+              <span>Item base: {view.itemDescricao}</span>
+              <MetaBullet />
+              <span>{view.vinculoLabel}</span>
+              <MetaBullet />
+              <span>{view.quantidade} {view.quantidade === 1 ? 'lançamento' : 'lançamentos'}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onTogglePaymentLaunches(view.key)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              {view.isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {view.isExpanded ? 'Ocultar lançamentos' : 'Ver lançamentos'}
+            </button>
+
+            {canShowManageActions ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onStartEditPayment(view.itemId, view.payment.id)}
+                  disabled={isPersisting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar pagamento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemovePayment(view.itemId, view.payment.id)}
+                  disabled={isPersisting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Excluir
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <CompactMetricCard label="Lançamentos" value={String(view.quantidade)} />
+          <CompactMetricCard label="Total comprometido" value={formatCurrency(view.totalComprometido)} />
+          <CompactMetricCard label="Pago" value={formatCurrency(view.totalPago)} />
+          <CompactMetricCard
+            label="Reservado"
+            value={formatCurrency(view.totalReservado)}
+            toneClassName="text-amber-600"
+          />
+          <CompactMetricCard
+            label="Último pagamento"
+            value={view.ultimaDataPagamentoPago ? formatDate(view.ultimaDataPagamentoPago) : '-'}
+          />
+        </div>
+
+        {canShowManageActions ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {view.isEditingLancamentos ? (
+              <button
+                type="button"
+                onClick={onCancelLaunchEditing}
+                disabled={isPersisting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+                Cancelar edição
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (view.isEditingLancamentos) {
+                  onSaveLaunches();
+                  return;
+                }
+
+                if (view.hasLancamentos) {
+                  onEditLaunches(view.itemId, view.payment.id);
+                  return;
+                }
+
+                handlers.onAddLaunch(view.itemId, view.payment.id);
+              }}
+              disabled={isPersisting}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <PrimaryActionIcon className="h-4 w-4" />
+              {view.isEditingLancamentos
+                ? 'Salvar lançamentos'
+                : view.hasLancamentos
+                  ? 'Editar lançamentos'
+                  : 'Adicionar lançamento'}
+            </button>
+          </div>
+        ) : null}
+
+        {view.isExpanded ? (
+          <PaymentLaunchList
+            view={view}
+            canManageChildren={canManageChildren}
+            isPersisting={isPersisting}
+            onAddLaunch={handlers.onAddLaunch}
+            onUpdateLaunch={handlers.onUpdateLaunch}
+            onRemoveLaunch={handlers.onRemoveLaunch}
+            onMarkLaunchPaid={handlers.onMarkLaunchPaid}
+          />
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function PaymentLaunchList({
+  view,
+  canManageChildren,
+  isPersisting,
+  onAddLaunch,
+  onUpdateLaunch,
+  onRemoveLaunch,
+  onMarkLaunchPaid,
+}: PaymentLaunchListProps) {
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-slate-900">Lançamentos do pagamento</div>
+          <div className="text-sm text-slate-700">{view.payment.empresaRh || view.itemDescricao}</div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span>{view.quantidade} {view.quantidade === 1 ? 'lançamento' : 'lançamentos'}</span>
+            <MetaBullet />
+            <span>{view.vinculoLabel}</span>
+            <MetaBullet />
+            <span>Pago: {formatCurrency(view.totalPago)}</span>
+            <MetaBullet />
+            <span>Reservado: {formatCurrency(view.totalReservado)}</span>
+          </div>
+        </div>
+
+        {canManageChildren && view.isEditingLancamentos ? (
+          <button
+            type="button"
+            onClick={() => onAddLaunch(view.itemId, view.payment.id)}
+            disabled={isPersisting}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#004225] bg-white px-4 py-2 text-sm font-medium text-[#004225] transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Novo lançamento
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {view.lancamentosParaExibir.length === 0 ? (
+          <EmptyLaunchesState />
+        ) : (
+          view.lancamentosParaExibir.map((launch, index) => (
+            <LaunchRow
+              key={launch.id}
+              itemId={view.itemId}
+              paymentId={view.payment.id}
+              launch={launch}
+              index={index}
+              isEditing={view.isEditingLancamentos}
+              canManageChildren={canManageChildren}
+              isPersisting={isPersisting}
+              onUpdateLaunch={onUpdateLaunch}
+              onRemoveLaunch={onRemoveLaunch}
+              onMarkLaunchPaid={onMarkLaunchPaid}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LaunchRow({
+  itemId,
+  paymentId,
+  launch,
+  index,
+  isEditing,
+  canManageChildren,
+  isPersisting,
+  onUpdateLaunch,
+  onRemoveLaunch,
+  onMarkLaunchPaid,
+}: LaunchRowProps) {
+  if (canManageChildren && isEditing) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto]">
+          <MoneyInput
+            valueCents={Math.round(launch.valor * 100)}
+            onValueChange={(cents) =>
+              onUpdateLaunch(itemId, paymentId, launch.id, {
+                valor: cents / 100,
+              })
+            }
+            disabled={isPersisting}
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-sm"
+          />
+          <select
+            value={launch.paymentStatus}
+            onChange={(event) =>
+              onUpdateLaunch(itemId, paymentId, launch.id, {
+                paymentStatus: event.target.value as ExpensePaymentStatusEnum,
+              })
+            }
+            disabled={isPersisting}
+            className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+          >
+            <option value="PAGO">Pago</option>
+            <option value="RESERVADO">Reservado</option>
+          </select>
+          <select
+            value={launch.paidBy}
+            onChange={(event) =>
+              onUpdateLaunch(itemId, paymentId, launch.id, {
+                paidBy: event.target.value as ExpensePaidByEnum,
+              })
+            }
+            disabled={isPersisting}
+            className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+          >
+            <option value="EMPRESA">Empresa</option>
+            <option value="PARCEIRO">Parceiro</option>
+          </select>
+          <DatePicker
+            value={launch.dataPag || ''}
+            onChange={(value) =>
+              onUpdateLaunch(itemId, paymentId, launch.id, {
+                dataPag: value,
+              })
+            }
+            placeholder="Selecionar data"
+            disabled={isPersisting}
+            className="h-10 min-w-[220px] rounded-xl border-slate-300 bg-white px-2 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => onRemoveLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Excluir lançamento"
+              title="Excluir lançamento"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-base font-semibold text-slate-900">{formatCurrency(launch.valor)}</span>
+          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPaymentStatusBadgeClassName(launch.paymentStatus)}`}>
+            {getPaymentStatusLabel(launch.paymentStatus)}
+          </span>
+          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPaidByBadgeClassName(launch.paidBy)}`}>
+            {getPaidByLabel(launch.paidBy)}
+          </span>
+          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            {formatDate(launch.dataPag)}
+          </span>
+        </div>
+
+        {canManageChildren ? (
+          <div className="flex items-center gap-2 self-end lg:self-auto">
+            {launch.paymentStatus === 'RESERVADO' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void onMarkLaunchPaid(itemId, paymentId, launch.id);
+                }}
+                disabled={isPersisting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" />
+                Tornar pago
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onRemoveLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Excluir lançamento"
+              title="Excluir lançamento"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EmptyPaymentsState({
+  canShowManageActions,
+  onAddPayment,
+}: {
+  canShowManageActions: boolean;
+  onAddPayment: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+      <div className="flex flex-col items-center gap-3">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+          <AlertCircle className="h-5 w-5" />
+        </div>
+        <div className="space-y-1">
+          <p className="font-medium text-slate-700">Nenhum pagamento cadastrado neste item.</p>
+          <p>Crie o primeiro pagamento para depois registrar os lançamentos.</p>
+        </div>
+        {canShowManageActions ? (
+          <button
+            type="button"
+            onClick={onAddPayment}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-[#004225] transition-colors hover:bg-emerald-50"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar pagamento
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EmptyLaunchesState() {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+      Nenhum lançamento cadastrado para este pagamento.
+    </div>
+  );
+}
+
+function BudgetItemPickerModal({
+  isOpen,
+  rubricaView,
+  isPersisting,
+  onClose,
+  onSelectItem,
+}: {
+  isOpen: boolean;
+  rubricaView: RubricaViewModel | null;
+  isPersisting: boolean;
+  onClose: () => void;
+  onSelectItem: (itemId: ID) => void;
+}) {
+  if (!isOpen || !rubricaView) {
+    return null;
+  }
+
+  return (
+    <AppModalShell
+      isOpen={isOpen}
+      title="Escolher item para o novo pagamento"
+      description={`A rubrica ${rubricaView.rubrica.nome} possui mais de um item de apoio. Escolha em qual item o pagamento deve ser criado.`}
+      icon={<Plus className="h-5 w-5" />}
+      tone="brand"
+      onClose={onClose}
+      maxWidthClassName="max-w-2xl"
+      closeDisabled={isPersisting}
+      footer={
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPersisting}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3 p-6">
+        {rubricaView.itemViews.map((itemView) => (
+          <button
+            key={itemView.item.id}
+            type="button"
+            onClick={() => onSelectItem(itemView.item.id)}
+            disabled={isPersisting}
+            className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-900">{itemView.item.descricao}</p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                  <span>Valor {formatCurrency(itemView.totalItem)}</span>
+                  <MetaBullet />
+                  <span>{itemView.totalPagamentosItem} pagamentos</span>
+                  <MetaBullet />
+                  <span>Saldo {formatCurrency(itemView.saldoItem)}</span>
+                </div>
+              </div>
+              <ChevronRight className="mt-0.5 h-4 w-4 text-slate-400" />
+            </div>
+          </button>
+        ))}
+      </div>
+    </AppModalShell>
+  );
+}
 function ModalShell({
   title,
   subtitle,
@@ -3164,7 +4021,7 @@ function SubitemModal({
       <div className="space-y-5 p-6">
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-gray-700">
-            Nome do subitem <span className="text-red-500">*</span>
+            Nome do pagamento <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -3178,7 +4035,7 @@ function SubitemModal({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">Vínculo do subitem</label>
+          <label className="block text-sm font-medium text-gray-700">V?nculo do pagamento</label>
           <select
             value={form.vinculoTipo}
             onChange={(event) => {
@@ -3588,7 +4445,7 @@ function CreateLinkedCompanyModal({
     const state = form.state.trim().toUpperCase().slice(0, 2);
 
     if (!name) {
-      setError('Informe a razão social da empresa.');
+      setError('Informe a raz?o social da empresa.');
       return;
     }
 
@@ -3603,7 +4460,7 @@ function CreateLinkedCompanyModal({
     }
 
     if (!email || !phone || !address || !city || !state) {
-      setError('Preencha e-mail, telefone, endereço, cidade e UF para cadastrar a empresa.');
+      setError('Preencha e-mail, telefone, endere?o, cidade e UF para cadastrar a empresa.');
       return;
     }
 
@@ -3835,7 +4692,7 @@ function LinkExistingPersonModal({
   return (
     <ModalShell
       title="Vincular pessoa existente"
-      subtitle="Escolha uma pessoa ja cadastrada na base para vinculá-la ao projeto."
+      subtitle="Escolha uma pessoa já cadastrada na base para vinculá-la ao projeto."
       onClose={onClose}
       maxWidthClassName="max-w-xl"
       zIndexClassName="z-[60]"
@@ -3847,7 +4704,7 @@ function LinkExistingPersonModal({
           </div>
         ) : people.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
-            Todas as pessoas cadastradas já estao vinculadas a este projeto.
+            Todas as pessoas cadastradas já estão vinculadas a este projeto.
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -3953,7 +4810,7 @@ function LinkExistingCompanyModal({
   return (
     <ModalShell
       title="Vincular empresa existente"
-      subtitle="Escolha uma empresa ja cadastrada na base para vinculá-la ao projeto."
+      subtitle="Escolha uma empresa já cadastrada na base para vinculá-la ao projeto."
       onClose={onClose}
       maxWidthClassName="max-w-xl"
       zIndexClassName="z-[60]"
@@ -3965,7 +4822,7 @@ function LinkExistingCompanyModal({
           </div>
         ) : companies.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
-            Todas as empresas cadastradas já estao vinculadas a este projeto.
+            Todas as empresas cadastradas já estão vinculadas a este projeto.
           </div>
         ) : (
           <div className="space-y-1.5">
