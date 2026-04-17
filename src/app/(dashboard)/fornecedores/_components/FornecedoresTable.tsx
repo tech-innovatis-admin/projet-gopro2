@@ -8,17 +8,10 @@ import { ResizableTable } from "@/components/ui/resizable-table";
 import {
   type Fornecedor,
   type FornecedoresFiltersState,
-  CATEGORIA_LABELS,
-  CATEGORIA_COLORS,
   STATUS_CONFIG,
-  type FornecedorCategoria,
 } from "../types";
 import { getContratosCountByFornecedor, getContratosByFornecedor } from "../mockData";
 import { StarRating } from "@/components/ui/StarRating";
-
-// =============================================================================
-// TABELA DE FORNECEDORES
-// =============================================================================
 
 interface FornecedoresTableProps {
   fornecedores: Fornecedor[];
@@ -31,17 +24,14 @@ export function FornecedoresTable({
   filters,
   onFiltersChange,
 }: FornecedoresTableProps) {
-  // Handler para ordenação
   const handleSort = useCallback(
     (column: "nome" | "uf" | "municipio" | "status") => {
       if (filters.sortBy === column) {
-        // Alterna direção
         onFiltersChange({
           ...filters,
           sortDir: filters.sortDir === "asc" ? "desc" : "asc",
         });
       } else {
-        // Nova coluna, começa ascendente
         onFiltersChange({
           ...filters,
           sortBy: column,
@@ -52,7 +42,6 @@ export function FornecedoresTable({
     [filters, onFiltersChange]
   );
 
-  // Ícone de ordenação
   const SortIcon = useCallback(
     ({ column }: { column: "nome" | "uf" | "municipio" | "status" }) => {
       if (filters.sortBy !== column) {
@@ -67,7 +56,6 @@ export function FornecedoresTable({
     [filters.sortBy, filters.sortDir]
   );
 
-  // Paginação
   const paginatedFornecedores = useMemo(() => {
     const start = (filters.page - 1) * filters.pageSize;
     const end = start + filters.pageSize;
@@ -76,28 +64,24 @@ export function FornecedoresTable({
 
   const totalPages = Math.ceil(fornecedores.length / filters.pageSize);
 
-  // Gera iniciais do nome
-  const getInitials = (nome: string): string => {
-    return nome
+  const getInitials = (nome: string): string =>
+    nome
       .split(" ")
       .map((n) => n[0])
       .slice(0, 2)
       .join("")
       .toUpperCase();
-  };
 
-  // Calcula média de avaliações de um fornecedor
   const getMediaAvaliacoes = (fornecedorId: string): number => {
     const contratos = getContratosByFornecedor(fornecedorId);
     const avaliacoes = contratos
       .map((c) => c.avaliacao?.nota)
       .filter((nota): nota is number => nota !== undefined && nota > 0);
-    
+
     if (avaliacoes.length === 0) return 0;
     return avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length;
   };
 
-  // Estado vazio
   if (fornecedores.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -112,22 +96,13 @@ export function FornecedoresTable({
     );
   }
 
-  // Configuração de larguras padrão das colunas
-  const defaultColumnWidths = [
-    250, // Fornecedor (nome + CNPJ)
-    180, // Categorias
-    120, // Avaliação
-    150, // Localização
-    120, // Contratos
-    100, // Status
-  ];
+  const defaultColumnWidths = [280, 120, 170, 130, 110];
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-      {/* Tabela com scroll */}
       <div className="flex-1 overflow-auto custom-scrollbar">
         <ResizableTable
-          columnCount={6}
+          columnCount={5}
           defaultWidths={defaultColumnWidths}
           minColumnWidth={80}
           className="w-full"
@@ -142,11 +117,6 @@ export function FornecedoresTable({
                   Fornecedor
                   <SortIcon column="nome" />
                 </button>
-              </th>
-              <th className="text-center px-4 py-3">
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                  Categorias
-                </span>
               </th>
               <th className="text-center px-4 py-3">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
@@ -184,11 +154,7 @@ export function FornecedoresTable({
               const statusConfig = STATUS_CONFIG[fornecedor.status];
 
               return (
-                <tr
-                  key={fornecedor.id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  {/* Nome */}
+                <tr key={fornecedor.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <Link
                       href={`/fornecedores/${fornecedor.id}`}
@@ -204,34 +170,12 @@ export function FornecedoresTable({
                           {fornecedor.nome}
                         </p>
                         {fornecedor.cnpj && (
-                          <p className="text-xs text-gray-500 truncate">
-                            {fornecedor.cnpj}
-                          </p>
+                          <p className="text-xs text-gray-500 truncate">{fornecedor.cnpj}</p>
                         )}
                       </div>
                     </Link>
                   </td>
 
-                  {/* Categorias */}
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex flex-wrap gap-1 justify-center">
-                      {fornecedor.categorias.slice(0, 2).map((cat) => (
-                        <span
-                          key={cat}
-                          className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700"
-                        >
-                          {CATEGORIA_LABELS[cat as FornecedorCategoria] || cat}
-                        </span>
-                      ))}
-                      {fornecedor.categorias.length > 2 && (
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                          +{fornecedor.categorias.length - 2}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Avaliação */}
                   <td className="px-4 py-3 text-center">
                     {(() => {
                       const media = getMediaAvaliacoes(fornecedor.id);
@@ -245,13 +189,11 @@ export function FornecedoresTable({
                     })()}
                   </td>
 
-                  {/* Localização */}
                   <td className="px-4 py-3">
                     <p className="text-sm text-gray-900">{fornecedor.municipio}</p>
                     <p className="text-xs text-gray-500">{fornecedor.uf}</p>
                   </td>
 
-                  {/* Contratos */}
                   <td className="px-4 py-3 text-center">
                     {contratosCount > 0 ? (
                       <Link
@@ -265,7 +207,6 @@ export function FornecedoresTable({
                     )}
                   </td>
 
-                  {/* Status */}
                   <td className="px-4 py-3 text-center">
                     <span
                       className={cn(
@@ -277,7 +218,6 @@ export function FornecedoresTable({
                       {statusConfig.label}
                     </span>
                   </td>
-
                 </tr>
               );
             })}
@@ -285,7 +225,6 @@ export function FornecedoresTable({
         </ResizableTable>
       </div>
 
-      {/* Paginação */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
           <div className="text-sm text-gray-500">
@@ -293,9 +232,7 @@ export function FornecedoresTable({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() =>
-                onFiltersChange({ ...filters, page: filters.page - 1 })
-              }
+              onClick={() => onFiltersChange({ ...filters, page: filters.page - 1 })}
               disabled={filters.page === 1}
               className={cn(
                 "px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors",
@@ -307,19 +244,13 @@ export function FornecedoresTable({
               Anterior
             </button>
 
-            {/* Números de página */}
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (filters.page <= 3) {
-                  pageNum = i + 1;
-                } else if (filters.page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = filters.page - 2 + i;
-                }
+                if (totalPages <= 5) pageNum = i + 1;
+                else if (filters.page <= 3) pageNum = i + 1;
+                else if (filters.page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = filters.page - 2 + i;
 
                 return (
                   <button
@@ -339,9 +270,7 @@ export function FornecedoresTable({
             </div>
 
             <button
-              onClick={() =>
-                onFiltersChange({ ...filters, page: filters.page + 1 })
-              }
+              onClick={() => onFiltersChange({ ...filters, page: filters.page + 1 })}
               disabled={filters.page === totalPages}
               className={cn(
                 "px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors",
@@ -358,3 +287,4 @@ export function FornecedoresTable({
     </div>
   );
 }
+

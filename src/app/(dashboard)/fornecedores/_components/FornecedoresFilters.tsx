@@ -5,20 +5,12 @@ import { Search, X, ChevronDown, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   type FornecedoresFiltersState,
-  type FornecedorCategoria,
-  type FornecedorServico,
   type FornecedorStatus,
-  CATEGORIA_LABELS,
-  SERVICO_LABELS,
   UF_LIST,
   STATUS_CONFIG,
   INITIAL_FILTERS_STATE,
 } from "../types";
 import { getMunicipiosByUF, getAllMunicipios } from "../mockData";
-
-// =============================================================================
-// COMPONENTE DE FILTROS DE FORNECEDORES
-// =============================================================================
 
 interface FornecedoresFiltersProps {
   filters: FornecedoresFiltersState;
@@ -33,7 +25,6 @@ export function FornecedoresFilters({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-  // Debounce para busca por nome
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchValue !== filters.q) {
@@ -44,35 +35,29 @@ export function FornecedoresFilters({
     return () => clearTimeout(timer);
   }, [searchValue, filters, onFiltersChange]);
 
-  // Lista de municípios baseada no UF selecionado (ou todos se não houver UF)
   const municipiosDisponiveis = useMemo(() => {
     return filters.uf ? getMunicipiosByUF(filters.uf) : getAllMunicipios();
   }, [filters.uf]);
 
-  // Contagem de filtros ativos
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (filters.uf) count++;
     if (filters.municipio) count++;
-    if (filters.categorias.length > 0) count++;
-    if (filters.servicos.length > 0) count++;
     if (filters.status) count++;
     return count;
   }, [filters]);
 
-  // Handler para limpar todos os filtros
   const handleClearFilters = useCallback(() => {
     setSearchValue("");
     onFiltersChange({ ...INITIAL_FILTERS_STATE });
   }, [onFiltersChange]);
 
-  // Handler para mudar UF
   const handleUFChange = useCallback(
     (uf: string | null) => {
       onFiltersChange({
         ...filters,
         uf,
-        municipio: null, // Limpa município ao mudar UF
+        municipio: null,
         page: 1,
       });
       setOpenDropdown(null);
@@ -80,7 +65,6 @@ export function FornecedoresFilters({
     [filters, onFiltersChange]
   );
 
-  // Handler para mudar município
   const handleMunicipioChange = useCallback(
     (municipio: string | null) => {
       onFiltersChange({ ...filters, municipio, page: 1 });
@@ -89,29 +73,6 @@ export function FornecedoresFilters({
     [filters, onFiltersChange]
   );
 
-  // Handler para toggle de categoria
-  const handleCategoriaToggle = useCallback(
-    (categoria: FornecedorCategoria) => {
-      const newCategorias = filters.categorias.includes(categoria)
-        ? filters.categorias.filter((c) => c !== categoria)
-        : [...filters.categorias, categoria];
-      onFiltersChange({ ...filters, categorias: newCategorias, page: 1 });
-    },
-    [filters, onFiltersChange]
-  );
-
-  // Handler para toggle de serviço
-  const handleServicoToggle = useCallback(
-    (servico: FornecedorServico) => {
-      const newServicos = filters.servicos.includes(servico)
-        ? filters.servicos.filter((s) => s !== servico)
-        : [...filters.servicos, servico];
-      onFiltersChange({ ...filters, servicos: newServicos, page: 1 });
-    },
-    [filters, onFiltersChange]
-  );
-
-  // Handler para mudar status
   const handleStatusChange = useCallback(
     (status: FornecedorStatus | null) => {
       onFiltersChange({ ...filters, status, page: 1 });
@@ -120,7 +81,6 @@ export function FornecedoresFilters({
     [filters, onFiltersChange]
   );
 
-  // Fecha dropdown ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -137,9 +97,7 @@ export function FornecedoresFilters({
 
   return (
     <div className="space-y-4">
-      {/* Linha principal: Busca + Toggle filtros avançados */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Campo de busca */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -159,7 +117,6 @@ export function FornecedoresFilters({
           )}
         </div>
 
-        {/* Botão de filtros avançados */}
         <button
           onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
           className={cn(
@@ -186,19 +143,15 @@ export function FornecedoresFilters({
         </button>
       </div>
 
-      {/* Filtros avançados */}
       {showAdvancedFilters && (
         <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {/* Filtro UF */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="relative" data-dropdown>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                 Estado (UF)
               </label>
               <button
-                onClick={() =>
-                  setOpenDropdown(openDropdown === "uf" ? null : "uf")
-                }
+                onClick={() => setOpenDropdown(openDropdown === "uf" ? null : "uf")}
                 className={cn(
                   "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border border-gray-300 bg-white hover:bg-gray-50 text-left",
                   filters.uf ? "text-gray-900" : "text-gray-500"
@@ -239,7 +192,6 @@ export function FornecedoresFilters({
               )}
             </div>
 
-            {/* Filtro Município */}
             <div className="relative" data-dropdown>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                 Município
@@ -253,9 +205,7 @@ export function FornecedoresFilters({
                   filters.municipio ? "text-gray-900" : "text-gray-500"
                 )}
               >
-                <span className="truncate">
-                  {filters.municipio || "Todos"}
-                </span>
+                <span className="truncate">{filters.municipio || "Todos"}</span>
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 transition-transform flex-shrink-0",
@@ -290,7 +240,6 @@ export function FornecedoresFilters({
               )}
             </div>
 
-            {/* Filtro Status */}
             <div className="relative" data-dropdown>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                 Status
@@ -346,105 +295,8 @@ export function FornecedoresFilters({
                 </div>
               )}
             </div>
-
-            {/* Filtro Categorias (multi-select) */}
-            <div className="relative" data-dropdown>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Categorias
-              </label>
-              <button
-                onClick={() =>
-                  setOpenDropdown(openDropdown === "categorias" ? null : "categorias")
-                }
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border border-gray-300 bg-white hover:bg-gray-50 text-left",
-                  filters.categorias.length > 0 ? "text-gray-900" : "text-gray-500"
-                )}
-              >
-                <span className="truncate">
-                  {filters.categorias.length > 0
-                    ? `${filters.categorias.length} selecionada(s)`
-                    : "Todas"}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform flex-shrink-0",
-                    openDropdown === "categorias" ? "rotate-180" : ""
-                  )}
-                />
-              </button>
-              {openDropdown === "categorias" && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-                  {(Object.keys(CATEGORIA_LABELS) as FornecedorCategoria[]).map(
-                    (cat) => (
-                      <label
-                        key={cat}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filters.categorias.includes(cat)}
-                          onChange={() => handleCategoriaToggle(cat)}
-                          className="h-4 w-4 rounded border-gray-300 text-[#1F4E79] focus:ring-[#1F4E79]"
-                        />
-                        <span>{CATEGORIA_LABELS[cat]}</span>
-                      </label>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Filtro Serviços (multi-select) */}
-            <div className="relative" data-dropdown>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Serviços
-              </label>
-              <button
-                onClick={() =>
-                  setOpenDropdown(openDropdown === "serviços" ? null : "serviços")
-                }
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all border border-gray-300 bg-white hover:bg-gray-50 text-left",
-                  filters.servicos.length > 0 ? "text-gray-900" : "text-gray-500"
-                )}
-              >
-                <span className="truncate">
-                  {filters.servicos.length > 0
-                    ? `${filters.servicos.length} selecionado(s)`
-                    : "Todos"}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform flex-shrink-0",
-                    openDropdown === "servicos" ? "rotate-180" : ""
-                  )}
-                />
-              </button>
-              {openDropdown === "serviços" && (
-                <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-                  {(Object.keys(SERVICO_LABELS) as FornecedorServico[]).map(
-                    (serv) => (
-                      <label
-                        key={serv}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filters.servicos.includes(serv)}
-                          onChange={() => handleServicoToggle(serv)}
-                          className="h-4 w-4 rounded border-gray-300 text-[#1F4E79] focus:ring-[#1F4E79]"
-                        />
-                        <span>{SERVICO_LABELS[serv]}</span>
-                      </label>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* Chips de filtros ativos + Limpar */}
           {activeFiltersCount > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200">
               <span className="text-xs text-gray-500">Filtros ativos:</span>
@@ -485,34 +337,6 @@ export function FornecedoresFilters({
                 </span>
               )}
 
-              {filters.categorias.length > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-[#1F4E79]/10 text-[#1F4E79] rounded-full">
-                  {filters.categorias.length} categoria(s)
-                  <button
-                    onClick={() =>
-                      onFiltersChange({ ...filters, categorias: [], page: 1 })
-                    }
-                    className="hover:bg-[#1F4E79]/20 rounded-full p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              )}
-
-              {filters.servicos.length > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-[#1F4E79]/10 text-[#1F4E79] rounded-full">
-                  {filters.servicos.length} serviço(s)
-                  <button
-                    onClick={() =>
-                      onFiltersChange({ ...filters, servicos: [], page: 1 })
-                    }
-                    className="hover:bg-[#1F4E79]/20 rounded-full p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              )}
-
               <button
                 onClick={handleClearFilters}
                 className="ml-auto text-xs font-medium text-red-600 hover:text-red-700 hover:underline"
@@ -526,3 +350,4 @@ export function FornecedoresFilters({
     </div>
   );
 }
+

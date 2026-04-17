@@ -220,14 +220,16 @@ export default function ParceiroDetalhePage() {
 
               {/* Ações */}
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                >
-                  <Edit className="h-4 w-4" />
-                  Editar
-                </Button>
+                <Link href={`/parceiros/${parceiro.id}/editar`}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Editar
+                  </Button>
+                </Link>
                 <Button
                   variant="outline"
                   size="sm"
