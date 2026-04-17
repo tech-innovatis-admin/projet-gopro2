@@ -142,6 +142,13 @@ const toPositiveInt = (value: number | undefined, fallback = 1): number => {
   return Math.max(1, Math.trunc(parsed));
 };
 
+const parsePositiveIntInput = (value: string): number | undefined => {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(1, Math.trunc(parsed));
+};
+
 const toMoneyValue = (value: number | undefined): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
@@ -172,8 +179,8 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
 });
 
 const calculateDraftTotal = (draft: Partial<ItemRubrica>) => {
-  const quantidade = toPositiveInt(draft.quantidade, 1);
-  const meses = toPositiveInt(draft.meses, 1);
+  const quantidade = toPositiveInt(draft.quantidade, 0);
+  const meses = toPositiveInt(draft.meses, 0);
   const valorUnitario = toMoneyValue(draft.valorUnitario);
 
   return Number((quantidade * meses * valorUnitario).toFixed(2));
@@ -411,7 +418,7 @@ export default function RubricasPage() {
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<ItemRubrica | null>(null);
+  const [editForm, setEditForm] = useState<Partial<ItemRubrica> | null>(null);
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>(createEmptyItemDraft);
   const [itemPendingDeletion, setItemPendingDeletion] = useState<{
@@ -726,6 +733,11 @@ export default function RubricasPage() {
       return;
     }
 
+    if (newItem.quantidade == null || newItem.meses == null) {
+      setActionError('Informe quantidade e meses antes de salvar o item.');
+      return;
+    }
+
     const quantidade = toPositiveInt(newItem.quantidade, 1);
     const meses = toPositiveInt(newItem.meses, 1);
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
@@ -787,8 +799,17 @@ export default function RubricasPage() {
   const handleSaveEdit = async (rubricaId: string) => {
     if (!ensureCanManageChildren()) return;
     if (!editForm || !editingItem) return;
+    if (!editForm.descricao?.trim()) {
+      setActionError('Informe a descrição do item.');
+      return;
+    }
     if (!isPersistedId(editingItem) || !isPersistedId(rubricaId)) {
       setActionError('Item ou rubrica inválido para atualizar.');
+      return;
+    }
+
+    if (editForm.quantidade == null || editForm.meses == null) {
+      setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
 
@@ -1742,11 +1763,11 @@ export default function RubricasPage() {
                   type="number"
                   min={1}
                   step={1}
-                  value={toPositiveInt(newItem.quantidade, 1)}
+                  value={newItem.quantidade ?? ''}
                   onChange={(event) =>
                     setNewItem((current) => ({
                       ...current,
-                      quantidade: toPositiveInt(Number(event.target.value || 1), 1),
+                      quantidade: parsePositiveIntInput(event.target.value),
                     }))
                   }
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
@@ -1762,11 +1783,11 @@ export default function RubricasPage() {
                   type="number"
                   min={1}
                   step={1}
-                  value={toPositiveInt(newItem.meses, 1)}
+                  value={newItem.meses ?? ''}
                   onChange={(event) =>
                     setNewItem((current) => ({
                       ...current,
-                      meses: toPositiveInt(Number(event.target.value || 1), 1),
+                      meses: parsePositiveIntInput(event.target.value),
                     }))
                   }
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
@@ -1909,13 +1930,13 @@ export default function RubricasPage() {
                   type="number"
                   min={1}
                   step={1}
-                  value={toPositiveInt(editForm.quantidade, 1)}
+                  value={editForm.quantidade ?? ''}
                   onChange={(event) =>
                     setEditForm((current) =>
                       current
                         ? {
                             ...current,
-                            quantidade: toPositiveInt(Number(event.target.value || 1), 1),
+                            quantidade: parsePositiveIntInput(event.target.value),
                           }
                         : current
                     )
@@ -1933,13 +1954,13 @@ export default function RubricasPage() {
                   type="number"
                   min={1}
                   step={1}
-                  value={toPositiveInt(editForm.meses, 1)}
+                  value={editForm.meses ?? ''}
                   onChange={(event) =>
                     setEditForm((current) =>
                       current
                         ? {
                             ...current,
-                            meses: toPositiveInt(Number(event.target.value || 1), 1),
+                            meses: parsePositiveIntInput(event.target.value),
                           }
                         : current
                     )

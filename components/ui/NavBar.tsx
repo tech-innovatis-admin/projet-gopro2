@@ -36,7 +36,7 @@ import {
   subscribeReadNotificationIds,
 } from "@/src/lib/notifications/readState";
 
-type UserRole = "superadmin" | "admin" | "analista" | "estagiario";
+type UserRole = "owner" | "superadmin" | "admin" | "analista" | "estagiario";
 
 type SessionUser = {
   id: string;
@@ -284,8 +284,8 @@ export function NavBar() {
     return subscribeReadNotificationIds(syncReadIds);
   }, []);
 
-  const isSuperAdmin = currentUser?.role === "superadmin";
-  const isAdmin = isSuperAdmin || currentUser?.role === "admin";
+  const hasSuperadminPrivileges = currentUser?.role === "owner" || currentUser?.role === "superadmin";
+  const isAdmin = hasSuperadminPrivileges || currentUser?.role === "admin";
 
   const markNotificationAsRead = useCallback((notificationId: string) => {
     if (!notificationId) {
@@ -349,12 +349,12 @@ export function NavBar() {
     const adminChildren: NavItem[] = [
       { label: "Usuários", href: "/admin/usuarios", icon: Users },
     ];
-    if (isSuperAdmin) {
+    if (hasSuperadminPrivileges) {
       adminChildren.unshift({ label: "Convites", href: "/admin/convites", icon: Shield });
       adminChildren.push({ label: "Auditoria", href: "/admin/auditoria", icon: Activity });
     }
 
-    const adminDefaultHref = isSuperAdmin ? "/admin/convites" : "/admin/usuarios";
+    const adminDefaultHref = hasSuperadminPrivileges ? "/admin/convites" : "/admin/usuarios";
 
     return [
       ...baseNavigationItems,
@@ -365,7 +365,7 @@ export function NavBar() {
         children: adminChildren,
       },
     ];
-  }, [isAdmin, isSuperAdmin]);
+  }, [hasSuperadminPrivileges, isAdmin]);
 
   const adminHomeHref = "/admin/usuarios";
   const resolvedNavigationItems = useMemo<NavItem[]>(() => {

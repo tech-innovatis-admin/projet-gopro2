@@ -54,6 +54,10 @@ import {
   validatePhoneComplete,
 } from "./_components/PhoneValidator";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import {
+  fetchBrazilStates as fetchBrazilStatesLookup,
+  fetchCitiesByState as fetchCitiesByStateLookup,
+} from "@/src/lib/ibge";
 
 type Papel =
   | "COORDENADOR"
@@ -135,54 +139,6 @@ function isUuid(value?: string | null) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value.trim(),
   );
-}
-
-type IbgeStateResponse = {
-  id: number;
-  sigla: string;
-  nome: string;
-};
-
-type IbgeCityResponse = {
-  id: number;
-  nome: string;
-};
-
-async function fetchBrazilStates() {
-  const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
-  if (!response.ok) {
-    throw new Error("Não foi possível carregar os estados.");
-  }
-
-  const data = (await response.json()) as IbgeStateResponse[];
-  return data
-    .filter((item) => item.sigla?.trim())
-    .sort((a, b) => a.sigla.localeCompare(b.sigla))
-    .map((item) => ({
-      value: item.sigla.trim().toUpperCase(),
-      label: `${item.sigla.trim().toUpperCase()} - ${item.nome}`,
-    }));
-}
-
-async function fetchCitiesByState(uf: string) {
-  const normalizedUf = uf.trim().toUpperCase();
-  if (!normalizedUf) return [];
-
-  const response = await fetch(
-    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`,
-  );
-  if (!response.ok) {
-    throw new Error("Não foi possível carregar as cidades.");
-  }
-
-  const data = (await response.json()) as IbgeCityResponse[];
-  return data
-    .filter((item) => item.nome?.trim())
-    .sort((a, b) => a.nome.localeCompare(b.nome))
-    .map((item) => ({
-      value: item.nome.trim(),
-      label: item.nome.trim(),
-    }));
 }
 
 function roleToPapel(role: RoleProjectPeopleEnum | null): Papel {
@@ -1166,14 +1122,16 @@ function MemberFormModal({
   const [isCityLoading, setIsCityLoading] = useState(Boolean(formData.state));
   const [ufLookupError, setUfLookupError] = useState<string | null>(null);
   const [cityLookupError, setCityLookupError] = useState<string | null>(null);
+  const [allowManualCityEntry, setAllowManualCityEntry] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    void fetchBrazilStates()
-      .then((options) => {
+    void fetchBrazilStatesLookup()
+      .then((lookup) => {
         if (!isMounted) return;
-        setUfOptions(options);
+        setUfOptions(lookup.options);
+        setUfLookupError(lookup.message ?? null);
       })
       .catch(() => {
         if (!isMounted) return;
@@ -1198,15 +1156,18 @@ function MemberFormModal({
 
     let isMounted = true;
 
-    void fetchCitiesByState(selectedUf)
-      .then((options) => {
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
         if (!isMounted) return;
-        setCityOptions(options);
+        setCityOptions(lookup.options);
+        setCityLookupError(lookup.message ?? null);
+        setAllowManualCityEntry(lookup.allowManualEntry);
       })
       .catch(() => {
         if (!isMounted) return;
         setCityOptions([]);
-        setCityLookupError("Não foi possível carregar as cidades deste estado.");
+        setCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setAllowManualCityEntry(true);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -1420,6 +1381,7 @@ function MemberFormModal({
                   setCityLookupError(null);
                   setCityOptions([]);
                   setIsCityLoading(Boolean(value));
+                  setAllowManualCityEntry(false);
                 }}
                 placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
                 disabled={isUfLoading || ufOptions.length === 0}
@@ -1432,23 +1394,35 @@ function MemberFormModal({
             </Field>
 
             <Field label="Cidade" required>
-              <Dropdown
-                options={cityOptions}
-                value={formData.city || undefined}
-                onChange={(value) =>
-                  setFormData((prev) => ({ ...prev, city: value || "" }))
-                }
-                placeholder={
-                  !formData.state
-                    ? "Selecione a UF primeiro"
-                    : isCityLoading
-                      ? "Carregando cidades..."
-                      : "Selecione a cidade"
-                }
-                disabled={!formData.state || isCityLoading || cityOptions.length === 0}
-                searchable
-                className="w-full"
-              />
+              {allowManualCityEntry && formData.state ? (
+                <input
+                  type="text"
+                  value={formData.city || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, city: e.target.value }))
+                  }
+                  placeholder="Digite a cidade"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                />
+              ) : (
+                <Dropdown
+                  options={cityOptions}
+                  value={formData.city || undefined}
+                  onChange={(value) =>
+                    setFormData((prev) => ({ ...prev, city: value || "" }))
+                  }
+                  placeholder={
+                    !formData.state
+                      ? "Selecione a UF primeiro"
+                      : isCityLoading
+                        ? "Carregando cidades..."
+                        : "Selecione a cidade"
+                  }
+                  disabled={!formData.state || isCityLoading || cityOptions.length === 0}
+                  searchable
+                  className="w-full"
+                />
+              )}
               {cityLookupError ? (
                 <p className="text-xs text-amber-600">{cityLookupError}</p>
               ) : null}

@@ -21,7 +21,7 @@ import {
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
-const roleOptions: UserRoleEnum[] = ["SUPERADMIN", "ADMIN", "ANALISTA", "ESTAGIARIO"];
+const roleOptions: UserRoleEnum[] = ["OWNER", "SUPERADMIN", "ADMIN", "ANALISTA", "ESTAGIARIO"];
 const statusOptions: Array<AllowedRegistrationStatusEnum | ""> = [
   "",
   "PENDING",
@@ -31,6 +31,7 @@ const statusOptions: Array<AllowedRegistrationStatusEnum | ""> = [
 ];
 
 const roleLabels: Record<UserRoleEnum, string> = {
+  OWNER: "Owner",
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",
@@ -264,7 +265,7 @@ export default function AdminConvitesPage() {
         <header>
           <h1 className="text-2xl font-bold text-zinc-900">Gestão de convites</h1>
           <p className="text-sm text-zinc-600">
-            Admin e superadmin podem liberar novos cadastros por e-mail.
+            Owner, superadmin e admin podem liberar novos cadastros por e-mail.
           </p>
         </header>
 
@@ -276,7 +277,7 @@ export default function AdminConvitesPage() {
 
         {!loadingAccess && !canManage && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Acesso permitido apenas para admin e superadmin.
+            Acesso permitido apenas para owner, superadmin e admin.
           </div>
         )}
 

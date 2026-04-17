@@ -31,7 +31,7 @@ import {
   resolveBudgetReferenceEntityLabel,
 } from "@/src/lib/audit/budget-reference-presentation";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
-import { canViewContractAudit, fetchCurrentUser } from "@/src/lib/auth/session";
+import { fetchCurrentUser } from "@/src/lib/auth/session";
 
 const PAGE_SIZE = 5;
 
@@ -70,6 +70,7 @@ const ENTITY_FILTER_OPTIONS: EntityFilterOption[] = [
 ];
 
 const USER_ROLE_LABELS: Record<string, string> = {
+  OWNER: "Owner",
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",
@@ -285,7 +286,7 @@ export default function ContractAuditPage() {
       try {
         const user = await fetchCurrentUser();
         if (!cancelled) {
-          setCanView(canViewContractAudit(user));
+          setCanView(Boolean(user));
         }
       } finally {
         if (!cancelled) {

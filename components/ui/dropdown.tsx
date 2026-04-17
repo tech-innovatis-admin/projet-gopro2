@@ -184,6 +184,7 @@ export function Dropdown({
         <div style={{ maxHeight: menuPosition.maxHeight }} className="overflow-y-auto">
           {(!searchable || !searchTerm) && (
             <button
+              type="button"
               onClick={() => selectOption(undefined)}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
@@ -198,6 +199,7 @@ export function Dropdown({
             filteredOptions.map((option) => (
               <button
                 key={option.value}
+                type="button"
                 onClick={() => selectOption(option.value)}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
@@ -258,6 +260,7 @@ export function Dropdown({
         </div>
       ) : (
         <button
+          type="button"
           onClick={toggleDropdown}
           disabled={disabled}
           className={cn(
@@ -286,4 +289,3 @@ export function Dropdown({
     </div>
   );
 }
-

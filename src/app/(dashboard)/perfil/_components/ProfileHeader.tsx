@@ -14,6 +14,7 @@ type ProfileHeaderProps = {
 };
 
 const ROLE_LABELS: Record<UserRoleEnum, string> = {
+  OWNER: "Owner",
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",
@@ -21,6 +22,7 @@ const ROLE_LABELS: Record<UserRoleEnum, string> = {
 };
 
 const ROLE_BADGE_COLORS: Record<UserRoleEnum, string> = {
+  OWNER: "bg-[#052e16]/90 text-emerald-50 ring-1 ring-emerald-900/40",
   SUPERADMIN: "bg-amber-200/95 text-amber-950 ring-1 ring-amber-100",
   ADMIN: "bg-sky-200/95 text-sky-950 ring-1 ring-sky-100",
   ANALISTA: "bg-violet-200/95 text-violet-950 ring-1 ring-violet-100",
@@ -59,9 +61,11 @@ function formatLastAccess(lastLoginAt: string | null): string {
 }
 
 export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHeaderProps) {
+  const isProtectedOwner = user.role === "OWNER";
+  const canEditProfile = Boolean(onEditProfile) && !isProtectedOwner;
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
   const statusLabel = STATUS_LABELS[user.status] ?? user.status;
-  const username = user.username?.trim() || "Não informado";
+  const username = user.username?.trim() || "Nao informado";
   const lastAccess = formatLastAccess(user.lastLoginAt);
 
   return (
@@ -119,7 +123,7 @@ export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHe
           </div>
 
           <div className="flex w-full gap-2 sm:w-auto">
-            {onEditProfile ? (
+            {canEditProfile ? (
               <Button
                 type="button"
                 variant="outline"
@@ -130,17 +134,20 @@ export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHe
                 Editar perfil
               </Button>
             ) : null}
-            <Button
-              asChild
-              variant="outline"
-              className="flex-1 border-white/40 bg-white/90 text-[#00331d] hover:bg-white sm:flex-none"
-            >
-              <Link href="/perfil/seguranca">Segurança</Link>
-            </Button>
-            {/* TODO: Reativar quando a pagina de configuracoes estiver implementada. */}
-            {/* <Button asChild className="flex-1 bg-[#002818] hover:bg-[#001f13] sm:flex-none">
-              <Link href="/perfil/configuracoes">Configuracoes</Link>
-            </Button> */}
+
+            {isProtectedOwner ? (
+              <div className="flex flex-1 items-center rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-xs font-medium text-white/90 sm:flex-none">
+                Conta Owner protegida
+              </div>
+            ) : (
+              <Button
+                asChild
+                variant="outline"
+                className="flex-1 border-white/40 bg-white/90 text-[#00331d] hover:bg-white sm:flex-none"
+              >
+                <Link href="/perfil/seguranca">Seguranca</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -166,7 +173,7 @@ export function ProfileHeader({ user, avatarImageUrl, onEditProfile }: ProfileHe
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
             <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500">
               <Clock3 className="h-3.5 w-3.5" />
-              Último acesso da conta
+              Ultimo acesso da conta
             </div>
             <p className="text-sm font-semibold text-gray-900">{lastAccess}</p>
           </div>

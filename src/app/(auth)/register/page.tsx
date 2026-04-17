@@ -22,6 +22,7 @@ type InviteInfo = {
 };
 
 const roleLabels: Record<UserRoleEnum, string> = {
+  OWNER: "Owner",
   SUPERADMIN: "Superadmin",
   ADMIN: "Admin",
   ANALISTA: "Analista",

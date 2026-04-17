@@ -1197,6 +1197,20 @@ export default function MetaEtapaFasePage() {
     [etapaModalParentMeta, etapaCreateModalState]
   );
 
+  const faseModalParentMeta = useMemo(() => {
+    if (!faseCreateModalState) return null;
+    return metas.find((item) => item.id === faseCreateModalState.metaId) ?? null;
+  }, [metas, faseCreateModalState]);
+
+  const faseModalParentEtapa = useMemo(() => {
+    if (!faseModalParentMeta || !faseCreateModalState) return null;
+    return (
+      faseModalParentMeta.etapas.find(
+        (item) => item.id === faseCreateModalState.etapaId
+      ) ?? null
+    );
+  }, [faseModalParentMeta, faseCreateModalState]);
+
   const openCreateEtapaModal = (meta: Meta) => {
     if (!canManageChildren) return;
 
@@ -2461,7 +2475,7 @@ export default function MetaEtapaFasePage() {
               saveMetaModal();
             }}
           >
-            <div
+            {/* <div
               className={`rounded-2xl border px-4 py-3 ${
                 metaModalState.mode === "edit"
                   ? "border-blue-200 bg-blue-50"
@@ -2489,7 +2503,7 @@ export default function MetaEtapaFasePage() {
               >
                 O preenchimento fica concentrado aqui para deixar a lista principal mais limpa e rápida de usar.
               </p>
-            </div>
+            </div> */}
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
@@ -2661,6 +2675,7 @@ export default function MetaEtapaFasePage() {
               </p>
               <p className="mt-1 font-medium text-blue-950">
                 Meta {etapaCreateModalState.metaNumero}
+                {etapaModalParentMeta?.titulo ? ` - ${etapaModalParentMeta.titulo}` : ""}
               </p>
               <p className="mt-1 text-sm text-blue-800">
                 {etapaCreateModalState?.mode === "edit"
@@ -2669,7 +2684,7 @@ export default function MetaEtapaFasePage() {
               </p>
             </div>
 
-            {etapaModalFinancialContext?.goalHasFinancialValue ? (
+            {/* {etapaModalFinancialContext?.goalHasFinancialValue ? (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
                   Distribuição financeira da meta
@@ -2706,7 +2721,7 @@ export default function MetaEtapaFasePage() {
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 Defina primeiro o valor financeiro da meta para distribuir valores entre as etapas.
               </div>
-            )}
+            )} */}
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
@@ -2944,7 +2959,11 @@ export default function MetaEtapaFasePage() {
                 Estrutura vinculada
               </p>
               <p className="mt-1 font-medium text-slate-900">
-                Meta {faseCreateModalState.metaNumero} • Etapa {faseCreateModalState.etapaNumero}
+                Meta {faseCreateModalState.metaNumero}
+                {faseModalParentMeta?.titulo ? ` - ${faseModalParentMeta.titulo}` : ""}
+                {" • "}
+                Etapa {faseCreateModalState.etapaNumero}
+                {faseModalParentEtapa?.titulo ? ` - ${faseModalParentEtapa.titulo}` : ""}
               </p>
               <p className="mt-1 text-sm text-slate-700">
                 {faseCreateModalState?.mode === "edit"

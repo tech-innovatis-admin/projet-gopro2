@@ -17,6 +17,7 @@ import {
   Home,
   ArrowLeft,
   Plus,
+  Pencil,
   Trash2,
   Milestone,
   Flag,
@@ -72,6 +73,10 @@ import {
   canManageContractChildren,
   fetchCurrentUser,
 } from "@/src/lib/auth/session";
+import {
+  fetchBrazilStates as fetchBrazilStatesLookup,
+  fetchCitiesByState as fetchCitiesByStateLookup,
+} from "@/src/lib/ibge";
 
 // Tipos
 type ContratoStatus = ProjectStatusEnum;
@@ -201,15 +206,6 @@ type SecretaryCreateForm = {
   address: string;
   contactPerson: string;
 };
-type IbgeStateResponse = {
-  id: number;
-  sigla: string;
-  nome: string;
-};
-type IbgeCityResponse = {
-  id: number;
-  nome: string;
-};
 type TipoDocumento = "contrato" | "tr" | "planoTrabalho" | "outro";
 type ProjetoDocumentos = Partial<Record<TipoDocumento, File>>;
 
@@ -282,6 +278,7 @@ const publicAgencyTypeOptions: { value: PublicAgencyTypeEnum; label: string }[] 
   { value: "PREFEITURA", label: "Prefeitura" },
   { value: "GOVERNO_ESTADUAL", label: "Governo Estadual" },
   { value: "MINISTERIO", label: "Ministerio" },
+  { value: "EMPRESA_PUBLICA", label: "Empresa publica" },
   { value: "EMPRESA_PRIVADA", label: "Empresa privada" },
 ];
 
@@ -307,6 +304,13 @@ const initialFormState: NovoContratoForm = {
   contract_value: "",
   metas: [],
   parcelas: [],
+};
+
+const initialParcelaDraftState: Partial<ParcelaDesembolso> = {
+  dataPrevista: "",
+  valorPrevisto: 0,
+  status: "PREVISTO",
+  observacao: "",
 };
 
 const initialCoordinatorFormState: CoordinatorForm = {
@@ -404,6 +408,53 @@ function formatCurrencyInputValue(value: number | null): string {
   });
 }
 
+function isValidIsoDateString(value: string | null | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}` === value;
+}
+
+function validateOptionalDateValue(
+  value: string | null | undefined,
+  label: string
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (!isValidIsoDateString(value)) {
+    return `${label} invalida. Selecione uma data valida.`;
+  }
+
+  return null;
+}
+
+function validateOptionalDateRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+  contextLabel: string
+): string | null {
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  if (startDate > endDate) {
+    return `${contextLabel}: a data de fim deve ser posterior ou igual a data de inicio.`;
+  }
+
+  return null;
+}
+
 function mapProjectToForm(project: ProjectResponseDTO): NovoContratoForm {
   const fallbackLocation = splitExecutionLocation(project.executionLocation);
 
@@ -465,43 +516,6 @@ const formatPhoneInput = (value: string) => {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
-async function fetchBrazilStates() {
-  const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
-  if (!response.ok) {
-    throw new Error("Não foi possível carregar os estados.");
-  }
-
-  const data = (await response.json()) as IbgeStateResponse[];
-  return data
-    .filter((item) => item.sigla?.trim())
-    .sort((a, b) => a.sigla.localeCompare(b.sigla))
-    .map((item) => ({
-      value: item.sigla.trim().toUpperCase(),
-      label: `${item.sigla.trim().toUpperCase()} - ${item.nome}`,
-    }));
-}
-
-async function fetchCitiesByState(uf: string) {
-  const normalizedUf = uf.trim().toUpperCase();
-  if (!normalizedUf) return [];
-
-  const response = await fetch(
-    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalizedUf}/municipios`
-  );
-  if (!response.ok) {
-    throw new Error("Não foi possível carregar as cidades.");
-  }
-
-  const data = (await response.json()) as IbgeCityResponse[];
-  return data
-    .filter((item) => item.nome?.trim())
-    .sort((a, b) => a.nome.localeCompare(b.nome))
-    .map((item) => ({
-      value: item.nome.trim(),
-      label: item.nome.trim(),
-    }));
-}
-
 function NovoContratoPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -527,6 +541,7 @@ function NovoContratoPageContent() {
   const [isCidadeLoading, setIsCidadeLoading] = useState(false);
   const [ufLookupError, setUfLookupError] = useState<string | null>(null);
   const [cidadeLookupError, setCidadeLookupError] = useState<string | null>(null);
+  const [allowManualCidadeEntry, setAllowManualCidadeEntry] = useState(false);
   const [showMetasSection, setShowMetasSection] = useState(false);
   const [expandedMetas, setExpandedMetas] = useState<Set<string>>(new Set());
   const [expandedEtapas, setExpandedEtapas] = useState<Set<string>>(new Set());
@@ -544,6 +559,7 @@ function NovoContratoPageContent() {
   const [coordenadores, setCoordenadores] = useState<CoordinatorOptionItem[]>([]);
   const [showParcelasSection, setShowParcelasSection] = useState(false);
   const [isAddingParcela, setIsAddingParcela] = useState(false);
+  const [editingParcelaId, setEditingParcelaId] = useState<string | null>(null);
   const [showCoordinatorModal, setShowCoordinatorModal] = useState(false);
   const [isCreatingCoordinator, setIsCreatingCoordinator] = useState(false);
   const [coordinatorForm, setCoordinatorForm] = useState<CoordinatorForm>(
@@ -553,6 +569,7 @@ function NovoContratoPageContent() {
   const [coordinatorCityOptions, setCoordinatorCityOptions] = useState<DropdownOption[]>([]);
   const [isCoordinatorCityLoading, setIsCoordinatorCityLoading] = useState(false);
   const [coordinatorCityLookupError, setCoordinatorCityLookupError] = useState<string | null>(null);
+  const [allowManualCoordinatorCityEntry, setAllowManualCoordinatorCityEntry] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [partnerTargetField, setPartnerTargetField] =
     useState<PartnerTargetField>("parceiroId");
@@ -564,6 +581,7 @@ function NovoContratoPageContent() {
   const [partnerCityOptions, setPartnerCityOptions] = useState<DropdownOption[]>([]);
   const [isPartnerCityLoading, setIsPartnerCityLoading] = useState(false);
   const [partnerCityLookupError, setPartnerCityLookupError] = useState<string | null>(null);
+  const [allowManualPartnerCityEntry, setAllowManualPartnerCityEntry] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [clientForm, setClientForm] = useState<ClientCreateForm>(initialClientCreateFormState);
@@ -575,10 +593,7 @@ function NovoContratoPageContent() {
   );
   const [secretaryFormError, setSecretaryFormError] = useState<string | null>(null);
   const [newParcela, setNewParcela] = useState<Partial<ParcelaDesembolso>>({
-    dataPrevista: "",
-    valorPrevisto: 0,
-    status: "PREVISTO",
-    observacao: "",
+    ...initialParcelaDraftState,
   });
   const [documentos, setDocumentos] = useState<ProjetoDocumentos>({});
   const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>({
@@ -589,6 +604,7 @@ function NovoContratoPageContent() {
   });
   
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const submitGuardRef = useRef(false);
 
   // Carregar organizacoes disponiveis
   const loadOrganizations = useCallback(async () => {
@@ -792,12 +808,8 @@ function NovoContratoPageContent() {
       setExpandedEtapas(new Set());
       setShowParcelasSection(false);
       setIsAddingParcela(false);
-      setNewParcela({
-        dataPrevista: "",
-        valorPrevisto: 0,
-        status: "PREVISTO",
-        observacao: "",
-      });
+      setEditingParcelaId(null);
+      setNewParcela({ ...initialParcelaDraftState });
     } catch (error) {
       if (signal?.aborted) {
         return;
@@ -829,10 +841,11 @@ function NovoContratoPageContent() {
     setIsUfLoading(true);
     setUfLookupError(null);
 
-    void fetchBrazilStates()
-      .then((options) => {
+    void fetchBrazilStatesLookup()
+      .then((lookup) => {
         if (!isMounted) return;
-        setUfOptions(options);
+        setUfOptions(lookup.options);
+        setUfLookupError(lookup.message ?? null);
       })
       .catch(() => {
         if (!isMounted) return;
@@ -855,6 +868,7 @@ function NovoContratoPageContent() {
       setCidadeOptions([]);
       setCidadeLookupError(null);
       setIsCidadeLoading(false);
+      setAllowManualCidadeEntry(false);
       return;
     }
 
@@ -862,15 +876,18 @@ function NovoContratoPageContent() {
     setIsCidadeLoading(true);
     setCidadeLookupError(null);
 
-    void fetchCitiesByState(selectedUf)
-      .then((options) => {
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
         if (!isMounted) return;
-        setCidadeOptions(options);
+        setCidadeOptions(lookup.options);
+        setCidadeLookupError(lookup.message ?? null);
+        setAllowManualCidadeEntry(lookup.allowManualEntry);
       })
       .catch(() => {
         if (!isMounted) return;
         setCidadeOptions([]);
-        setCidadeLookupError("Não foi possível carregar as cidades deste estado.");
+        setCidadeLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setAllowManualCidadeEntry(true);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -888,6 +905,7 @@ function NovoContratoPageContent() {
       setCoordinatorCityOptions([]);
       setCoordinatorCityLookupError(null);
       setIsCoordinatorCityLoading(false);
+      setAllowManualCoordinatorCityEntry(false);
       return;
     }
 
@@ -895,15 +913,18 @@ function NovoContratoPageContent() {
     setIsCoordinatorCityLoading(true);
     setCoordinatorCityLookupError(null);
 
-    void fetchCitiesByState(selectedUf)
-      .then((options) => {
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
         if (!isMounted) return;
-        setCoordinatorCityOptions(options);
+        setCoordinatorCityOptions(lookup.options);
+        setCoordinatorCityLookupError(lookup.message ?? null);
+        setAllowManualCoordinatorCityEntry(lookup.allowManualEntry);
       })
       .catch(() => {
         if (!isMounted) return;
         setCoordinatorCityOptions([]);
-        setCoordinatorCityLookupError("Não foi possível carregar as cidades deste estado.");
+        setCoordinatorCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setAllowManualCoordinatorCityEntry(true);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -921,6 +942,7 @@ function NovoContratoPageContent() {
       setPartnerCityOptions([]);
       setPartnerCityLookupError(null);
       setIsPartnerCityLoading(false);
+      setAllowManualPartnerCityEntry(false);
       return;
     }
 
@@ -928,15 +950,18 @@ function NovoContratoPageContent() {
     setIsPartnerCityLoading(true);
     setPartnerCityLookupError(null);
 
-    void fetchCitiesByState(selectedUf)
-      .then((options) => {
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
         if (!isMounted) return;
-        setPartnerCityOptions(options);
+        setPartnerCityOptions(lookup.options);
+        setPartnerCityLookupError(lookup.message ?? null);
+        setAllowManualPartnerCityEntry(lookup.allowManualEntry);
       })
       .catch(() => {
         if (!isMounted) return;
         setPartnerCityOptions([]);
-        setPartnerCityLookupError("Não foi possível carregar as cidades deste estado.");
+        setPartnerCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setAllowManualPartnerCityEntry(true);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -988,32 +1013,51 @@ function NovoContratoPageContent() {
         if (!Array.isArray(value) || value.length === 0) return "Selecione ao menos um segmento";
         return "";
       case "dataInicio":
-        if (typeof value !== "string" || !value) return "A data de início é obrigatória";
+        if (typeof value !== "string" || !value) return "A data de inicio e obrigatoria";
+        if (!isValidIsoDateString(value)) return "A data de inicio esta invalida";
         return "";
       case "dataFim":
-        if (typeof value !== "string" || !value) return "A data de fim é obrigatória";
-        if (form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de fim deve ser posterior a data de início";
+        if (typeof value !== "string" || !value) return "A data de fim e obrigatoria";
+        if (!isValidIsoDateString(value)) return "A data de fim esta invalida";
+        if (form.dataInicio && isValidIsoDateString(form.dataInicio) && value < form.dataInicio) {
+          return "A data de fim deve ser posterior a data de inicio";
         }
         return "";
       case "dataInicioEfetivo":
-        // Opcional, mas se preenchido deve ser válido
-        if (typeof value === "string" && value && form.dataInicio && new Date(value) < new Date(form.dataInicio)) {
-          return "A data de início efetivo deve ser posterior ou igual a data de início do contrato";
+        // Opcional, mas se preenchido deve ser valido
+        if (typeof value === "string" && value && !isValidIsoDateString(value)) {
+          return "A data de inicio efetivo esta invalida";
+        }
+        if (
+          typeof value === "string" &&
+          value &&
+          form.dataInicio &&
+          isValidIsoDateString(form.dataInicio) &&
+          value < form.dataInicio
+        ) {
+          return "A data de inicio efetivo deve ser posterior ou igual a data de inicio do contrato";
         }
         return "";
       case "dataFimEfetivo":
         // Opcional, mas se preenchido deve ser posterior ao inicio efetivo
-        if (typeof value === "string" && value && form.dataInicioEfetivo && new Date(value) < new Date(form.dataInicioEfetivo)) {
-          return "A data de fim efetivo deve ser posterior a data de início efetivo";
+        if (typeof value === "string" && value && !isValidIsoDateString(value)) {
+          return "A data de fim efetivo esta invalida";
         }
-        return "";
-      case "uf":
+        if (
+          typeof value === "string" &&
+          value &&
+          form.dataInicioEfetivo &&
+          isValidIsoDateString(form.dataInicioEfetivo) &&
+          value < form.dataInicioEfetivo
+        ) {
+          return "A data de fim efetivo deve ser posterior a data de inicio efetivo";
+        }
+        return "";      case "uf":      case "uf":
         if (typeof value !== "string" || !value.trim()) return "Selecione a UF";
         if (value.trim().length !== 2) return "UF inválida";
         return "";
       case "cidade":
-        if (typeof value !== "string" || !value.trim()) return "Selecione a cidade";
+        if (typeof value !== "string" || !value.trim()) return "Selecione ou informe a cidade";
         return "";
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
@@ -1076,8 +1120,30 @@ function NovoContratoPageContent() {
     return parseInt(onlyNumbers, 10) || 0;
   };
 
-  const parseCurrencyToNumber = (formattedValue: string): number =>
-    parseCurrencyToCents(formattedValue) / 100;
+  const normalizeCurrencyNumber = (value?: number | null): number => {
+    const numericValue = typeof value === "number" && Number.isFinite(value) ? value : 0;
+    return Math.round(numericValue * 100) / 100;
+  };
+
+  const currencyNumberToCents = (value?: number | null): number =>
+    Math.round(normalizeCurrencyNumber(value) * 100);
+
+  const parseCurrencyInputToNumber = (rawValue: string): number => {
+    const maxCents = Math.round(MAX_CONTRACT_VALUE * 100);
+    const nextCents = Math.min(parseCurrencyToCents(rawValue), maxCents);
+    return nextCents / 100;
+  };
+
+  const formatCurrencyAmountInput = (value?: number | null): string => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return "";
+    }
+
+    return value.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
 
   const resetFormState = useCallback(() => {
     setForm(initialFormState);
@@ -1088,7 +1154,8 @@ function NovoContratoPageContent() {
     setExpandedEtapas(new Set());
     setShowParcelasSection(false);
     setIsAddingParcela(false);
-    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
+    setEditingParcelaId(null);
+    setNewParcela({ ...initialParcelaDraftState });
     setDocumentos({});
     setFileErrors({
       contrato: "",
@@ -1186,6 +1253,7 @@ function NovoContratoPageContent() {
       }));
       setCidadeOptions([]);
       setCidadeLookupError(null);
+      setAllowManualCidadeEntry(false);
 
       const error = validateField(name, normalizedUf);
       setErrors((prev) => ({
@@ -1745,31 +1813,74 @@ function NovoContratoPageContent() {
 
   const validateParcela = (p: Partial<ParcelaDesembolso>) => {
     const valor = typeof p.valorPrevisto === "number" ? p.valorPrevisto : 0;
-    return Boolean(p.dataPrevista && valor > 0);
+    return Boolean(isValidIsoDateString(p.dataPrevista) && valor > 0);
   };
 
-  const addParcela = () => {
+  const resetParcelaEditor = () => {
+    setIsAddingParcela(false);
+    setEditingParcelaId(null);
+    setNewParcela({ ...initialParcelaDraftState });
+  };
+
+  const openNewParcelaForm = () => {
+    setIsAddingParcela(true);
+    setEditingParcelaId(null);
+    setNewParcela({ ...initialParcelaDraftState });
+  };
+
+  const startEditingParcela = (parcela: ParcelaDesembolso) => {
+    setIsAddingParcela(true);
+    setEditingParcelaId(parcela.id);
+    setNewParcela({
+      dataPrevista: parcela.dataPrevista,
+      valorPrevisto: parcela.valorPrevisto,
+      status: parcela.status,
+      observacao: parcela.observacao,
+    });
+  };
+
+  const saveParcela = () => {
     if (!validateParcela(newParcela)) return;
 
-    const novaParcela: ParcelaDesembolso = {
-      id: generateId(),
-      numero: form.parcelas.length + 1,
-      dataPrevista: newParcela.dataPrevista!,
-      valorPrevisto: newParcela.valorPrevisto || 0,
-      status: newParcela.status ?? "PREVISTO",
-      observacao: newParcela.observacao || "",
-    };
+    setForm((prev) => {
+      const parcelaBase = {
+        dataPrevista: newParcela.dataPrevista!,
+        valorPrevisto: normalizeCurrencyNumber(newParcela.valorPrevisto),
+        status: newParcela.status ?? "PREVISTO",
+        observacao: newParcela.observacao || "",
+      };
 
-    setForm((prev) => ({
-      ...prev,
-      parcelas: sortAndRenumberParcelas([...prev.parcelas, novaParcela]),
-    }));
+      if (editingParcelaId) {
+        return {
+          ...prev,
+          parcelas: sortAndRenumberParcelas(
+            prev.parcelas.map((parcela) =>
+              parcela.id === editingParcelaId ? { ...parcela, ...parcelaBase } : parcela
+            )
+          ),
+        };
+      }
 
-    setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
-    setIsAddingParcela(false);
+      const novaParcela: ParcelaDesembolso = {
+        id: generateId(),
+        numero: prev.parcelas.length + 1,
+        ...parcelaBase,
+      };
+
+      return {
+        ...prev,
+        parcelas: sortAndRenumberParcelas([...prev.parcelas, novaParcela]),
+      };
+    });
+
+    resetParcelaEditor();
   };
 
   const removeParcela = (id: string) => {
+    if (editingParcelaId === id) {
+      resetParcelaEditor();
+    }
+
     setForm((prev) => ({
       ...prev,
       parcelas: sortAndRenumberParcelas(prev.parcelas.filter((p) => p.id !== id)),
@@ -1780,15 +1891,22 @@ function NovoContratoPageContent() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return "-";
+    if (!dateStr || !isValidIsoDateString(dateStr)) return "-";
     const date = new Date(dateStr + "T00:00:00");
     return date.toLocaleDateString("pt-BR");
   };
 
-  const valorTotalContrato = form.contract_value ? parseCurrencyToNumber(form.contract_value) : 0;
-  const totalPrevisto = form.parcelas.reduce((acc, p) => acc + (p.valorPrevisto || 0), 0);
-  const restante = Math.max(valorTotalContrato - totalPrevisto, 0);
-  const excedente = Math.max(totalPrevisto - valorTotalContrato, 0);
+  const isEditingParcela = editingParcelaId !== null;
+  const valorTotalContratoCents = form.contract_value ? parseCurrencyToCents(form.contract_value) : 0;
+  const totalPrevistoCents = form.parcelas.reduce(
+    (acc, parcela) => acc + currencyNumberToCents(parcela.valorPrevisto),
+    0
+  );
+  const balanceDifferenceCents = valorTotalContratoCents - totalPrevistoCents;
+  const valorTotalContrato = valorTotalContratoCents / 100;
+  const totalPrevisto = totalPrevistoCents / 100;
+  const restante = balanceDifferenceCents > 0 ? balanceDifferenceCents / 100 : 0;
+  const excedente = balanceDifferenceCents < 0 ? Math.abs(balanceDifferenceCents) / 100 : 0;
 
   const buildProjectCode = (tipo: ContratoTipo) => {
     const prefix = tipo === "PRODUTO" ? "PRD" : "PRJ";
@@ -1845,24 +1963,107 @@ function NovoContratoPageContent() {
 
   const validateHierarchyBeforeSubmit = (formData: NovoContratoForm): string | null => {
     for (const parcela of formData.parcelas) {
+      const parcelaDateError = validateOptionalDateValue(
+        parcela.dataPrevista,
+        `A data prevista da Parcela ${parcela.numero}`
+      );
+      if (parcelaDateError) {
+        return parcelaDateError;
+      }
+
       if (!validateParcela(parcela)) {
-        return `Parcela ${parcela.numero} inválida. Preencha data prevista e valor maior que zero.`;
+        return `Parcela ${parcela.numero} invalida. Preencha data prevista e valor maior que zero.`;
       }
     }
 
     for (const meta of formData.metas) {
       if (!meta.titulo.trim()) {
-        return `Preencha o título da Meta ${meta.numero}.`;
+        return `Preencha o titulo da Meta ${meta.numero}.`;
+      }
+
+      const metaStartError = validateOptionalDateValue(
+        meta.dataInicio,
+        `A data de inicio da Meta ${meta.numero}`
+      );
+      if (metaStartError) {
+        return metaStartError;
+      }
+
+      const metaEndError = validateOptionalDateValue(
+        meta.dataFim,
+        `A data de fim da Meta ${meta.numero}`
+      );
+      if (metaEndError) {
+        return metaEndError;
+      }
+
+      const metaRangeError = validateOptionalDateRange(
+        meta.dataInicio,
+        meta.dataFim,
+        `Meta ${meta.numero}`
+      );
+      if (metaRangeError) {
+        return metaRangeError;
       }
 
       for (const etapa of meta.etapas) {
         if (!etapa.titulo.trim()) {
-          return `Preencha o título da Etapa ${meta.numero}.${etapa.numero}.`;
+          return `Preencha o titulo da Etapa ${meta.numero}.${etapa.numero}.`;
+        }
+
+        const etapaStartError = validateOptionalDateValue(
+          etapa.dataInicio,
+          `A data de inicio da Etapa ${meta.numero}.${etapa.numero}`
+        );
+        if (etapaStartError) {
+          return etapaStartError;
+        }
+
+        const etapaEndError = validateOptionalDateValue(
+          etapa.dataFim,
+          `A data de fim da Etapa ${meta.numero}.${etapa.numero}`
+        );
+        if (etapaEndError) {
+          return etapaEndError;
+        }
+
+        const etapaRangeError = validateOptionalDateRange(
+          etapa.dataInicio,
+          etapa.dataFim,
+          `Etapa ${meta.numero}.${etapa.numero}`
+        );
+        if (etapaRangeError) {
+          return etapaRangeError;
         }
 
         for (const fase of etapa.fases) {
           if (!fase.titulo.trim()) {
-            return `Preencha o título da Fase ${meta.numero}.${etapa.numero}.${fase.numero}.`;
+            return `Preencha o titulo da Fase ${meta.numero}.${etapa.numero}.${fase.numero}.`;
+          }
+
+          const faseStartError = validateOptionalDateValue(
+            fase.dataInicio,
+            `A data de inicio da Fase ${meta.numero}.${etapa.numero}.${fase.numero}`
+          );
+          if (faseStartError) {
+            return faseStartError;
+          }
+
+          const faseEndError = validateOptionalDateValue(
+            fase.dataFim,
+            `A data de fim da Fase ${meta.numero}.${etapa.numero}.${fase.numero}`
+          );
+          if (faseEndError) {
+            return faseEndError;
+          }
+
+          const faseRangeError = validateOptionalDateRange(
+            fase.dataInicio,
+            fase.dataFim,
+            `Fase ${meta.numero}.${etapa.numero}.${fase.numero}`
+          );
+          if (faseRangeError) {
+            return faseRangeError;
           }
         }
       }
@@ -1980,26 +2181,52 @@ function NovoContratoPageContent() {
     [isPopupMode]
   );
 
+  const handleMainFormKeyDownCapture = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter" || event.defaultPrevented || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLButtonElement ||
+      target instanceof HTMLAnchorElement
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (submitGuardRef.current) {
+      return;
+    }
+
+    submitGuardRef.current = true;
     setTouched(new Set(Object.keys(form) as Array<keyof NovoContratoForm>));
     setSubmitError(null);
 
-    if (!validateForm()) return;
-
-    if (!isEditMode) {
-      const hierarchyError = validateHierarchyBeforeSubmit(form);
-      if (hierarchyError) {
-        setSubmitError(hierarchyError);
-        return;
-      }
-    }
-
-    setIsSubmitting(true);
     let createdProjectId: number | null = null;
 
     try {
+      if (!validateForm()) {
+        return;
+      }
+
+      if (!isEditMode) {
+        const hierarchyError = validateHierarchyBeforeSubmit(form);
+        if (hierarchyError) {
+          setSubmitError(hierarchyError);
+          return;
+        }
+      }
+
+      setIsSubmitting(true);
+
       if (isEditMode && editContractId) {
         const updatePayload = transformFormToUpdateBackend(form);
         await updateProject(editContractId, updatePayload);
@@ -2045,15 +2272,16 @@ function NovoContratoPageContent() {
       const rootMessage = getUserErrorMessage(
         error,
         isEditMode
-          ? "Não foi possível atualizar o contrato."
-          : "Não foi possível concluir o cadastro do contrato."
+          ? "Nao foi possivel atualizar o contrato."
+          : "Nao foi possivel concluir o cadastro do contrato."
       );
 
       const message = createdProjectId
-        ? `${rootMessage} Projeto ${createdProjectId} foi criado, mas ocorreu erro ao salvar cronograma/metas.`
+        ? `${rootMessage} O projeto ${createdProjectId} ja foi criado, mas ocorreu erro ao salvar cronograma/metas. Nao tente cadastrar novamente; abra o contrato criado para concluir os dados pendentes.`
         : rootMessage;
       setSubmitError(message);
     } finally {
+      submitGuardRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -2165,7 +2393,7 @@ function NovoContratoPageContent() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onKeyDownCapture={handleMainFormKeyDownCapture}>
           {!loadingAccess && !canManageChildren && (
             <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
               Seu perfil pode criar e editar as informações principais do contrato, mas metas, desembolsos e documentos ficam apenas para consulta nesta tela.
@@ -2574,25 +2802,39 @@ function NovoContratoPageContent() {
                   error={errors.cidade}
                   icon={<MapPin className="h-4 w-4" />}
                 >
-                  <Dropdown
-                    options={cidadeDropdownOptions}
-                    value={form.cidade || undefined}
-                    onChange={(value) => handleChange("cidade", value)}
-                    placeholder={
-                      !form.uf
-                        ? "Selecione a UF primeiro"
-                        : isCidadeLoading
-                          ? "Carregando cidades..."
-                          : "Selecione a cidade"
-                    }
-                    disabled={!form.uf || isCidadeLoading || cidadeDropdownOptions.length === 0}
-                    searchable
-                    className={
-                      errors.cidade
-                        ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
-                        : ""
-                    }
-                  />
+                  {allowManualCidadeEntry && form.uf ? (
+                    <input
+                      type="text"
+                      value={form.cidade}
+                      onChange={(e) => handleChange("cidade", e.target.value)}
+                      placeholder="Digite a cidade"
+                      className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                        errors.cidade
+                          ? "border-red-300 focus:border-red-500"
+                          : "border-gray-300 focus:border-[#004225]"
+                      }`}
+                    />
+                  ) : (
+                    <Dropdown
+                      options={cidadeDropdownOptions}
+                      value={form.cidade || undefined}
+                      onChange={(value) => handleChange("cidade", value)}
+                      placeholder={
+                        !form.uf
+                          ? "Selecione a UF primeiro"
+                          : isCidadeLoading
+                            ? "Carregando cidades..."
+                            : "Selecione a cidade"
+                      }
+                      disabled={!form.uf || isCidadeLoading || cidadeDropdownOptions.length === 0}
+                      searchable
+                      className={
+                        errors.cidade
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : ""
+                      }
+                    />
+                  )}
                   {cidadeLookupError ? (
                     <p className="mt-1 text-xs text-amber-600">{cidadeLookupError}</p>
                   ) : null}
@@ -2762,7 +3004,7 @@ function NovoContratoPageContent() {
                     <div className="flex justify-end">
                       <button
                         type="button"
-                        onClick={() => setIsAddingParcela(true)}
+                        onClick={openNewParcelaForm}
                         disabled={isAddingParcela}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
                       >
@@ -2776,15 +3018,18 @@ function NovoContratoPageContent() {
                       <div className="bg-gray-50 border-2 border-[#004225]/20 rounded-lg p-4">
                         <div className="flex items-center justify-between gap-4 mb-4">
                           <div>
-                            <h4 className="font-medium text-sm text-black">Nova Parcela</h4>
-                            <p className="text-xs text-gray-600 mt-0.5">Informe data, valor previsto e status</p>
+                            <h4 className="font-medium text-sm text-black">
+                              {isEditingParcela ? "Editar Parcela" : "Nova Parcela"}
+                            </h4>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              {isEditingParcela
+                                ? "Atualize data, valor previsto, status e observacao"
+                                : "Informe data, valor previsto e status"}
+                            </p>
                           </div>
                           <button
                             type="button"
-                            onClick={() => {
-                              setIsAddingParcela(false);
-                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
-                            }}
+                            onClick={resetParcelaEditor}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                           >
                             <X className="h-4 w-4" />
@@ -2812,12 +3057,14 @@ function NovoContratoPageContent() {
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">R$</span>
                               <input
                                 type="text"
-                                value={newParcela.valorPrevisto ? formatCurrency(String(newParcela.valorPrevisto * 100)) : ""}
-                                onChange={(e) => {
-                                  const formatted = formatCurrency(e.target.value);
-                                  const numericValue = parseFloat(formatted.replace(/\./g, "").replace(",", ".")) || 0;
-                                  setNewParcela({ ...newParcela, valorPrevisto: numericValue });
-                                }}
+                                inputMode="numeric"
+                                value={formatCurrencyAmountInput(newParcela.valorPrevisto)}
+                                onChange={(e) =>
+                                  setNewParcela({
+                                    ...newParcela,
+                                    valorPrevisto: parseCurrencyInputToNumber(e.target.value),
+                                  })
+                                }
                                 placeholder="0,00"
                                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
                               />
@@ -2861,21 +3108,18 @@ function NovoContratoPageContent() {
                         <div className="flex justify-end gap-2 mt-4">
                           <button
                             type="button"
-                            onClick={() => {
-                              setIsAddingParcela(false);
-                              setNewParcela({ dataPrevista: "", valorPrevisto: 0, status: "PREVISTO", observacao: "" });
-                            }}
+                            onClick={resetParcelaEditor}
                             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                           >
                             Cancelar
                           </button>
                           <button
                             type="button"
-                            onClick={addParcela}
+                            onClick={saveParcela}
                             disabled={!validateParcela(newParcela)}
                             className="px-4 py-2 text-sm bg-[#004225] text-white rounded-lg hover:bg-[#003319] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
-                            Adicionar
+                            {isEditingParcela ? "Salvar alteracoes" : "Adicionar"}
                           </button>
                         </div>
                       </div>
@@ -2889,7 +3133,7 @@ function NovoContratoPageContent() {
                         </p>
                         <button
                           type="button"
-                          onClick={() => setIsAddingParcela(true)}
+                          onClick={openNewParcelaForm}
                           className="text-sm text-gray-600 hover:text-gray-700 font-medium"
                         >
                           + Adicionar primeira parcela
@@ -2910,7 +3154,12 @@ function NovoContratoPageContent() {
                           </thead>
                           <tbody>
                             {form.parcelas.map((parcela) => (
-                              <tr key={parcela.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <tr
+                                key={parcela.id}
+                                className={`border-b border-gray-100 ${
+                                  editingParcelaId === parcela.id ? "bg-[#004225]/5" : "hover:bg-gray-50"
+                                }`}
+                              >
                                 <td className="py-3 px-4 font-medium text-gray-500 text-center">{parcela.numero}o</td>
                                 <td className="py-3 px-4 text-center text-gray-700">{formatDate(parcela.dataPrevista)}</td>
                                 <td className="py-3 px-4 text-center font-semibold text-gray-900">
@@ -2932,6 +3181,14 @@ function NovoContratoPageContent() {
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditingParcela(parcela)}
+                                      className="p-1.5 text-[#004225] hover:bg-[#004225]/10 rounded transition-colors"
+                                      title="Editar"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => removeParcela(parcela.id)}
@@ -3522,6 +3779,7 @@ function NovoContratoPageContent() {
                         city: "",
                       }));
                       setPartnerCityLookupError(null);
+                      setAllowManualPartnerCityEntry(false);
                     }}
                     placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
                     disabled={isUfLoading || partnerUfDropdownOptions.length === 0}
@@ -3537,27 +3795,39 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Cidade <span className="text-red-500">*</span>
                   </label>
-                  <Dropdown
-                    options={partnerCityDropdownOptions}
-                    value={partnerForm.city || undefined}
-                    onChange={(value) =>
-                      setPartnerForm((prev) => ({ ...prev, city: value || "" }))
-                    }
-                    placeholder={
-                      !partnerForm.state
-                        ? "Selecione a UF primeiro"
-                        : isPartnerCityLoading
-                          ? "Carregando cidades..."
-                          : "Selecione a cidade"
-                    }
-                    disabled={
-                      !partnerForm.state ||
-                      isPartnerCityLoading ||
-                      partnerCityDropdownOptions.length === 0
-                    }
-                    searchable
-                    className="h-10"
-                  />
+                  {allowManualPartnerCityEntry && partnerForm.state ? (
+                    <input
+                      type="text"
+                      value={partnerForm.city}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, city: event.target.value }))
+                      }
+                      placeholder="Digite a cidade"
+                      className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    />
+                  ) : (
+                    <Dropdown
+                      options={partnerCityDropdownOptions}
+                      value={partnerForm.city || undefined}
+                      onChange={(value) =>
+                        setPartnerForm((prev) => ({ ...prev, city: value || "" }))
+                      }
+                      placeholder={
+                        !partnerForm.state
+                          ? "Selecione a UF primeiro"
+                          : isPartnerCityLoading
+                            ? "Carregando cidades..."
+                            : "Selecione a cidade"
+                      }
+                      disabled={
+                        !partnerForm.state ||
+                        isPartnerCityLoading ||
+                        partnerCityDropdownOptions.length === 0
+                      }
+                      searchable
+                      className="h-10"
+                    />
+                  )}
                   {partnerCityLookupError ? (
                     <p className="mt-1 text-xs text-amber-600">{partnerCityLookupError}</p>
                   ) : null}
@@ -4170,6 +4440,7 @@ function NovoContratoPageContent() {
                         city: "",
                       }));
                       setCoordinatorCityLookupError(null);
+                      setAllowManualCoordinatorCityEntry(false);
                     }}
                     placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
                     disabled={isUfLoading || coordinatorUfDropdownOptions.length === 0}
@@ -4185,27 +4456,39 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Cidade <span className="text-red-500">*</span>
                   </label>
-                  <Dropdown
-                    options={coordinatorCityDropdownOptions}
-                    value={coordinatorForm.city || undefined}
-                    onChange={(value) =>
-                      setCoordinatorForm((prev) => ({ ...prev, city: value || "" }))
-                    }
-                    placeholder={
-                      !coordinatorForm.state
-                        ? "Selecione a UF primeiro"
-                        : isCoordinatorCityLoading
-                          ? "Carregando cidades..."
-                          : "Selecione a cidade"
-                    }
-                    disabled={
-                      !coordinatorForm.state ||
-                      isCoordinatorCityLoading ||
-                      coordinatorCityDropdownOptions.length === 0
-                    }
-                    searchable
-                    className="h-10"
-                  />
+                  {allowManualCoordinatorCityEntry && coordinatorForm.state ? (
+                    <input
+                      type="text"
+                      value={coordinatorForm.city}
+                      onChange={(event) =>
+                        setCoordinatorForm((prev) => ({ ...prev, city: event.target.value }))
+                      }
+                      placeholder="Digite a cidade"
+                      className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    />
+                  ) : (
+                    <Dropdown
+                      options={coordinatorCityDropdownOptions}
+                      value={coordinatorForm.city || undefined}
+                      onChange={(value) =>
+                        setCoordinatorForm((prev) => ({ ...prev, city: value || "" }))
+                      }
+                      placeholder={
+                        !coordinatorForm.state
+                          ? "Selecione a UF primeiro"
+                          : isCoordinatorCityLoading
+                            ? "Carregando cidades..."
+                            : "Selecione a cidade"
+                      }
+                      disabled={
+                        !coordinatorForm.state ||
+                        isCoordinatorCityLoading ||
+                        coordinatorCityDropdownOptions.length === 0
+                      }
+                      searchable
+                      className="h-10"
+                    />
+                  )}
                   {coordinatorCityLookupError ? (
                     <p className="mt-1 text-xs text-amber-600">{coordinatorCityLookupError}</p>
                   ) : null}
@@ -4380,3 +4663,5 @@ function FormField({
     </div>
   );
 }
+
+

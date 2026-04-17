@@ -252,6 +252,7 @@ export default function ContratoLayout({
   const [showEditPopup, setShowEditPopup] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [tabSectionRefreshKey, setTabSectionRefreshKey] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
   const [canViewAuditTab, setCanViewAuditTab] = useState(false);
 
@@ -551,6 +552,10 @@ export default function ContratoLayout({
     setShowEditPopup(true);
   }, []);
 
+  const refreshTabSection = useCallback(() => {
+    setTabSectionRefreshKey((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     if (!autoEditRequested || autoEditAppliedRef.current) {
       return;
@@ -592,6 +597,7 @@ export default function ContratoLayout({
         setShowEditPopup(false);
         setSaveError(null);
         void loadContrato().then(() => {
+          refreshTabSection();
           setSavedMessage(true);
           setTimeout(() => setSavedMessage(false), 3000);
         });
@@ -602,7 +608,7 @@ export default function ContratoLayout({
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, [contratoId, loadContrato]);
+  }, [contratoId, loadContrato, refreshTabSection]);
 
   const handleCancel = () => {
     setSaveError(null);
@@ -649,6 +655,7 @@ export default function ContratoLayout({
     try {
       await updateProject(contratoId, payload);
       await loadContrato();
+      refreshTabSection();
       setIsEditing(false);
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
@@ -691,6 +698,7 @@ export default function ContratoLayout({
     try {
       await updateProject(contratoId, { projectStatus: nextStatus });
       await loadContrato();
+      refreshTabSection();
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
@@ -1414,7 +1422,10 @@ export default function ContratoLayout({
         </div>
 
         {/* Tabs de navegação*/}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div
+          key={`${pathname}-${tabSectionRefreshKey}`}
+          className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6"
+        >
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
               {tabs.map((tab) => (
