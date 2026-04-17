@@ -298,7 +298,7 @@ function createDraftLancamento(): Lancamento {
     valor: 0,
     dataPag: '',
     paymentStatus: 'PAGO',
-    paidBy: 'EMPRESA',
+    paidBy: 'INNOVATIS',
     expenseId: undefined,
   };
 }
@@ -333,12 +333,20 @@ function getPaymentStatusBadgeClassName(status: ExpensePaymentStatusEnum) {
     : 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
-function getPaidByLabel(value: ExpensePaidByEnum) {
-  return value === 'PARCEIRO' ? 'Parceiro' : 'Empresa';
+function normalizePaidBy(
+  value: ExpensePaidByEnum | 'EMPRESA' | 'PARCEIRO' | null | undefined
+): ExpensePaidByEnum {
+  if (value === 'PARCEIRO') return 'EXECUCAO';
+  if (value === 'EMPRESA') return 'INNOVATIS';
+  return value ?? 'INNOVATIS';
 }
 
-function getPaidByBadgeClassName(value: ExpensePaidByEnum) {
-  return value === 'PARCEIRO'
+function getPaidByLabel(value: ExpensePaidByEnum | 'EMPRESA' | 'PARCEIRO') {
+  return normalizePaidBy(value) === 'EXECUCAO' ? 'Execução' : 'Innovatis';
+}
+
+function getPaidByBadgeClassName(value: ExpensePaidByEnum | 'EMPRESA' | 'PARCEIRO') {
+  return normalizePaidBy(value) === 'EXECUCAO'
     ? 'border-sky-200 bg-sky-50 text-sky-700'
     : 'border-slate-200 bg-slate-50 text-slate-700';
 }
@@ -801,7 +809,7 @@ export default function PagamentosPlanilhaPage() {
             valor: toMoneyValue(expense.amount),
             dataPag: expense.expenseDate || '',
             paymentStatus: expense.paymentStatus ?? 'PAGO',
-            paidBy: expense.paidBy ?? 'EMPRESA',
+            paidBy: normalizePaidBy(expense.paidBy),
             expenseId: String(expense.id),
           },
         ]);
@@ -2015,7 +2023,7 @@ export default function PagamentosPlanilhaPage() {
       quantity: toPositiveInt(currentExpense.quantity, 1),
       amount: toMoneyValue(lancamento.valor),
       paymentStatus: 'PAGO',
-      paidBy: lancamento.paidBy ?? currentExpense.paidBy ?? 'EMPRESA',
+      paidBy: normalizePaidBy(lancamento.paidBy ?? currentExpense.paidBy),
       personId: personId ?? undefined,
       organizationId: organizationId ?? undefined,
       description: description || currentExpense.description || undefined,
@@ -2098,7 +2106,7 @@ export default function PagamentosPlanilhaPage() {
       const amount = toMoneyValue(lancamento.valor);
       const expenseDate = (lancamento.dataPag || '').trim();
       const paymentStatus = lancamento.paymentStatus ?? 'PAGO';
-      const paidBy = lancamento.paidBy ?? 'EMPRESA';
+      const paidBy = normalizePaidBy(lancamento.paidBy);
       const hasAmount = amount > 0;
       const hasDate = expenseDate.length > 0;
       const expenseId = parsePersistedId(lancamento.expenseId);
@@ -2176,7 +2184,7 @@ export default function PagamentosPlanilhaPage() {
             toPositiveInt(currentExpense.quantity, 1) !== payload.quantity ||
             toMoneyValue(currentExpense.amount) !== payload.amount ||
             (currentExpense.paymentStatus ?? 'PAGO') !== payload.paymentStatus ||
-            (currentExpense.paidBy ?? 'EMPRESA') !== payload.paidBy ||
+            normalizePaidBy(currentExpense.paidBy) !== payload.paidBy ||
             (currentExpense.personId ?? null) !== (payload.personId ?? null) ||
             (currentExpense.organizationId ?? null) !== (payload.organizationId ?? null) ||
             (currentExpense.description || '') !== (payload.description || '');
@@ -3743,8 +3751,8 @@ function LaunchRow({
             disabled={isPersisting}
             className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
           >
-            <option value="EMPRESA">Empresa</option>
-            <option value="PARCEIRO">Parceiro</option>
+            <option value="INNOVATIS">Innovatis</option>
+            <option value="EXECUCAO">Execução</option>
           </select>
           <DatePicker
             value={launch.dataPag || ''}

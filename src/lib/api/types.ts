@@ -79,7 +79,7 @@ export type ProjectStatusEnum =
   | 'SUSPENSO'
   | 'PLANEJAMENTO';
 export type ExpensePaymentStatusEnum = 'PAGO' | 'RESERVADO';
-export type ExpensePaidByEnum = 'EMPRESA' | 'PARCEIRO';
+export type ExpensePaidByEnum = 'INNOVATIS' | 'EXECUCAO';
 export type StatusProjectPeopleEnum = 'PENDENTE' | 'ATIVO' | 'ENCERRADO';
 export type ContractTypeEnum = 'BOLSA' | 'RPA' | 'CLT';
 export type RoleProjectPeopleEnum = 'DIRETOR' | 'BOLSISTA';
