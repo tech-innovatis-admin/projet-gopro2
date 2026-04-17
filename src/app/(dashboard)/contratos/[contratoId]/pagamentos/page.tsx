@@ -3126,8 +3126,8 @@ function SummaryMetricCard({
   }[tone];
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${toneStyles.accent}`} />
+    <div className={`relative overflow-visible rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${toneStyles.accent}`} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -3143,13 +3143,15 @@ function SummaryMetricCard({
         <div className="group/tooltip relative shrink-0">
           <button
             type="button"
-            aria-label={tooltip}
-            title={tooltip}
+            aria-label={`Saiba mais sobre ${label}`}
             className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${toneStyles.tooltipButton}`}
           >
             <Info className="h-4 w-4" />
           </button>
-          <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-56 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white shadow-xl group-hover/tooltip:block group-focus-within/tooltip:block">
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-3rem)] translate-y-1 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 invisible group-hover/tooltip:visible group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:visible group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+          >
             {tooltip}
           </div>
         </div>
@@ -3449,12 +3451,12 @@ function BudgetItemSection({
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CompactMetricCard label="Pago" value={formatCurrency(view.pagoItem)} />
+        <CompactMetricCard label="Comprometido" value={formatCurrency(view.comprometidoItem)} />
         <CompactMetricCard
           label="Reservado"
           value={formatCurrency(view.reservadoItem)}
           toneClassName="text-amber-600"
         />
-        <CompactMetricCard label="Comprometido" value={formatCurrency(view.comprometidoItem)} />
         <CompactMetricCard
           label="Saldo"
           value={formatCurrency(view.saldoItem)}
