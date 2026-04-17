@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
@@ -559,8 +560,24 @@ export default function EmpresasPage() {
                 {empresa.email && <div className="flex items-center gap-2 text-gray-600"><Globe className="h-4 w-4 text-gray-400" /><span>{empresa.email}</span></div>}
               </div>
 
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                <div className="text-xs text-gray-500">{empresa.dataInicio && empresa.dataFim ? `${formatDateBr(empresa.dataInicio)} ate ${formatDateBr(empresa.dataFim)}` : "Período não informado"}</div>
+              <div className="flex items-end justify-between mt-4 pt-3 border-t border-gray-100 gap-3">
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs text-gray-500">{empresa.dataInicio && empresa.dataFim ? `${formatDateBr(empresa.dataInicio)} ate ${formatDateBr(empresa.dataFim)}` : "Período não informado"}</div>
+                  {typeof empresa.companyId === "number" ? (
+                    <Link
+                      href={`/fornecedores/${empresa.companyId}`}
+                      className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#004225] border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      Ver fornecedor
+                    </Link>
+                  ) : (
+                    <span className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-400 border border-gray-200 bg-gray-50 rounded-lg cursor-not-allowed">
+                      <Link2 className="h-3.5 w-3.5" />
+                      Fornecedor indisponível
+                    </span>
+                  )}
+                </div>
                 <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
               </div>
             </div>

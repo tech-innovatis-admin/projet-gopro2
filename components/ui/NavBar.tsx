@@ -176,6 +176,15 @@ const baseNavigationItems: NavItem[] = [
       { label: "Pré-Contratos", href: "/contratos/pre-projetos", icon: FileCodeIcon },
     ],
   },
+  {
+    label: "Gestão",
+    href: "/gestão",
+    icon: Users,
+    children: [
+      { label: "Parceiros", href: "/parceiros", icon: FolderOpen },
+      { label: "Fornecedores", href: "/fornecedores", icon: FileText },
+    ],
+  },
 ];
 
 function isItemActive(pathname: string, href: string): boolean {
@@ -246,6 +255,25 @@ export function NavBar() {
     setOpenDropdown(null);
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!openDropdown) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-nav-dropdown-root='true']")) {
+        return;
+      }
+      setOpenDropdown(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openDropdown]);
 
   useEffect(() => {
     const syncReadIds = () => {
@@ -402,7 +430,7 @@ export function NavBar() {
     }
 
     return (
-      <div key={item.label} className="relative">
+      <div key={item.label} className="relative" data-nav-dropdown-root="true">
         <button
           type="button"
           onClick={() => setOpenDropdown(isOpen ? null : item.label)}
@@ -470,7 +498,7 @@ export function NavBar() {
     }
 
     return (
-      <div key={item.label}>
+      <div key={item.label} data-nav-dropdown-root="true">
         <button
           type="button"
           onClick={() => setOpenDropdown(isOpen ? null : item.label)}

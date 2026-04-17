@@ -78,6 +78,8 @@ export type ProjectStatusEnum =
   | 'FINALIZADO'
   | 'SUSPENSO'
   | 'PLANEJAMENTO';
+export type ExpensePaymentStatusEnum = 'PAGO' | 'RESERVADO';
+export type ExpensePaidByEnum = 'INNOVATIS' | 'EXECUCAO';
 export type StatusProjectPeopleEnum = 'PENDENTE' | 'ATIVO' | 'ENCERRADO';
 export type ContractTypeEnum = 'BOLSA' | 'RPA' | 'CLT';
 export type RoleProjectPeopleEnum = 'DIRETOR' | 'BOLSISTA';
@@ -453,6 +455,8 @@ export interface ProjectResponseDTO {
   isActive: boolean;
   totalReceived: number | null;
   totalExpenses: number | null;
+  totalReserved: number | null;
+  saldoReal: number | null;
   saldo: number | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -493,6 +497,8 @@ export interface ProjectTotalsDTO {
   projectId: number;
   totalIncome: number;
   totalExpense: number;
+  totalReserved: number;
+  saldoReal: number;
   saldo: number;
 }
 
@@ -950,6 +956,8 @@ export interface ExpenseResponseDTO {
   expenseDate: string;
   quantity: number;
   amount: number;
+  paymentStatus: ExpensePaymentStatusEnum;
+  paidBy: ExpensePaidByEnum;
   personId: number | null;
   organizationId: number | null;
   description: string | null;
@@ -971,6 +979,8 @@ export interface ExpenseRequestDTO {
   expenseDate: string;
   quantity: number;
   amount: number;
+  paymentStatus: ExpensePaymentStatusEnum;
+  paidBy?: ExpensePaidByEnum;
   personId?: number;
   organizationId?: number;
   description?: string;

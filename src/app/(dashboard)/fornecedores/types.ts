@@ -93,8 +93,8 @@ export interface Fornecedor {
   uf: string;
   municipio: string;
   endereco?: string;
-  categorias: FornecedorCategoria[];
-  servicos: FornecedorServico[];
+  categorias?: FornecedorCategoria[];
+  servicos?: FornecedorServico[];
   status: FornecedorStatus;
   observacoes?: string;
   createdAt: string; // ISO date
@@ -127,8 +127,6 @@ export interface FornecedoresFiltersState {
   q: string; // busca por nome
   uf: string | null;
   municipio: string | null;
-  categorias: FornecedorCategoria[];
-  servicos: FornecedorServico[];
   status: FornecedorStatus | null;
   sortBy: "nome" | "uf" | "municipio" | "status";
   sortDir: "asc" | "desc";
@@ -141,8 +139,6 @@ export const INITIAL_FILTERS_STATE: FornecedoresFiltersState = {
   q: "",
   uf: null,
   municipio: null,
-  categorias: [],
-  servicos: [],
   status: null,
   sortBy: "nome",
   sortDir: "asc",
