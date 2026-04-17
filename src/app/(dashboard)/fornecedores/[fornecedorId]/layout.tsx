@@ -1,17 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Building2, Eye, Pencil, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavBar } from "@/components/ui/NavBar";
 import { StarRating } from "@/components/ui/StarRating";
-import { getFornecedorById, getContratosByFornecedor } from "../mockData";
-import { STATUS_CONFIG } from "../types";
-
-// =============================================================================
-// LAYOUT COMPARTILHADO PARA PÁGINAS DE DETALHE DO FORNECEDOR
-// =============================================================================
+import { getCompanyById } from "@/src/lib/api/endpoints";
+import { getContratosByFornecedor } from "../mockData";
+import { STATUS_CONFIG, type Fornecedor } from "../types";
+import { getFriendlyApiError, mapCompanyToFornecedor } from "../mappers";
 
 interface FornecedorLayoutProps {
   children: React.ReactNode;
@@ -22,28 +21,61 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
   const pathname = usePathname();
   const fornecedorId = params.fornecedorId as string;
 
-  const fornecedor = getFornecedorById(fornecedorId);
+  const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Calcula média de avaliações
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const company = await getCompanyById(fornecedorId);
+        if (!mounted) return;
+        setFornecedor(mapCompanyToFornecedor(company));
+      } catch (loadError) {
+        if (!mounted) return;
+        setFornecedor(null);
+        setError(getFriendlyApiError(loadError));
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [fornecedorId]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+        <NavBar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-gray-500">
+          Carregando fornecedor...
+        </main>
+      </div>
+    );
+  }
+
   const contratos = fornecedor ? getContratosByFornecedor(fornecedorId) : [];
   const avaliacoes = contratos
     .map((c) => c.avaliacao?.nota)
     .filter((nota): nota is number => nota !== undefined && nota > 0);
-  
-  const mediaAvaliacoes = avaliacoes.length > 0
-    ? avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length
-    : 0;
+  const mediaAvaliacoes =
+    avaliacoes.length > 0
+      ? avaliacoes.reduce((sum, nota) => sum + nota, 0) / avaliacoes.length
+      : 0;
 
   if (!fornecedor) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100 flex items-center justify-center">
         <div className="text-center">
           <Building2 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Fornecedor não encontrado
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Fornecedor não encontrado</h2>
           <p className="text-gray-500 mb-4">
-            O fornecedor solicitado não existe ou foi removido.
+            {error || "O fornecedor solicitado não existe ou foi removido."}
           </p>
           <Link
             href="/fornecedores"
@@ -58,8 +90,6 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
   }
 
   const statusConfig = STATUS_CONFIG[fornecedor.status];
-
-  // Tabs de navegação
   const tabs = [
     {
       label: "Visão Geral",
@@ -84,10 +114,8 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
       <NavBar />
-      {/* Header do fornecedor */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Breadcrumb e voltar */}
           <div className="py-4">
             <Link
               href="/fornecedores"
@@ -98,10 +126,8 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
             </Link>
           </div>
 
-          {/* Info do fornecedor */}
           <div className="pb-4">
             <div className="flex items-start gap-4">
-              {/* Avatar */}
               <div className="flex-shrink-0 h-16 w-16 rounded-xl bg-[#1F4E79]/10 flex items-center justify-center">
                 <span className="text-xl font-bold text-[#1F4E79]">
                   {fornecedor.nome
@@ -113,12 +139,9 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
                 </span>
               </div>
 
-              {/* Dados */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-xl font-bold text-gray-900">
-                    {fornecedor.nome}
-                  </h1>
+                  <h1 className="text-xl font-bold text-gray-900">{fornecedor.nome}</h1>
                   <span
                     className={cn(
                       "inline-flex px-2.5 py-1 text-xs font-medium rounded-full",
@@ -152,7 +175,6 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
             </div>
           </div>
 
-          {/* Tabs de navegação */}
           <div className="flex items-center gap-1 -mb-px">
             {tabs.map((tab) => (
               <Link
@@ -173,10 +195,8 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
         </div>
       </div>
 
-      {/* Conteúdo */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
     </div>
   );
 }
+

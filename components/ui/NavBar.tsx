@@ -257,6 +257,25 @@ export function NavBar() {
   }, [pathname]);
 
   useEffect(() => {
+    if (!openDropdown) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-nav-dropdown-root='true']")) {
+        return;
+      }
+      setOpenDropdown(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openDropdown]);
+
+  useEffect(() => {
     const syncReadIds = () => {
       setReadNotificationIds(loadReadNotificationIds());
     };
@@ -411,7 +430,7 @@ export function NavBar() {
     }
 
     return (
-      <div key={item.label} className="relative">
+      <div key={item.label} className="relative" data-nav-dropdown-root="true">
         <button
           type="button"
           onClick={() => setOpenDropdown(isOpen ? null : item.label)}
@@ -479,7 +498,7 @@ export function NavBar() {
     }
 
     return (
-      <div key={item.label}>
+      <div key={item.label} data-nav-dropdown-root="true">
         <button
           type="button"
           onClick={() => setOpenDropdown(isOpen ? null : item.label)}
