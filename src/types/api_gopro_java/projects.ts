@@ -54,6 +54,8 @@ export interface Project extends AuditFields {
   executedByInnovatis?: boolean;
   totalReceived: number;
   totalExpenses: number;
+  totalReserved?: number;
+  saldoReal?: number;
   saldo: number;
 }
 
@@ -82,4 +84,4 @@ export interface CreateProject {
   executedByInnovatis?: boolean;
 }
 
-export interface UpdateProject extends Partial<CreateProject> {}
+export type UpdateProject = Partial<CreateProject>;
