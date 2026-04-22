@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavBar } from "@/components/ui/NavBar";
-import { createPartner, listPartners, listProjects } from "@/src/lib/api/endpoints";
+import { createPartner } from "@/src/lib/api/endpoints";
+import { loadPartnerCatalog } from "@/src/lib/partners/metrics";
 import type { ProjectResponseDTO } from "@/src/lib/api/types";
 import {
   ParceirosHeader,
@@ -35,15 +36,12 @@ export default function ParceirosPage() {
     setError(null);
 
     try {
-      const [partnersResponse, projectsResponse] = await Promise.all([
-        listPartners({ page: 0, size: 20 }),
-        listProjects({ page: 0, size: 20 }),
-      ]);
+      const { partners, projects: allProjects } = await loadPartnerCatalog();
 
-      setProjects(projectsResponse.content);
+      setProjects(allProjects);
       setParceiros(
-        partnersResponse.content.map((partner) =>
-          mapPartnerToParceiro(partner, projectsResponse.content)
+        partners.map((partner) =>
+          mapPartnerToParceiro(partner, allProjects)
         )
       );
     } catch (loadError) {
@@ -95,7 +93,7 @@ export default function ParceirosPage() {
         case "tipo":
           return sortDir * a.tipo.localeCompare(b.tipo);
         case "contratosAtivos":
-          return sortDir * ((b.contratosAtivos ?? 0) - (a.contratosAtivos ?? 0));
+          return sortDir * ((b.totalContratos ?? b.contratosAtivos ?? 0) - (a.totalContratos ?? a.contratosAtivos ?? 0));
         default:
           return 0;
       }
@@ -118,7 +116,7 @@ export default function ParceirosPage() {
   }, []);
 
   const handleAddParceiro = useCallback(
-    async (data: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">) => {
+    async (data: Omit<Parceiro, "id" | "createdAt" | "totalContratos" | "contratosAtivos" | "valorTotalContratos">) => {
       const cnpjDigits = (data.cnpj ?? "").replace(/\D/g, "");
       if (cnpjDigits.length !== 14) {
         throw new Error("Informe um CNPJ válido com 14 dígitos.");

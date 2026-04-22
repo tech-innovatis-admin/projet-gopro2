@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavBar } from "@/components/ui/NavBar";
+import { buildPartnerOverviewMetrics, loadPartnerCatalog } from "@/src/lib/partners/metrics";
 import {
   TrendingUp,
   TrendingDown,
@@ -40,7 +41,6 @@ import {
   mockBudgetTransfers,
   mockSLAComparison,
   mockOpenActivities,
-  mockPartners,
   mockClients,
   mockByRegion,
   mockSupplierRatings,
@@ -73,6 +73,60 @@ const TOTAL_PAGES = 6;
 export default function AnalisePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState(defaultFilters);
+  const [partnerMetrics, setPartnerMetrics] = useState<ReturnType<typeof buildPartnerOverviewMetrics>>([]);
+  const [partnerMetricsLoading, setPartnerMetricsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLivePartners = async () => {
+      setPartnerMetricsLoading(true);
+
+      try {
+        const { partners, projects } = await loadPartnerCatalog();
+        if (!isMounted) {
+          return;
+        }
+
+        setPartnerMetrics(buildPartnerOverviewMetrics(partners, projects));
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setPartnerMetrics([]);
+      } finally {
+        if (isMounted) {
+          setPartnerMetricsLoading(false);
+        }
+      }
+    };
+
+    void loadLivePartners();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const partnerInsights = useMemo(() => {
+    return partnerMetrics.map((partner) => ({
+      id: String(partner.partnerId),
+      tradeName: partner.partnerAcronym || partner.partnerName,
+      projectCount: partner.totalContracts,
+      totalValue: partner.totalValue,
+    }));
+  }, [partnerMetrics]);
+
+  const activePartnerCount = useMemo(
+    () => partnerMetrics.filter((partner) => partner.isActive).length,
+    [partnerMetrics]
+  );
+
+  const totalPartnerContracts = useMemo(
+    () => partnerMetrics.reduce((acc, partner) => acc + partner.totalContracts, 0),
+    [partnerMetrics]
+  );
 
   const goToNextPage = () => {
     setCurrentPage((prev) => (prev < TOTAL_PAGES ? prev + 1 : 1));
@@ -690,8 +744,8 @@ export default function AnalisePage() {
                 />
                 <MetricCard
                   title="Parceiros Ativos"
-                  value={mockPartners.length}
-                  subtitle={`${mockPartners.reduce((acc, p) => acc + p.projectCount, 0)} projetos`}
+                  value={partnerMetricsLoading ? "..." : activePartnerCount}
+                  subtitle={partnerMetricsLoading ? "Carregando contratos" : `${totalPartnerContracts} contratos`}
                   icon={<Users className="h-4 w-4" />}
                 />
               </div>
@@ -702,14 +756,20 @@ export default function AnalisePage() {
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">Top Parceiros</h3>
                   <div className="flex-1 min-h-0">
-                    <HorizontalBarChart
-                      data={mockPartners.map(p => ({
-                        label: p.tradeName,
-                        value: p.projectCount,
-                        secondary: formatCurrencyCompact(p.totalValue),
-                      }))}
-                      valueLabel="projetos"
-                    />
+                    {partnerMetricsLoading ? (
+                      <div className="h-full flex items-center justify-center text-xs text-gray-500">
+                        Carregando parceiros...
+                      </div>
+                    ) : (
+                      <HorizontalBarChart
+                        data={partnerInsights.map((partner) => ({
+                          label: partner.tradeName,
+                          value: partner.projectCount,
+                          secondary: formatCurrencyCompact(partner.totalValue),
+                        }))}
+                        valueLabel="contratos"
+                      />
+                    )}
                   </div>
                 </div>
 

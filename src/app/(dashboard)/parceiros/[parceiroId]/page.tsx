@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getPartnerById, listProjects } from "@/src/lib/api/endpoints";
+import { loadPartnerDetailSnapshot } from "@/src/lib/partners/metrics";
 import { getFriendlyApiError, isProjectLinkedToPartner, mapPartnerToParceiro, mapProjectToParceiroContrato } from "../mappers";
 import { TIPO_CONFIG, STATUS_CONFIG, type ParceiroContratoVinculado } from "../types";
 import type { Parceiro } from "../types";
@@ -48,18 +48,15 @@ export default function ParceiroDetalhePage() {
 
       try {
         const partnerId = params.parceiroId as string;
-        const [partnerResponse, projectsResponse] = await Promise.all([
-          getPartnerById(partnerId),
-          listProjects({ page: 0, size: 20 }),
-        ]);
+        const { partner: partnerResponse, projects } = await loadPartnerDetailSnapshot(partnerId);
 
         if (!isMounted) {
           return;
         }
 
-        setParceiro(mapPartnerToParceiro(partnerResponse, projectsResponse.content));
+        setParceiro(mapPartnerToParceiro(partnerResponse, projects));
         setContratos(
-          projectsResponse.content
+          projects
             .filter((project) => isProjectLinkedToPartner(project, partnerResponse.id))
             .map(mapProjectToParceiroContrato)
         );
@@ -125,6 +122,7 @@ export default function ParceiroDetalhePage() {
   }
 
   const TipoIcon = tipoConfig?.icon || Building;
+  const totalContratos = parceiro.totalContratos ?? parceiro.contratosAtivos ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -341,6 +339,15 @@ export default function ParceiroDetalhePage() {
                 </h2>
               </div>
               <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <FileText className="h-4 w-4" />
+                    <span className="text-sm">Contratos</span>
+                  </div>
+                  <span className="text-lg font-semibold text-[#004225]">
+                    {totalContratos}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-gray-500">
                     <FileText className="h-4 w-4" />

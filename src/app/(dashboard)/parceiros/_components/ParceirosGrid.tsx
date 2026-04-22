@@ -96,6 +96,8 @@ export function ParceirosGrid({
         {paginatedParceiros.map((parceiro) => {
           const tipoConfig = TIPO_COLORS[parceiro.tipo];
           const statusConfig = STATUS_CONFIG[parceiro.status];
+          const totalContratos = parceiro.totalContratos ?? parceiro.contratosAtivos ?? 0;
+          const contratosAtivos = parceiro.contratosAtivos ?? 0;
 
           return (
             <Link
@@ -187,12 +189,19 @@ export function ParceirosGrid({
                 <div className="pt-3 mt-3 border-t border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="text-xs text-gray-600">
-                      <span className="font-semibold text-gray-900">
-                        {parceiro.contratosAtivos || 0}
-                      </span>{" "}
-                      contratos
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-600">
+                        <span className="font-semibold text-gray-900">
+                          {totalContratos}
+                        </span>{" "}
+                        contratos
+                      </span>
+                      {contratosAtivos > 0 && contratosAtivos !== totalContratos && (
+                        <span className="text-[11px] text-gray-400">
+                          {contratosAtivos} ativos
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {parceiro.valorTotalContratos && parceiro.valorTotalContratos > 0 && (
                     <span className="text-xs font-medium text-[#004225]">
