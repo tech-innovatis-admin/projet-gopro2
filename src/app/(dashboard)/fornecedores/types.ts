@@ -81,6 +81,13 @@ export const CATEGORIA_COLORS: Record<FornecedorCategoria, { bg: string; text: s
   INFRAESTRUTURA: { bg: "bg-emerald-100", text: "text-emerald-700" },
 };
 
+export interface FornecedorResponsavel {
+  id: string;
+  nome: string;
+  cpf?: string;
+  email?: string;
+}
+
 // Interface principal do Fornecedor
 export interface Fornecedor {
   id: string;
@@ -89,6 +96,8 @@ export interface Fornecedor {
   cnpj?: string;
   email?: string;
   telefone?: string;
+  responsavelPersonId?: string;
+  responsavel?: FornecedorResponsavel;
   cep?: string;
   uf: string;
   municipio: string;

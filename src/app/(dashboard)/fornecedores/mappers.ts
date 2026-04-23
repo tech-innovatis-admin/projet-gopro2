@@ -19,6 +19,15 @@ function formatCnpj(raw?: string): string | undefined {
   );
 }
 
+function formatCpf(raw?: string | null): string | undefined {
+  const digits = onlyDigits(raw ?? "");
+  if (digits.length !== 11) return raw ?? undefined;
+  return digits.replace(
+    /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+    "$1.$2.$3-$4"
+  );
+}
+
 export function mapCompanyToFornecedor(company: CompanyResponseDTO): Fornecedor {
   return {
     id: String(company.id),
@@ -27,6 +36,17 @@ export function mapCompanyToFornecedor(company: CompanyResponseDTO): Fornecedor 
     cnpj: formatCnpj(company.cnpj) || undefined,
     email: company.email || undefined,
     telefone: company.phone || undefined,
+    responsavelPersonId: company.responsiblePerson
+      ? String(company.responsiblePerson.id)
+      : undefined,
+    responsavel: company.responsiblePerson
+      ? {
+          id: String(company.responsiblePerson.id),
+          nome: company.responsiblePerson.fullName,
+          cpf: formatCpf(company.responsiblePerson.cpf),
+          email: company.responsiblePerson.email || undefined,
+        }
+      : undefined,
     endereco: company.address || undefined,
     municipio: company.city || "",
     uf: company.state || "",
@@ -48,6 +68,9 @@ export function mapFornecedorFormToCompanyRequestDTO(
     address: fornecedor.endereco?.trim() || "",
     city: fornecedor.municipio.trim(),
     state: fornecedor.uf.trim().toUpperCase(),
+    responsiblePersonId: fornecedor.responsavelPersonId
+      ? Number(fornecedor.responsavelPersonId)
+      : null,
     createdBy: 1,
   };
 }

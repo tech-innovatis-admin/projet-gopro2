@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { Mail, Phone, MapPin, Calendar, UserCircle2 } from "lucide-react";
 import { type Fornecedor, STATUS_CONFIG } from "../../types";
 import { StarRating } from "@/components/ui/StarRating";
 import { cn } from "@/lib/utils";
@@ -105,6 +105,30 @@ export function FornecedorSummary({ fornecedor, contratosCount }: FornecedorSumm
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Calendar className="h-4 w-4 text-gray-400" />
               <span>Cadastrado em {formatDate(fornecedor.createdAt)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <UserCircle2 className="mt-0.5 h-4 w-4 text-emerald-700" />
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                  Responsável da empresa
+                </p>
+                {fornecedor.responsavel ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-900">{fornecedor.responsavel.nome}</p>
+                    {fornecedor.responsavel.cpf ? (
+                      <p className="text-xs text-gray-500">CPF: {fornecedor.responsavel.cpf}</p>
+                    ) : null}
+                    {fornecedor.responsavel.email ? (
+                      <p className="text-xs text-gray-500">{fornecedor.responsavel.email}</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">Nenhum responsável definido.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

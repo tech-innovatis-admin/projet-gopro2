@@ -572,6 +572,3 @@ export function NovoParceiroModal({
     </>
   );
 }
-
-
-

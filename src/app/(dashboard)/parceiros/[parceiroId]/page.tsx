@@ -463,4 +463,3 @@ function formatCurrency(value: number): string {
     currency: "BRL",
   }).format(value);
 }
-

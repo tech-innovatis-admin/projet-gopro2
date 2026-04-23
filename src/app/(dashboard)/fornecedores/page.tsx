@@ -100,15 +100,11 @@ export default function FornecedoresPage() {
 
   const handleNovoFornecedor = useCallback(
     async (novoFornecedor: Omit<Fornecedor, "id" | "createdAt">) => {
-      try {
-        const created = await createCompany(
-          mapFornecedorFormToCompanyRequestDTO(novoFornecedor as Omit<Fornecedor, "id" | "createdAt" | "updatedAt">)
-        );
-        setFornecedores((prev) => [mapCompanyToFornecedor(created), ...prev]);
-        setIsModalOpen(false);
-      } catch (error) {
-        alert(getFriendlyApiError(error));
-      }
+      const created = await createCompany(
+        mapFornecedorFormToCompanyRequestDTO(novoFornecedor as Omit<Fornecedor, "id" | "createdAt" | "updatedAt">)
+      );
+      setFornecedores((prev) => [mapCompanyToFornecedor(created), ...prev]);
+      setIsModalOpen(false);
     },
     []
   );
