@@ -76,6 +76,7 @@ export interface Parceiro {
   municipio: string;
   endereco?: string;
   status: ParceiroStatus;
+  totalContratos?: number;
   contratosAtivos?: number;
   valorTotalContratos?: number;
   observacoes?: string;

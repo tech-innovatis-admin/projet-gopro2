@@ -151,6 +151,7 @@ export default function EditarFornecedorPage() {
         cnpj: formData.cnpj || "",
         email: formData.email || "",
         telefone: formData.telefone || "",
+        responsavelPersonId: formData.responsavelPersonId,
         cep: formData.cep || "",
         uf: formData.uf || "",
         municipio: formData.municipio || "",
@@ -178,7 +179,7 @@ export default function EditarFornecedorPage() {
           <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
             <p className="text-sm text-amber-700">
-              Você tem alterações não salvas. Clique em "Salvar" para persistir as mudanças.
+              Você tem alterações não salvas. Clique em &quot;Salvar&quot; para persistir as mudanças.
             </p>
           </div>
         )}

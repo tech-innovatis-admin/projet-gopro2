@@ -19,7 +19,7 @@ interface NovoParceiroModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
-    parceiro: Omit<Parceiro, "id" | "createdAt" | "contratosAtivos" | "valorTotalContratos">
+    parceiro: Omit<Parceiro, "id" | "createdAt" | "totalContratos" | "contratosAtivos" | "valorTotalContratos">
   ) => Promise<void> | void;
 }
 
@@ -572,6 +572,3 @@ export function NovoParceiroModal({
     </>
   );
 }
-
-
-

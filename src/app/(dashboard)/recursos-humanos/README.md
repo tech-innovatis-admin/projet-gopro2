@@ -7,6 +7,9 @@ O módulo de **Recursos Humanos** é responsável por gerenciar dois tipos disti
 1. **Equipe Interna** - Membros da equipe de execução da organização
 2. **Pessoas em Projetos** - Profissionais contratados especificamente para projetos
 
+> Nota: a gestão de usuários/equipe foi centralizada em `/admin/usuarios`.
+> A rota legada `/recursos-humanos/equipe` agora redireciona para o admin, e o fluxo ativo deste módulo fica em `Pessoas em Projetos`.
+
 ## Estrutura de Arquivos
 
 ```
@@ -161,21 +164,20 @@ A página de pessoas segue o mesmo padrão de layout dos contratos:
 
 ## Navegação e URLs
 
-- `/recursos-humanos/equipe` - Equipe interna
+- `/recursos-humanos/equipe` - Redireciona para `/admin/usuarios`
 - `/recursos-humanos/pessoas` - Lista de pessoas em projetos
 - `/recursos-humanos/pessoas/[id]` - Detalhes de uma pessoa específica
 
 ## Integração com Navbar
 
-O módulo está integrado ao navbar principal com a seção "Recursos Humanos":
+O acesso ativo no navbar principal fica na seção "Gestão", apontando para a tela de pessoas em projetos:
 
 ```typescript
 {
-  label: "Recursos Humanos",
-  href: "/recursos-humanos",
+  label: "Gestão",
+  href: "/gestão",
   icon: Users,
   children: [
-    { label: "Equipe Interna", href: "/recursos-humanos/equipe", icon: Users },
     { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
   ],
 }

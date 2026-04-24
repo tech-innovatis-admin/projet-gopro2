@@ -3,10 +3,16 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
-import { PeopleTable } from "./_components";
+import {
+  PeopleTable,
+  PersonActionItem,
+  PersonManagementActions,
+  type PersonActionFeedback,
+} from "./_components";
 import { fetchPeopleWithProjects, formatDate, formatCurrency } from "./data";
-import { type PersonWithProjects, PROJECT_PERSON_STATUS_CONFIG, CONTRACT_TYPE_LABELS } from "./types";
+import { type Person, type PersonWithProjects, PROJECT_PERSON_STATUS_CONFIG, CONTRACT_TYPE_LABELS } from "./types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { formatCPF, formatPhone } from "./person-utils";
 import {
   ChevronRight,
   Home,
@@ -19,6 +25,7 @@ import {
   Clock,
   Building2,
   Briefcase,
+  Eye,
   ExternalLink,
   Users,
   UserMinus,
@@ -37,6 +44,7 @@ export default function PessoasPage() {
   const [people, setPeople] = useState<PersonWithProjects[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<PersonActionFeedback | null>(null);
 
   // Estado de seleção
   const [selectedPersonId, setSelectedPersonId] = useState<string | undefined>();
@@ -125,6 +133,20 @@ export default function PessoasPage() {
     setIsProjectsExpanded(false);
   }, []);
 
+  const handlePersonUpdated = useCallback((updatedPerson: Person) => {
+    setPeople((current) =>
+      current.map((person) =>
+        person.id === updatedPerson.id ? { ...person, ...updatedPerson } : person
+      )
+    );
+  }, []);
+
+  const handlePersonDeactivated = useCallback((personId: string) => {
+    setPeople((current) => current.filter((person) => person.id !== personId));
+    setSelectedPersonId((current) => (current === personId ? undefined : current));
+    setIsProjectsExpanded(false);
+  }, []);
+
   // Função para obter iniciais do nome
   const getInitials = (name: string): string => {
     return name
@@ -165,6 +187,19 @@ export default function PessoasPage() {
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {feedback && (
+          <div
+            className={cn(
+              "mb-6 rounded-lg px-4 py-3 text-sm",
+              feedback.type === "success"
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border border-red-200 bg-red-50 text-red-700"
+            )}
+          >
+            {feedback.message}
           </div>
         )}
 
@@ -235,81 +270,86 @@ export default function PessoasPage() {
             {selectedPerson ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-full animate-in slide-in-from-right-2 duration-300">
                 {/* Linha principal */}
-                <div className="flex flex-col gap-4 mb-4">
-                  <div className="flex items-start gap-4">
+                <div className="mb-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3">
                     {/* Avatar */}
-                    <div className="h-16 w-16 rounded-full bg-[#004225]/10 flex items-center justify-center flex-shrink-0">
+                    <div className="row-span-3 flex h-16 w-16 items-center justify-center self-start rounded-full bg-[#004225]/10">
                       <span className="text-xl font-bold text-[#004225]">
                         {getInitials(selectedPerson.fullName)}
                       </span>
                     </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h2 className="text-xl font-bold text-[#003319]">
-                          {selectedPerson.fullName}
-                        </h2>
-                        <Link
-                          href={`/recursos-humanos/pessoas/${selectedPerson.id}`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#004225] hover:text-[#004225]/80 transition-colors"
+                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+                      <h2 className="min-w-0 text-xl font-bold leading-tight text-[#003319]">
+                        {selectedPerson.fullName}
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50/80 p-1">
+                          <PersonActionItem
+                            label="Ver página completa"
+                            href={`/recursos-humanos/pessoas/${selectedPerson.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            icon={<Eye className="h-4 w-4" />}
+                          />
+                          <div className="h-5 w-px bg-gray-200" aria-hidden="true" />
+                          <PersonManagementActions
+                            person={selectedPerson}
+                            compact
+                            onPersonUpdated={handlePersonUpdated}
+                            onPersonDeactivated={handlePersonDeactivated}
+                            onFeedback={setFeedback}
+                          />
+                        </div>
+                        <button
+                          onClick={handleClose}
+                          className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
+                          title="Fechar"
                         >
-                          <ExternalLink className="h-3 w-3" />
-                          Ver página completa
-                        </Link>
-                      </div>
-
-                      {selectedPerson.cpf && (
-                        <p className="text-sm text-gray-500 mb-3">
-                          CPF: {selectedPerson.cpf}
-                        </p>
-                      )}
-
-                      {/* Contato inline */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {selectedPerson.email && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Mail className="h-4 w-4 text-gray-400" />
-                            <a
-                              href={`mailto:${selectedPerson.email}`}
-                              className="hover:text-[#004225] hover:underline truncate"
-                            >
-                              {selectedPerson.email}
-                            </a>
-                          </div>
-                        )}
-                        {selectedPerson.phone && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Phone className="h-4 w-4 text-gray-400" />
-                            <span>{selectedPerson.phone}</span>
-                          </div>
-                        )}
-                        {selectedPerson.city && selectedPerson.state && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <MapPin className="h-4 w-4 text-gray-400" />
-                            <span>
-                              {selectedPerson.city}, {selectedPerson.state}
-                            </span>
-                          </div>
-                        )}
-                        {selectedPerson.birthDate && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span>{formatDate(selectedPerson.birthDate)}</span>
-                          </div>
-                        )}
+                          <X className="h-5 w-5 text-gray-500" />
+                        </button>
                       </div>
                     </div>
 
-                    {/* Botão fechar */}
-                    <button
-                      onClick={handleClose}
-                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
-                      title="Fechar"
-                    >
-                      <X className="h-5 w-5 text-gray-500" />
-                    </button>
-                  </div>
+                    {selectedPerson.cpf && (
+                      <p className="text-sm text-gray-500">
+                        CPF: {formatCPF(selectedPerson.cpf)}
+                      </p>
+                    )}
+
+                    {/* Contato inline */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedPerson.email && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Mail className="h-4 w-4 text-gray-400" />
+                          <a
+                            href={`mailto:${selectedPerson.email}`}
+                            className="truncate hover:text-[#004225] hover:underline"
+                          >
+                            {selectedPerson.email}
+                          </a>
+                        </div>
+                      )}
+                      {selectedPerson.phone && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Phone className="h-4 w-4 text-gray-400" />
+                          <span>{formatPhone(selectedPerson.phone)}</span>
+                        </div>
+                      )}
+                      {selectedPerson.city && selectedPerson.state && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <span>
+                            {selectedPerson.city}, {selectedPerson.state}
+                          </span>
+                        </div>
+                      )}
+                      {selectedPerson.birthDate && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <span>{formatDate(selectedPerson.birthDate)}</span>
+                        </div>
+                      )}
+                    </div>
                 </div>
 
                 {/* Cards de resumo */}
@@ -363,12 +403,18 @@ export default function PessoasPage() {
                               {/* Header */}
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium text-gray-900 truncate">
-                                    {project.projectName}
-                                  </p>
-                                  <p className="text-xs text-[#004225] font-medium">
-                                    {project.projectCode}
-                                  </p>
+                                  <Link
+                                    href={`/contratos/${project.projectId}`}
+                                    className="group inline-block min-w-0"
+                                  >
+                                    <p className="truncate text-sm font-medium text-gray-900 group-hover:text-[#004225]">
+                                      {project.projectName}
+                                    </p>
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[#004225] group-hover:underline">
+                                      {project.projectCode}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </span>
+                                  </Link>
                                 </div>
                                 <span
                                   className={cn(

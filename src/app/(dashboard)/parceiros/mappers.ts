@@ -4,6 +4,7 @@ import type {
   ProjectResponseDTO,
   ProjectStatusEnum,
 } from '@/src/lib/api/types';
+import { getPartnerProjectMetrics } from '@/src/lib/partners/metrics';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 import type {
   Parceiro,
@@ -12,11 +13,7 @@ import type {
   ParceiroTipo,
 } from './types';
 
-const ACTIVE_PROJECT_STATUSES = new Set<ProjectStatusEnum>([
-  'PRE_PROJETO',
-  'PLANEJAMENTO',
-  'EXECUCAO',
-]);
+export { isProjectLinkedToPartner } from '@/src/lib/partners/metrics';
 
 function sanitizeCnpj(raw?: string): string {
   return (raw ?? '').replace(/\D/g, '');
@@ -40,12 +37,6 @@ function mapPartnerType(partnersType: PartnerResponseDTO['partnersType']): Parce
 
 function mapPartnerStatus(isActive: boolean): ParceiroStatus {
   return isActive ? 'ATIVO' : 'INATIVO';
-}
-
-export function isProjectLinkedToPartner(project: ProjectResponseDTO, partnerId: number): boolean {
-  return (
-    project.primaryPartnerId === partnerId || project.secundaryPartnerId === partnerId
-  );
 }
 
 function mapProjectStatus(projectStatus: ProjectStatusEnum): string {
@@ -73,18 +64,7 @@ export function mapPartnerToParceiro(
   partner: PartnerResponseDTO,
   projects: ProjectResponseDTO[]
 ): Parceiro {
-  const linkedProjects = projects.filter((project) =>
-    isProjectLinkedToPartner(project, partner.id)
-  );
-
-  const contratosAtivos = linkedProjects.filter((project) =>
-    ACTIVE_PROJECT_STATUSES.has(project.projectStatus)
-  ).length;
-
-  const valorTotalContratos = linkedProjects.reduce(
-    (sum, project) => sum + Number(project.contractValue ?? 0),
-    0
-  );
+  const metrics = getPartnerProjectMetrics(partner.id, projects);
 
   return {
     id: String(partner.id),
@@ -99,8 +79,9 @@ export function mapPartnerToParceiro(
     municipio: partner.city ?? '',
     endereco: partner.address ?? undefined,
     status: mapPartnerStatus(Boolean(partner.isActive)),
-    contratosAtivos,
-    valorTotalContratos,
+    totalContratos: metrics.totalContracts,
+    contratosAtivos: metrics.activeContracts,
+    valorTotalContratos: metrics.totalValue,
     createdAt: partner.createdAt ?? new Date().toISOString(),
     updatedAt: partner.updatedAt ?? undefined,
   };
@@ -109,7 +90,7 @@ export function mapPartnerToParceiro(
 export function mapParceiroFormToPartnerRequestDTO(
   parceiro: Omit<
     Parceiro,
-    'id' | 'createdAt' | 'updatedAt' | 'contratosAtivos' | 'valorTotalContratos'
+    'id' | 'createdAt' | 'updatedAt' | 'totalContratos' | 'contratosAtivos' | 'valorTotalContratos'
   >
 ): PartnerRequestDTO {
   return {

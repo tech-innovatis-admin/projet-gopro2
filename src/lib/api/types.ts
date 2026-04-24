@@ -374,11 +374,19 @@ export interface CompanyResponseDTO {
   address: string | null;
   city: string | null;
   state: string | null;
+  responsiblePerson: CompanyResponsiblePersonDTO | null;
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
   createdBy: number | null;
   updatedBy: number | null;
+}
+
+export interface CompanyResponsiblePersonDTO {
+  id: number;
+  fullName: string;
+  cpf: string | null;
+  email: string | null;
 }
 
 export interface CompanyRequestDTO {
@@ -390,6 +398,7 @@ export interface CompanyRequestDTO {
   address: string;
   city: string;
   state: string;
+  responsiblePersonId?: number | null;
   createdBy?: number;
 }
 
@@ -871,6 +880,10 @@ export interface ProjectCompanyDetailedResponseDTO extends ProjectCompanyRespons
   companyAddress: string | null;
   companyCity: string | null;
   companyState: string | null;
+  companyResponsiblePersonId: number | null;
+  companyResponsiblePersonFullName: string | null;
+  companyResponsiblePersonCpf: string | null;
+  companyResponsiblePersonEmail: string | null;
 }
 
 export interface ProjectCompanyRequestDTO {

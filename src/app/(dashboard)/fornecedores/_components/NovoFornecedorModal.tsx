@@ -1,22 +1,56 @@
 "use client";
 
-import { useState } from "react";
-import { X, Building2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { type Fornecedor, UF_LIST, MUNICIPIOS_POR_UF } from "../types";
+import { type ReactNode, useEffect, useState } from "react";
+import { Building2, Loader2, X } from "lucide-react";
+import { CompanyResponsiblePersonSection } from "./CompanyResponsiblePersonSection";
+import { type Fornecedor } from "../types";
 
 interface NovoFornecedorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (fornecedor: Omit<Fornecedor, "id" | "createdAt">) => void;
+  onSubmit: (fornecedor: Omit<Fornecedor, "id" | "createdAt">) => Promise<void> | void;
 }
+
+type ResponsavelFornecedor = {
+  id: string;
+  nome: string;
+  cpf?: string;
+  email?: string;
+};
+
+type FormData = {
+  nome: string;
+  razaoSocial: string;
+  cnpj: string;
+  email: string;
+  telefone: string;
+  responsavelPersonId: string;
+  cep: string;
+  uf: string;
+  municipio: string;
+  endereco: string;
+  observacoes: string;
+};
 
 type ViaCepResponse = {
   erro?: boolean;
   logradouro?: string;
   localidade?: string;
   uf?: string;
+};
+
+const INITIAL_FORM: FormData = {
+  nome: "",
+  razaoSocial: "",
+  cnpj: "",
+  email: "",
+  telefone: "",
+  responsavelPersonId: "",
+  cep: "",
+  uf: "",
+  municipio: "",
+  endereco: "",
+  observacoes: "",
 };
 
 function onlyDigits(value: string): string {
@@ -33,7 +67,9 @@ function formatPhone(value: string): string {
   const digits = onlyDigits(value).slice(0, 11);
   if (digits.length <= 2) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
@@ -42,214 +78,392 @@ function formatCnpj(value: string): string {
   if (digits.length <= 2) return digits;
   if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
   if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  if (digits.length <= 12) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  }
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 }
 
-async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
+async function fetchViaCep(zipCode: string): Promise<ViaCepResponse | null> {
   const normalizedZipCode = onlyDigits(zipCode);
-  if (normalizedZipCode.length !== 8) throw new Error("CEP deve ter 8 dígitos.");
+  if (normalizedZipCode.length !== 8) return null;
+
   const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
-  if (!response.ok) throw new Error("Falha ao consultar CEP.");
+  if (!response.ok) {
+    throw new Error("Nao foi possivel consultar o CEP.");
+  }
+
   const data = (await response.json()) as ViaCepResponse;
-  if (data.erro) throw new Error("CEP não encontrado.");
+  if (data.erro) return null;
   return data;
 }
 
+function hasRequiredCompanyFields(formData: FormData) {
+  return (
+    formData.nome.trim().length > 0 &&
+    formData.razaoSocial.trim().length > 0 &&
+    formData.cnpj.trim().length > 0 &&
+    formData.email.trim().length > 0 &&
+    formData.telefone.trim().length > 0 &&
+    formData.endereco.trim().length > 0 &&
+    formData.municipio.trim().length > 0 &&
+    formData.uf.trim().length > 0
+  );
+}
+
 export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedorModalProps) {
-  const [formData, setFormData] = useState({
-    nome: "",
-    razaoSocial: "",
-    cnpj: "",
-    email: "",
-    telefone: "",
-    cep: "",
-    uf: "",
-    municipio: "",
-    endereco: "",
-    observacoes: "",
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
+  const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
+  const [responsavel, setResponsavel] = useState<ResponsavelFornecedor | undefined>(undefined);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
 
-  const municipiosDisponiveis = formData.uf ? MUNICIPIOS_POR_UF[formData.uf] || [] : [];
-
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    if (!formData.nome.trim()) newErrors.nome = "Nome é obrigatório";
-    if (!formData.uf) newErrors.uf = "UF é obrigatório";
-    if (!formData.municipio) newErrors.municipio = "Município é obrigatório";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleZipCodeChange = async (rawValue: string) => {
-    const formattedZipCode = formatZipCode(rawValue);
-    const normalizedZipCode = onlyDigits(formattedZipCode);
-    setFormData((prev) => ({ ...prev, cep: formattedZipCode }));
-
-    if (normalizedZipCode.length !== 8) {
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData(INITIAL_FORM);
+      setResponsavel(undefined);
+      setSubmitError(null);
+      setIsSaving(false);
+      setIsResolvingZipCode(false);
       setZipCodeLookupError(null);
-      setIsZipCodeLoading(false);
-      return;
     }
-
-    setIsZipCodeLoading(true);
-    setZipCodeLookupError(null);
-    try {
-      const viaCepData = await fetchViaCep(normalizedZipCode);
-      setFormData((prev) => {
-        if (onlyDigits(prev.cep || "") !== normalizedZipCode) return prev;
-        return {
-          ...prev,
-          cep: formatZipCode(normalizedZipCode),
-          uf: viaCepData.uf?.trim().toUpperCase() || prev.uf,
-          municipio: viaCepData.localidade?.trim() || prev.municipio,
-          endereco: viaCepData.logradouro?.trim() || prev.endereco,
-        };
-      });
-    } catch (lookupError) {
-      setZipCodeLookupError(
-        lookupError instanceof Error ? lookupError.message : "Não foi possível consultar o CEP."
-      );
-    } finally {
-      setIsZipCodeLoading(false);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    onSubmit({
-      ...formData,
-      cnpj: onlyDigits(formData.cnpj) || undefined,
-      telefone: onlyDigits(formData.telefone) || undefined,
-      cep: onlyDigits(formData.cep) || undefined,
-      status: "ATIVO",
-    });
-
-    setFormData({
-      nome: "",
-      razaoSocial: "",
-      cnpj: "",
-      email: "",
-      telefone: "",
-      cep: "",
-      uf: "",
-      municipio: "",
-      endereco: "",
-      observacoes: "",
-    });
-    setErrors({});
-    setZipCodeLookupError(null);
-    onClose();
-  };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const handleLookupZipCode = async (rawZipCode?: string) => {
+    const normalizedZipCode = onlyDigits(rawZipCode ?? formData.cep);
+    if (normalizedZipCode.length !== 8) {
+      setZipCodeLookupError("CEP deve conter 8 digitos.");
+      return;
+    }
+
+    try {
+      setZipCodeLookupError(null);
+      setIsResolvingZipCode(true);
+      const viaCepData = await fetchViaCep(normalizedZipCode);
+
+      if (!viaCepData) {
+        setZipCodeLookupError("CEP nao encontrado.");
+        return;
+      }
+
+      setFormData((prev) => {
+        if (onlyDigits(prev.cep) !== normalizedZipCode) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          cep: formatZipCode(normalizedZipCode),
+          endereco: viaCepData.logradouro || prev.endereco,
+          municipio: viaCepData.localidade || prev.municipio,
+          uf: (viaCepData.uf || prev.uf || "").toUpperCase(),
+        };
+      });
+    } catch (error) {
+      setZipCodeLookupError(
+        error instanceof Error ? error.message : "Nao foi possivel consultar o CEP.",
+      );
+    } finally {
+      setIsResolvingZipCode(false);
+    }
+  };
+
+  const handleSubmit = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+
+    if (!hasRequiredCompanyFields(formData)) {
+      setSubmitError(
+        "Preencha os campos obrigatorios: razao social, nome fantasia, CNPJ, e-mail, telefone, endereco, cidade e UF.",
+      );
+      return;
+    }
+
+    const cnpjDigits = onlyDigits(formData.cnpj);
+    if (cnpjDigits.length !== 14) {
+      setSubmitError("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
+
+    setIsSaving(true);
+    setSubmitError(null);
+
+    try {
+      await onSubmit({
+        nome: formData.nome.trim(),
+        razaoSocial: formData.razaoSocial.trim(),
+        cnpj: cnpjDigits,
+        email: formData.email.trim(),
+        telefone: formData.telefone.trim(),
+        responsavelPersonId: formData.responsavelPersonId || undefined,
+        cep: onlyDigits(formData.cep) || undefined,
+        uf: formData.uf.trim().toUpperCase(),
+        municipio: formData.municipio.trim(),
+        endereco: formData.endereco.trim(),
+        observacoes: formData.observacoes.trim() || undefined,
+        status: "ATIVO",
+      });
+      onClose();
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel cadastrar o fornecedor.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in duration-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#1F4E79]/10 rounded-lg">
-              <Building2 className="h-5 w-5 text-[#1F4E79]" />
+            <div className="rounded-lg bg-white/10 p-2">
+              <Building2 className="h-5 w-5" />
             </div>
-            <h2 className="text-lg font-semibold text-gray-900">Novo Fornecedor</h2>
+            <h2 className="text-lg font-bold">Novo Fornecedor</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-gray-500" />
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-60"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto custom-scrollbar">
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Dados Básicos</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome / Razão Social *</label>
-                <input
-                  type="text"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  className={cn("w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent", errors.nome ? "border-red-500" : "border-gray-300")}
-                  placeholder="Nome do fornecedor"
-                />
-                {errors.nome && <p className="text-xs text-red-500 mt-1">{errors.nome}</p>}
-              </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Razao Social" required>
+              <input
+                type="text"
+                value={formData.nome}
+                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="Razao social da empresa"
+                disabled={isSaving}
+              />
+            </Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
-                <input type="text" value={formData.cnpj} onChange={(e) => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })} maxLength={18} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent" placeholder="00.000.000/0000-00" />
-              </div>
+            <Field label="Nome Fantasia" required>
+              <input
+                type="text"
+                value={formData.razaoSocial}
+                onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="Nome fantasia"
+                disabled={isSaving}
+              />
+            </Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent" placeholder="contato@empresa.com" />
-              </div>
+            <Field label="CNPJ" required>
+              <input
+                type="text"
+                value={formData.cnpj}
+                onChange={(e) => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
+                maxLength={18}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="00.000.000/0000-00"
+                disabled={isSaving}
+              />
+            </Field>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
-                <input type="text" value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })} maxLength={15} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent" placeholder="(00) 00000-0000" />
+            <Field label="E-mail" required>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="email@empresa.com.br"
+                disabled={isSaving}
+              />
+            </Field>
+
+            <Field label="Telefone" required>
+              <input
+                type="text"
+                value={formData.telefone}
+                onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+                maxLength={15}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="(00) 00000-0000"
+                disabled={isSaving}
+              />
+            </Field>
+
+            <Field label="CEP">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={formData.cep}
+                    onChange={(e) => {
+                      const formattedZipCode = formatZipCode(e.target.value);
+                      setFormData({ ...formData, cep: formattedZipCode });
+                      if (onlyDigits(formattedZipCode).length === 8) {
+                        void handleLookupZipCode(formattedZipCode);
+                      } else {
+                        setZipCodeLookupError(null);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (onlyDigits(formData.cep).length === 8) {
+                        void handleLookupZipCode();
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                    placeholder="00000-000"
+                    maxLength={9}
+                    disabled={isSaving}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleLookupZipCode();
+                    }}
+                    className="px-3 py-2 text-xs font-medium text-[#004225] border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isResolvingZipCode || isSaving}
+                  >
+                    {isResolvingZipCode ? "Buscando..." : "Buscar CEP"}
+                  </button>
+                </div>
+                {zipCodeLookupError ? (
+                  <p className="text-xs text-red-600">{zipCodeLookupError}</p>
+                ) : null}
               </div>
+            </Field>
+
+            <Field label="Endereco" required className="md:col-span-2">
+              <input
+                type="text"
+                value={formData.endereco}
+                onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="Rua, numero e bairro"
+                disabled={isSaving}
+              />
+            </Field>
+
+            <Field label="Cidade" required>
+              <input
+                type="text"
+                value={formData.municipio}
+                onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="Cidade"
+                disabled={isSaving}
+              />
+            </Field>
+
+            <Field label="UF" required>
+              <input
+                type="text"
+                value={formData.uf}
+                onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase().slice(0, 2) })}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                placeholder="UF"
+                maxLength={2}
+                disabled={isSaving}
+              />
+            </Field>
+
+            <div className="md:col-span-2">
+              <CompanyResponsiblePersonSection
+                value={formData.responsavelPersonId || undefined}
+                responsavel={responsavel}
+                onChange={(responsavelPersonId, nextResponsavel) => {
+                  setFormData((current) => ({
+                    ...current,
+                    responsavelPersonId: responsavelPersonId ?? "",
+                  }));
+                  setResponsavel(nextResponsavel);
+                }}
+                disabled={isSaving}
+                enabled={isOpen}
+                labels={{
+                  description:
+                    "Opcional. Vincule uma pessoa ja cadastrada ou cadastre uma nova para usar como responsavel deste fornecedor.",
+                  helperText:
+                    "Esse vinculo prepara as validacoes futuras entre a empresa e pessoas ja alocadas em projetos.",
+                  createModalDescription:
+                    "Cadastre a pessoa e vincule-a imediatamente como responsavel deste fornecedor.",
+                }}
+              />
             </div>
+
+            <Field label="Observacoes" className="md:col-span-2">
+              <textarea
+                value={formData.observacoes}
+                onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none"
+                placeholder="Observacoes adicionais"
+                disabled={isSaving}
+              />
+            </Field>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Localização</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">CEP</label>
-                <input type="text" value={formData.cep} onChange={(e) => void handleZipCodeChange(e.target.value)} maxLength={9} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent" placeholder="00000-000" />
-                {isZipCodeLoading ? <p className="text-xs text-gray-500 mt-1">Consultando CEP...</p> : null}
-                {zipCodeLookupError ? <p className="text-xs text-red-500 mt-1">{zipCodeLookupError}</p> : null}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">UF *</label>
-                <select value={formData.uf} onChange={(e) => setFormData({ ...formData, uf: e.target.value, municipio: "" })} className={cn("w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent", errors.uf ? "border-red-500" : "border-gray-300")}>
-                  <option value="">Selecione...</option>
-                  {UF_LIST.map((uf) => (
-                    <option key={uf} value={uf}>{uf}</option>
-                  ))}
-                </select>
-                {errors.uf && <p className="text-xs text-red-500 mt-1">{errors.uf}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Município *</label>
-                <select value={formData.municipio} onChange={(e) => setFormData({ ...formData, municipio: e.target.value })} disabled={!formData.uf} className={cn("w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent", errors.municipio ? "border-red-500" : "border-gray-300", !formData.uf && "opacity-50 cursor-not-allowed")}>
-                  <option value="">{formData.uf ? "Selecione..." : "Selecione UF primeiro"}</option>
-                  {formData.municipio && !municipiosDisponiveis.includes(formData.municipio) && <option value={formData.municipio}>{formData.municipio}</option>}
-                  {municipiosDisponiveis.map((mun) => (
-                    <option key={mun} value={mun}>{mun}</option>
-                  ))}
-                </select>
-                {errors.municipio && <p className="text-xs text-red-500 mt-1">{errors.municipio}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-                <input type="text" value={formData.endereco} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent" placeholder="Rua, número" />
-              </div>
+          {submitError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {submitError}
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent resize-none" placeholder="Observações adicionais..." />
-          </div>
+          ) : null}
         </form>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" onClick={handleSubmit} className="bg-[#1F4E79] hover:bg-[#153653]">Criar Fornecedor</Button>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSubmit();
+            }}
+            disabled={isSaving || !hasRequiredCompanyFields(formData) || onlyDigits(formData.cnpj).length !== 14}
+            className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando...
+              </span>
+            ) : (
+              "Adicionar Fornecedor"
+            )}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
+function Field({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className || ""}`}>
+      <label className="block text-sm font-medium text-gray-700">
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </label>
+      {children}
+    </div>
+  );
+}

@@ -69,6 +69,6 @@ export const mockNotifications: Notification[] = [
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48), // 2 dias atrás
     read: true,
     type: "info",
-    actionUrl: "/equipe",
+    actionUrl: "/admin/usuarios",
   },
 ];

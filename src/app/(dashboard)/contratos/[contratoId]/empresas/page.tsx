@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, X } from "lucide-react";
+import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, UserCircle2, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { CompanyResponsiblePersonSection } from "@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection";
 import {
   createCompany,
   createProjectCompany,
@@ -33,6 +35,13 @@ const BriefcaseBusinessIcon = () => (
 
 type TipoEmpresa = "INCUBADA" | "INDEPENDENTE";
 
+type ResponsavelEmpresa = {
+  id: string;
+  nome: string;
+  cpf?: string;
+  email?: string;
+};
+
 type EmpresaProjeto = {
   id: string;
   projectCompanyId?: number;
@@ -49,6 +58,8 @@ type EmpresaProjeto = {
   uf: string;
   tipoServico?: string;
   tipoEmpresa: TipoEmpresa;
+  responsavelPersonId?: string;
+  responsavel?: ResponsavelEmpresa;
   valorContrato?: number;
   dataInicio?: string;
   dataFim?: string;
@@ -173,6 +184,27 @@ function getCompanyLabel(company: CompanyResponseDTO) {
   return tradeName || company.name;
 }
 
+function getFormattedCpf(raw?: string | null) {
+  const onlyNumbers = digits(raw ?? "").slice(0, 11);
+  if (onlyNumbers.length !== 11) return undefined;
+  return onlyNumbers.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+}
+
+function getFormattedCnpj(raw?: string | null) {
+  return formatCnpj(raw ?? "");
+}
+
+function getCompanyOptionLabel(company: CompanyResponseDTO) {
+  const tradeName = company.tradeName?.trim();
+  const legalName = company.name?.trim();
+  const cnpj = getFormattedCnpj(company.cnpj);
+  const nameLabel =
+    tradeName && legalName && tradeName.localeCompare(legalName, "pt-BR", { sensitivity: "base" }) !== 0
+      ? `${tradeName} - ${legalName}`
+      : getCompanyLabel(company);
+  return cnpj ? `${nameLabel} - CNPJ ${cnpj}` : nameLabel;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return getUserErrorMessage(error, fallback);
 }
@@ -211,6 +243,15 @@ export default function EmpresasPage() {
         .filter((company) => !linkedCompanyIds.has(company.id))
         .sort((a, b) => getCompanyLabel(a).localeCompare(getCompanyLabel(b), "pt-BR")),
     [allCompanies, linkedCompanyIds],
+  );
+
+  const availableCompanyOptions = useMemo<DropdownOption[]>(
+    () =>
+      availableCompanies.map((company) => ({
+        value: String(company.id),
+        label: getCompanyOptionLabel(company),
+      })),
+    [availableCompanies],
   );
 
   const totalValor = empresas.reduce((acc, empresa) => acc + (empresa.valorContrato || 0), 0);
@@ -281,6 +322,17 @@ export default function EmpresasPage() {
           endereco: link.companyAddress || "",
           cidade: link.companyCity || "",
           uf: link.companyState || "",
+          responsavelPersonId: link.companyResponsiblePersonId
+            ? String(link.companyResponsiblePersonId)
+            : undefined,
+          responsavel: link.companyResponsiblePersonId
+            ? {
+                id: String(link.companyResponsiblePersonId),
+                nome: link.companyResponsiblePersonFullName || `Pessoa #${link.companyResponsiblePersonId}`,
+                cpf: getFormattedCpf(link.companyResponsiblePersonCpf),
+                email: link.companyResponsiblePersonEmail || undefined,
+              }
+            : undefined,
           tipoServico: link.serviceType || "",
           tipoEmpresa: link.isIncubated ? "INCUBADA" : "INDEPENDENTE",
           valorContrato: typeof link.totalValue === "number" ? link.totalValue : undefined,
@@ -318,6 +370,8 @@ export default function EmpresasPage() {
       endereco: "",
       cidade: "",
       uf: "",
+      responsavelPersonId: "",
+      responsavel: undefined,
       tipoServico: "",
       tipoEmpresa: "INDEPENDENTE",
       valorContrato: undefined,
@@ -349,7 +403,7 @@ export default function EmpresasPage() {
       const selectableCompanies = currentCompanies
         .filter((company) => !linkedCompanyIds.has(company.id))
         .sort((a, b) => getCompanyLabel(a).localeCompare(getCompanyLabel(b), "pt-BR"));
-      setSelectedCompanyId(selectableCompanies[0]?.id ?? "");
+      setSelectedCompanyId(selectableCompanies.length === 1 ? selectableCompanies[0].id : "");
       setIsLinkModalOpen(true);
     } catch (error) {
       setActionError(getErrorMessage(error, "Não foi possível carregar empresas existentes."));
@@ -387,6 +441,9 @@ export default function EmpresasPage() {
         address: formData.endereco!.trim(),
         city: formData.cidade!.trim(),
         state: formData.uf!.trim().toUpperCase(),
+        responsiblePersonId: formData.responsavelPersonId
+          ? Number(formData.responsavelPersonId)
+          : null,
       };
 
       if (editingEmpresa?.projectCompanyId && editingEmpresa.companyId) {
@@ -558,6 +615,29 @@ export default function EmpresasPage() {
                 <div className="flex items-center gap-2 text-gray-600"><FileText className="h-4 w-4 text-gray-400" /><span>{empresa.tipoServico || "—"}</span></div>
                 {(empresa.cidade || empresa.uf) && <div className="flex items-center gap-2 text-gray-600"><MapPin className="h-4 w-4 text-gray-400" /><span>{[empresa.cidade, empresa.uf].filter(Boolean).join(" - ")}</span></div>}
                 {empresa.email && <div className="flex items-center gap-2 text-gray-600"><Globe className="h-4 w-4 text-gray-400" /><span>{empresa.email}</span></div>}
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <UserCircle2 className="mt-0.5 h-4 w-4 text-emerald-700" />
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
+                        Responsável da empresa
+                      </p>
+                      {empresa.responsavel ? (
+                        <>
+                          <p className="text-sm font-medium text-gray-900">{empresa.responsavel.nome}</p>
+                          {empresa.responsavel.cpf ? (
+                            <p className="text-xs text-gray-500">CPF: {empresa.responsavel.cpf}</p>
+                          ) : null}
+                          {empresa.responsavel.email ? (
+                            <p className="text-xs text-gray-500">{empresa.responsavel.email}</p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-500">Nenhum responsável definido.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-end justify-between mt-4 pt-3 border-t border-gray-100 gap-3">
@@ -606,7 +686,7 @@ export default function EmpresasPage() {
 
       {canManageChildren && isLinkModalOpen && (
         <LinkExistingCompanyModal
-          companies={availableCompanies}
+          options={availableCompanyOptions}
           selectedCompanyId={selectedCompanyId}
           setSelectedCompanyId={setSelectedCompanyId}
           isLinking={isLinking}
@@ -773,6 +853,29 @@ function CompanyFormModal({
                 maxLength={2}
               />
             </Field>
+            <div className="md:col-span-2">
+              <CompanyResponsiblePersonSection
+                value={formData.responsavelPersonId || undefined}
+                responsavel={formData.responsavel}
+                onChange={(responsavelPersonId, responsavel) =>
+                  setFormData((current) => ({
+                    ...current,
+                    responsavelPersonId: responsavelPersonId ?? "",
+                    responsavel,
+                  }))
+                }
+                disabled={isSaving}
+                enabled
+                labels={{
+                  description:
+                    "Opcional. Vincule uma pessoa ja cadastrada ou cadastre uma nova para usar como responsavel desta empresa.",
+                  helperText:
+                    "Esse vinculo prepara as validacoes futuras entre a empresa do contrato e pessoas ja alocadas no projeto.",
+                  createModalDescription:
+                    "Cadastre a pessoa e vincule-a imediatamente como responsavel desta empresa.",
+                }}
+              />
+            </div>
             <Field label="Tipo de Serviço" className="md:col-span-2">
               <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
             </Field>
@@ -818,14 +921,14 @@ function CompanyFormModal({
 }
 
 function LinkExistingCompanyModal({
-  companies,
+  options,
   selectedCompanyId,
   setSelectedCompanyId,
   isLinking,
   onClose,
   onConfirm,
 }: {
-  companies: CompanyResponseDTO[];
+  options: DropdownOption[];
   selectedCompanyId: number | "";
   setSelectedCompanyId: React.Dispatch<React.SetStateAction<number | "">>;
   isLinking: boolean;
@@ -841,24 +944,29 @@ function LinkExistingCompanyModal({
         </div>
 
         <div className="p-6 space-y-4">
-          {companies.length === 0 ? (
+          {options.length === 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Não ha empresas disponiveis para vincular.</div>
           ) : (
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">Empresa</label>
-              <select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value ? Number(e.target.value) : "")} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]">
-                <option value="">Selecione...</option>
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>{getCompanyLabel(company)} - CNPJ {company.cnpj}</option>
-                ))}
-              </select>
+              <Dropdown
+                options={options}
+                value={selectedCompanyId ? String(selectedCompanyId) : undefined}
+                onChange={(value) => setSelectedCompanyId(value ? Number(value) : "")}
+                placeholder="Pesquise por nome ou CNPJ"
+                searchable
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                Digite parte do nome fantasia, razao social ou CNPJ para localizar a empresa.
+              </p>
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
           <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
-          <button onClick={onConfirm} disabled={companies.length === 0 || !selectedCompanyId || isLinking} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          <button onClick={onConfirm} disabled={options.length === 0 || !selectedCompanyId || isLinking} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {isLinking ? "Vinculando..." : "Vincular"}
           </button>
         </div>

@@ -183,6 +183,7 @@ const baseNavigationItems: NavItem[] = [
     children: [
       { label: "Parceiros", href: "/parceiros", icon: FolderOpen },
       { label: "Fornecedores", href: "/fornecedores", icon: FileText },
+      { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
     ],
   },
 ];
