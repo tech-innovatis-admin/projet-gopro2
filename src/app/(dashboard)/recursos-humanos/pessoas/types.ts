@@ -35,6 +35,7 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 export interface Person {
   id: string;
   fullName: string;
+  isActive: boolean;
   cpf?: string;
   email?: string;
   phone?: string;

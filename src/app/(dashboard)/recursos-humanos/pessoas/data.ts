@@ -18,6 +18,7 @@ import {
   type ProjectPerson,
   type ProjectPersonStatus,
 } from "./types";
+import { mapPeopleResponseToPerson } from "./person-utils";
 
 type UserNameMap = Record<number, string>;
 
@@ -44,25 +45,6 @@ function mapAuditUser(
     return undefined;
   }
   return userNamesById[userId] ?? `ID ${userId}`;
-}
-
-function mapPerson(dto: PeopleResponseDTO, userNamesById: UserNameMap): Person {
-  return {
-    id: String(dto.id),
-    fullName: dto.fullName,
-    cpf: dto.cpf ?? undefined,
-    email: dto.email ?? undefined,
-    phone: dto.phone ?? undefined,
-    birthDate: dto.birthDate ?? undefined,
-    address: dto.address ?? undefined,
-    city: dto.city ?? undefined,
-    state: dto.state ?? undefined,
-    notes: dto.notes ?? undefined,
-    createdAt: dto.createdAt ?? new Date().toISOString(),
-    updatedAt: dto.updatedAt ?? undefined,
-    createdBy: mapAuditUser(dto.createdBy, userNamesById),
-    updatedBy: mapAuditUser(dto.updatedBy, userNamesById),
-  };
 }
 
 function mapProjectPeople(
@@ -115,18 +97,24 @@ function buildPeopleWithProjects(
     projectLinksByPersonId.set(personId, currentLinks);
   }
 
-  return peopleDtos.map((dto) => {
-    const person = mapPerson(dto, userNamesById);
-    const projects = projectLinksByPersonId.get(person.id) ?? [];
-    const activeProjectsCount = projects.filter((project) => project.status === 1).length;
+  return peopleDtos
+    .filter((dto) => dto.isActive)
+    .map((dto) => {
+      const person: Person = {
+        ...mapPeopleResponseToPerson(dto),
+        createdBy: mapAuditUser(dto.createdBy, userNamesById),
+        updatedBy: mapAuditUser(dto.updatedBy, userNamesById),
+      };
+      const projects = projectLinksByPersonId.get(person.id) ?? [];
+      const activeProjectsCount = projects.filter((project) => project.status === 1).length;
 
-    return {
-      ...person,
-      projects,
-      activeProjectsCount,
-      totalProjectsCount: projects.length,
-    };
-  });
+      return {
+        ...person,
+        projects,
+        activeProjectsCount,
+        totalProjectsCount: projects.length,
+      };
+    });
 }
 
 export async function fetchPeopleWithProjects(): Promise<PersonWithProjects[]> {

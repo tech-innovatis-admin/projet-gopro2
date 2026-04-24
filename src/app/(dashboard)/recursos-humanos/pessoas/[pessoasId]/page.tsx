@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
 import {
@@ -14,13 +14,17 @@ import {
   Clock,
   Building2,
   Briefcase,
+  ExternalLink,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchPersonById, formatDate, formatCurrency } from "../data";
+import { PersonManagementActions, type PersonActionFeedback } from "../_components";
+import { formatCPF, formatPhone } from "../person-utils";
 import {
   PROJECT_PERSON_STATUS_CONFIG,
   CONTRACT_TYPE_LABELS,
+  type Person,
   type ProjectPerson,
 } from "../types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
@@ -31,11 +35,13 @@ import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 export default function PessoaDetalhesPage() {
   const params = useParams();
+  const router = useRouter();
   const pessoaId = params.pessoasId as string;
 
   const [person, setPerson] = useState<Awaited<ReturnType<typeof fetchPersonById>>>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<PersonActionFeedback | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -97,6 +103,15 @@ export default function PessoaDetalhesPage() {
       .toUpperCase();
   };
 
+  const handlePersonUpdated = useCallback((updatedPerson: Person) => {
+    setPerson((current) => (current ? { ...current, ...updatedPerson } : current));
+  }, []);
+
+  const handlePersonDeactivated = useCallback(() => {
+    router.push("/recursos-humanos/pessoas");
+    router.refresh();
+  }, [router]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
@@ -150,60 +165,82 @@ export default function PessoaDetalhesPage() {
             Voltar para pessoas
           </Link>
 
+          {feedback && (
+            <div
+              className={cn(
+                "rounded-lg px-4 py-3 text-sm",
+                feedback.type === "success"
+                  ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border border-red-200 bg-red-50 text-red-700"
+              )}
+            >
+              {feedback.message}
+            </div>
+          )}
+
           {/* Header */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-start gap-4">
-              {/* Avatar */}
-              <div className="h-20 w-20 rounded-full bg-[#004225]/10 flex items-center justify-center">
-                <span className="text-2xl font-bold text-[#004225]">
-                  {getInitials(person.fullName)}
-                </span>
-              </div>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-start gap-4">
+                {/* Avatar */}
+                <div className="h-20 w-20 rounded-full bg-[#004225]/10 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-[#004225]">
+                    {getInitials(person.fullName)}
+                  </span>
+                </div>
 
-              {/* Info */}
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {person.fullName}
-                </h1>
-                {person.cpf && (
-                  <p className="text-sm text-gray-500 mt-1">CPF: {person.cpf}</p>
-                )}
+                {/* Info */}
+                <div className="flex-1">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {person.fullName}
+                  </h1>
+                  {person.cpf && (
+                    <p className="text-sm text-gray-500 mt-1">CPF: {formatCPF(person.cpf)}</p>
+                  )}
 
-                {/* Contato */}
-                <div className="flex flex-wrap gap-4 mt-4">
-                  {person.email && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <a
-                        href={`mailto:${person.email}`}
-                        className="hover:text-[#004225] hover:underline"
-                      >
-                        {person.email}
-                      </a>
-                    </div>
-                  )}
-                  {person.phone && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      <span>{person.phone}</span>
-                    </div>
-                  )}
-                  {person.city && person.state && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <MapPin className="h-4 w-4 text-gray-400" />
-                      <span>
-                        {person.city}, {person.state}
-                      </span>
-                    </div>
-                  )}
-                  {person.birthDate && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <span>{formatDate(person.birthDate)}</span>
-                    </div>
-                  )}
+                  {/* Contato */}
+                  <div className="flex flex-wrap gap-4 mt-4">
+                    {person.email && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <a
+                          href={`mailto:${person.email}`}
+                          className="hover:text-[#004225] hover:underline"
+                        >
+                          {person.email}
+                        </a>
+                      </div>
+                    )}
+                    {person.phone && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        <span>{formatPhone(person.phone)}</span>
+                      </div>
+                    )}
+                    {person.city && person.state && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                        <span>
+                          {person.city}, {person.state}
+                        </span>
+                      </div>
+                    )}
+                    {person.birthDate && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>{formatDate(person.birthDate)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              <PersonManagementActions
+                person={person}
+                onPersonUpdated={handlePersonUpdated}
+                onPersonDeactivated={handlePersonDeactivated}
+                onFeedback={setFeedback}
+              />
             </div>
           </div>
 
@@ -322,10 +359,15 @@ function ProjectRow({ project }: { project: ProjectPerson }) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-6 py-4">
-        <div>
-          <p className="text-sm font-medium text-gray-900">{project.projectName}</p>
-          <p className="text-xs text-[#004225]">{project.projectCode}</p>
-        </div>
+        <Link href={`/contratos/${project.projectId}`} className="group block rounded-md -mx-2 px-2 py-1">
+          <p className="text-sm font-medium text-gray-900 group-hover:text-[#004225]">
+            {project.projectName}
+          </p>
+          <span className="inline-flex items-center gap-1 text-xs text-[#004225] group-hover:underline">
+            {project.projectCode}
+            <ExternalLink className="h-3 w-3" />
+          </span>
+        </Link>
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-2 text-sm text-gray-700">

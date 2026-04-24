@@ -148,7 +148,7 @@ Todas as páginas dentro de `src/app/(dashboard)/` são **protegidas por padrão
 | `/contratos/[id]/trilha` | Trilha de iniciação | 🔒 Protegida |
 | `/contratos/funil` | Funil de contratos | 🔒 Protegida |
 | `/contratos/pre-projetos` | Pré-projetos | 🔒 Protegida |
-| `/equipe` | Gestão de equipe | 🔒 Protegida |
+| `/equipe` | Atalho para admin/usuarios | 🔒 Protegida |
 | `/fornecedores` | Listagem de fornecedores | 🔒 Protegida |
 | `/fornecedores/[id]` | Detalhes do fornecedor | 🔒 Protegida |
 | `/parceiros` | Parceiros | 🔒 Protegida |
