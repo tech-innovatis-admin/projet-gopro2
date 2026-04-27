@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PAGES = new Set(['/login', '/register', '/termos', '/privacidade']);
+const PUBLIC_PAGES = new Set([
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/termos',
+  '/privacidade',
+]);
 const PUBLIC_API_PREFIXES = ['/api/auth'];
 const PUBLIC_API_ROUTES = new Set([
   '/api/backend/auth/login',
+  '/api/backend/auth/forgot-password',
+  '/api/backend/auth/reset-password',
   '/api/backend/register/validate',
   '/api/backend/register/complete',
 ]);

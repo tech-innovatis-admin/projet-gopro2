@@ -11,6 +11,10 @@ import type {
   AuthNotificationResponseDTO,
   AuthLoginRequestDTO,
   AuthLoginResponseDTO,
+  AuthForgotPasswordRequestDTO,
+  AuthForgotPasswordResponseDTO,
+  AuthResetPasswordRequestDTO,
+  AuthResetPasswordResponseDTO,
   AuthUserResponseDTO,
   PageResponseDTO,
   RegisterCompleteRequestDTO,
@@ -59,6 +63,18 @@ export interface ListInvitesParams {
 
 export function login(payload: AuthLoginRequestDTO) {
   return http.post<AuthLoginResponseDTO>('/auth/login', { body: payload });
+}
+
+export function forgotPassword(payload: AuthForgotPasswordRequestDTO) {
+  return http.post<AuthForgotPasswordResponseDTO>('/auth/forgot-password', {
+    body: payload,
+  });
+}
+
+export function resetPassword(payload: AuthResetPasswordRequestDTO) {
+  return http.post<AuthResetPasswordResponseDTO>('/auth/reset-password', {
+    body: payload,
+  });
 }
 
 export function me() {

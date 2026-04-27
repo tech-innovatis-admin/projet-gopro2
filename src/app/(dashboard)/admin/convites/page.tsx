@@ -178,7 +178,7 @@ export default function AdminConvitesPage() {
         expiresAt: toLocalDateTimeOrUndefined(expiresAt),
       });
 
-      setFeedback(`Convite criado para ${created.email}.`);
+      setFeedback(`Convite enviado para ${created.email}.`);
       setInviteLink(created.inviteLink);
       setEmail("");
       setExpiresAt("");
