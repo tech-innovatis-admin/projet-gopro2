@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { forgotPassword } from "@/src/lib/api/endpoints/auth";
+import { HttpError } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,7 +41,11 @@ export default function ForgotPasswordPage() {
       const response = await forgotPassword({ email: trimmedEmail });
       setSuccessMessage(response.message);
     } catch (requestError) {
-      setError(getUserErrorMessage(requestError, "Não foi possível enviar o link de redefinição."));
+      if (requestError instanceof HttpError && requestError.status === 400) {
+        setError(requestError.message);
+      } else {
+        setError(getUserErrorMessage(requestError, "Não foi possível enviar o link de redefinição."));
+      }
     } finally {
       setLoading(false);
     }
@@ -54,7 +59,7 @@ export default function ForgotPasswordPage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold text-zinc-900">Esqueci minha senha</h1>
               <p className="text-sm text-zinc-600">
-                Informe seu e-mail para receber um link de redefinição de senha.
+                Informe seu e-mail para receber o link de redefinição de senha.
               </p>
             </div>
 
