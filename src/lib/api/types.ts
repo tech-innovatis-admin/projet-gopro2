@@ -144,6 +144,23 @@ export interface AuthLoginResponseDTO {
   user: AuthUserResponseDTO;
 }
 
+export interface AuthForgotPasswordRequestDTO {
+  email: string;
+}
+
+export interface AuthForgotPasswordResponseDTO {
+  message: string;
+}
+
+export interface AuthResetPasswordRequestDTO {
+  token: string;
+  newPassword: string;
+}
+
+export interface AuthResetPasswordResponseDTO {
+  message: string;
+}
+
 export interface AllowedRegistrationCreateRequestDTO {
   email: string;
   role: UserRoleEnum;
