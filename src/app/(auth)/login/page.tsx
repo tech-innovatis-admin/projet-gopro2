@@ -226,7 +226,12 @@ export default function LoginPage() {
                       Lembrar de mim
                     </Label>
                   </div>
-                  
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm font-medium text-[#1F4E79] transition-colors hover:text-[#153653] hover:underline"
+                  >
+                    Esqueci minha senha
+                  </Link>
                 </div>
 
                 {/* Botão Sign In */}
