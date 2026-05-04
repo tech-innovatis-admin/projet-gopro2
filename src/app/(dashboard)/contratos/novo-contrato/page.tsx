@@ -69,6 +69,7 @@ import {
   type StatusDisbursementScheduleEnum,
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
 import {
   canManageContractChildren,
   fetchCurrentUser,
@@ -224,6 +225,8 @@ const documentoLabels: Record<TipoDocumento, string> = {
 };
 
 const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const TITLE_CHAR_LIMIT = 255;
+const SCOPE_CHAR_LIMIT = 1000;
 const ALLOWED_DOCUMENT_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 
 const DEFAULT_MAX_CONTRACT_VALUE = 9999999999999.99;
@@ -532,7 +535,6 @@ function NovoContratoPageContent() {
     : "Preencha as informações do contrato";
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingEditProject, setIsLoadingEditProject] = useState(false);
   const [, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
   const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
@@ -551,7 +553,6 @@ function NovoContratoPageContent() {
   const [postSubmitActionLoading, setPostSubmitActionLoading] = useState<"view" | "new" | null>(
     null
   );
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [organizacoesFinanciadoras, setOrganizacoesFinanciadoras] = useState<OptionItem[]>([]);
   const [organizacoesParceiras, setOrganizacoesParceiras] = useState<OptionItem[]>([]);
@@ -605,6 +606,30 @@ function NovoContratoPageContent() {
   
   const firstInputRef = useRef<HTMLInputElement>(null);
   const submitGuardRef = useRef(false);
+  const {
+    fieldErrors: apiFieldErrors,
+    globalError: submitError,
+    isSubmitting,
+    handleSubmitError,
+    clearErrors,
+    setSubmitting: setIsSubmitting,
+    focusFirstError,
+  } = useFormApiErrors<keyof NovoContratoForm>({
+    fieldMap: {
+      name: "titulo",
+      object: "scope",
+      primaryPartnerId: "parceiroId",
+      primaryClientId: "clientePrimarioId",
+      projectGovIf: "govIf",
+      projectType: "tipo",
+      contractValue: "contract_value",
+      endDate: "dataFim",
+      startDate: "dataInicio",
+      state: "uf",
+      city: "cidade",
+      expectedMonth: "dataInicio",
+    },
+  });
 
   // Carregar organizacoes disponiveis
   const loadOrganizations = useCallback(async () => {
@@ -793,7 +818,7 @@ function NovoContratoPageContent() {
 
     setIsLoadingEditProject(true);
     setLoadError(null);
-    setSubmitError(null);
+    clearErrors();
 
     try {
       const project = await getProjectById(editContractId);
@@ -982,6 +1007,7 @@ function NovoContratoPageContent() {
       case "titulo":
         if (typeof value !== "string" || !value.trim()) return "O título do projeto é obrigatório";
         if (value.trim().length < 5) return "O título deve ter pelo menos 5 caracteres";
+        if (value.length > TITLE_CHAR_LIMIT) return `O titulo deve ter no maximo ${TITLE_CHAR_LIMIT} caracteres`;
         return "";
       case "govIf":
         if (typeof value !== "string" || !value || (value !== "IF" && value !== "GOV")) return "Selecione uma opção";
@@ -1062,6 +1088,8 @@ function NovoContratoPageContent() {
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
         if (value.trim().length < 10) return "O objeto do contrato deve ter pelo menos 10 caracteres";
+        if (value.length > SCOPE_CHAR_LIMIT)
+          return `O objeto do contrato deve ter no maximo ${SCOPE_CHAR_LIMIT} caracteres`;
         return "";
       case "contract_value":
         if (typeof value !== "string" || !value.trim()) return "O valor do projeto é obrigatório";
@@ -1085,7 +1113,7 @@ function NovoContratoPageContent() {
     }
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
     let isValid = true;
 
@@ -1098,7 +1126,7 @@ function NovoContratoPageContent() {
     });
 
     setErrors(newErrors);
-    return isValid;
+    return { isValid, errors: newErrors };
   };
 
   // Funcao para formatar valor monetario
@@ -2208,19 +2236,22 @@ function NovoContratoPageContent() {
 
     submitGuardRef.current = true;
     setTouched(new Set(Object.keys(form) as Array<keyof NovoContratoForm>));
-    setSubmitError(null);
+    clearErrors();
 
     let createdProjectId: number | null = null;
 
     try {
-      if (!validateForm()) {
+      const validation = validateForm();
+      if (!validation.isValid) {
+        focusFirstError(validation.errors);
+        handleSubmitError(null, "Revise os campos obrigatorios destacados antes de criar o contrato.");
         return;
       }
 
       if (!isEditMode) {
         const hierarchyError = validateHierarchyBeforeSubmit(form);
         if (hierarchyError) {
-          setSubmitError(hierarchyError);
+          handleSubmitError(null, hierarchyError);
           return;
         }
       }
@@ -2279,7 +2310,7 @@ function NovoContratoPageContent() {
       const message = createdProjectId
         ? `${rootMessage} O projeto ${createdProjectId} ja foi criado, mas ocorreu erro ao salvar cronograma/metas. Nao tente cadastrar novamente; abra o contrato criado para concluir os dados pendentes.`
         : rootMessage;
-      setSubmitError(message);
+      handleSubmitError(error, message);
     } finally {
       submitGuardRef.current = false;
       setIsSubmitting(false);
@@ -2405,22 +2436,34 @@ function NovoContratoPageContent() {
               <FormField
                 label="Título do Projeto"
                 required
-                error={errors.titulo}
+                error={undefined}
                 icon={<FileText className="h-4 w-4" />}
               >
-                <input
-                  ref={firstInputRef}
-                  type="text"
-                  value={form.titulo}
-                  onChange={(e) => handleChange("titulo", e.target.value)}
-                  onBlur={() => handleBlur("titulo")}
-                  placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.titulo
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
+                <div className="relative">
+                  <input
+                    ref={firstInputRef}
+                    type="text"
+                    value={form.titulo}
+                    name="titulo"
+                    onChange={(e) => handleChange("titulo", e.target.value)}
+                    onBlur={() => handleBlur("titulo")}
+                    placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
+                    className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                      (apiFieldErrors.titulo ?? errors.titulo)
+                        ? "border-red-300 focus:border-red-500"
+                        : "border-gray-300 focus:border-[#004225]"
+                    }`}
+                  />
+</div>
+                <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-red-600">
+                    {(apiFieldErrors.titulo ?? errors.titulo) ? <AlertCircle className="h-3 w-3" /> : null}
+                    {(apiFieldErrors.titulo ?? errors.titulo) ?? ""}
+                  </span>
+                  <span className={form.titulo.length > TITLE_CHAR_LIMIT ? "font-medium text-red-600" : "text-gray-500"}>
+                    {form.titulo.length}/{TITLE_CHAR_LIMIT}
+                  </span>
+                </div>
               </FormField>
 
               {/* Gov/IF, Tipo e Status - Grid 3 colunas */}
@@ -2429,7 +2472,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Gov/IF"
                   required
-                  error={errors.govIf}
+                  error={apiFieldErrors.govIf ?? errors.govIf}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2446,7 +2489,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Tipo de Contrato"
                   required
-                  error={errors.tipo}
+                  error={apiFieldErrors.tipo ?? errors.tipo}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2463,7 +2506,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Status"
                   required
-                  error={errors.status}
+                  error={apiFieldErrors.status ?? errors.status}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2845,21 +2888,33 @@ function NovoContratoPageContent() {
               <FormField
                 label="Objeto do Contrato"
                 required
-                error={errors.scope}
+                error={undefined}
                 icon={<FileText className="h-4 w-4" />}
               >
-                <textarea
-                  value={form.scope}
-                  onChange={(e) => handleChange("scope", e.target.value)}
-                  onBlur={() => handleBlur("scope")}
-                  placeholder="Descreva o objeto/escopo do contrato..."
-                  rows={4}
-                  className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 resize-none ${
-                    errors.scope
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
+                <div className="relative">
+                  <textarea
+                    name="scope"
+                    value={form.scope}
+                    onChange={(e) => handleChange("scope", e.target.value)}
+                    onBlur={() => handleBlur("scope")}
+                    placeholder="Descreva o objeto/escopo do contrato..."
+                    rows={4}
+                    className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 resize-none ${
+                      (apiFieldErrors.scope ?? errors.scope)
+                        ? "border-red-300 focus:border-red-500"
+                        : "border-gray-300 focus:border-[#004225]"
+                    }`}
+                  />
+</div>
+                <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-red-600">
+                    {(apiFieldErrors.scope ?? errors.scope) ? <AlertCircle className="h-3 w-3" /> : null}
+                    {(apiFieldErrors.scope ?? errors.scope) ?? ""}
+                  </span>
+                  <span className={form.scope.length > SCOPE_CHAR_LIMIT ? "font-medium text-red-600" : "text-gray-500"}>
+                    {form.scope.length}/{SCOPE_CHAR_LIMIT}
+                  </span>
+                </div>
               </FormField>
 
               {/* Valor do Projeto */}
@@ -4637,12 +4692,14 @@ function FormField({
   label,
   required,
   error,
+  errorAlignRight,
   icon,
   children,
 }: {
   label: string;
   required?: boolean;
   error?: string;
+  errorAlignRight?: boolean;
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -4655,7 +4712,7 @@ function FormField({
       </label>
       {children}
       {error && (
-        <p className="flex items-center gap-1 text-xs text-red-600 mt-1">
+        <p className={`flex items-center gap-1 text-xs text-red-600 mt-1 ${errorAlignRight ? "justify-end text-right" : ""}`}> 
           <AlertCircle className="h-3 w-3" />
           {error}
         </p>
@@ -4663,5 +4720,22 @@ function FormField({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

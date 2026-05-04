@@ -728,9 +728,9 @@ export default function ContratoLayout({
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+      <div className="mx-auto max-w-7xl overflow-x-hidden px-4 sm:px-6 lg:px-8 py-6">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+        <nav className="flex min-w-0 card items-center gap-2 text-sm text-gray-500 mb-6">
           <Link href="/home" className="hover:text-gray-700 flex items-center gap-1">
             <Home className="h-4 w-4" />
             Home
@@ -740,7 +740,7 @@ export default function ContratoLayout({
             Contratos
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-900 font-medium">
+          <span className="min-w-0 flex-1 text-gray-900 font-medium break-words [overflow-wrap:anywhere]">
             {(isEditing ? editContrato : contrato).codigo} – {(isEditing ? editContrato : contrato).titulo}
           </span>
         </nav>
@@ -768,7 +768,7 @@ export default function ContratoLayout({
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           {/* Linha principal */}
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
                 {isEditing ? (
                   <div className="flex items-center gap-2 flex-wrap">
@@ -807,7 +807,7 @@ export default function ContratoLayout({
                     </select>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex min-w-0 items-start gap-3 flex-wrap">
                     <h1 className="text-2xl font-bold text-[#003319]">
                       {contrato.codigo} – {contrato.titulo}
                     </h1>
@@ -976,7 +976,7 @@ export default function ContratoLayout({
 
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
                     Parceiro Primário
                   </p>
@@ -1006,7 +1006,7 @@ export default function ContratoLayout({
               </div>
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
                     Parceiro Secundário
                   </p>
@@ -1040,7 +1040,7 @@ export default function ContratoLayout({
             <div className="space-y-3">
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
                     Cliente Primário
                   </p>
@@ -1068,7 +1068,7 @@ export default function ContratoLayout({
               </div>
               <div className="flex items-start gap-3 group">
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
                     Cliente Secundário (Secretaria)
                   </p>
@@ -1107,7 +1107,7 @@ export default function ContratoLayout({
             <div className="space-y-3">
               <div className="flex items-start gap-3 group">
                 <DollarSign className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Valor Total</p>
                   {isEditing ? (
                     <div className="relative">
@@ -1132,7 +1132,7 @@ export default function ContratoLayout({
               </div>
               <div className="flex items-start gap-3 group">
                 <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
                     Tipo
                   </p>
@@ -1175,7 +1175,7 @@ export default function ContratoLayout({
             <div className="space-y-3">
               <div className="flex items-start gap-3 group">
                 <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Início</p>
                   {isEditing ? (
                     <DatePicker
@@ -1192,7 +1192,7 @@ export default function ContratoLayout({
               </div>
               <div className="flex items-start gap-3 group">
                 <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data de Término</p>
                   {isEditing ? (
                     <DatePicker
@@ -1242,7 +1242,7 @@ export default function ContratoLayout({
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <User className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Coordenador</p>
                         {isEditing ? (
                           <select
@@ -1272,7 +1272,7 @@ export default function ContratoLayout({
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <MapPin className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Localidade</p>
                         {isEditing ? (
                           <input
@@ -1292,7 +1292,7 @@ export default function ContratoLayout({
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <Tag className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-2 group-hover:text-[#003319] transition-colors cursor-default">Segmentos</p>
                         {isEditing ? (
                           <div className="flex flex-wrap gap-2">
@@ -1337,7 +1337,7 @@ export default function ContratoLayout({
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 group">
                       <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Início</p>
                         {isEditing ? (
                           <DatePicker
@@ -1354,7 +1354,7 @@ export default function ContratoLayout({
                     </div>
                     <div className="flex items-start gap-3 group">
                       <Calendar className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">Data Efetiva de Término</p>
                         {isEditing ? (
                           <DatePicker
@@ -1533,5 +1533,9 @@ function formatDate(iso: string) {
     return iso;
   }
 }
+
+
+
+
 
 

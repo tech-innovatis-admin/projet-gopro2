@@ -251,10 +251,10 @@ export function ContratoOverviewCard() {
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-medium text-[#004225]">Dashboard do contrato</p>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
+          <h2 className="mt-1 text-2xl font-bold text-gray-900 break-words [overflow-wrap:anywhere]">
             {dashboardState.project?.name || `Contrato ${contratoId}`}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-gray-600">
@@ -322,3 +322,5 @@ export function ContratoOverviewCard() {
     </section>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import type { BackendErrorResponse, BackendFieldError, BffErrorEnvelope } from './types';
+import type { BackendErrorResponse, BackendFieldErrors, BffErrorEnvelope } from './types';
 import { HttpError } from './types';
 import { redirectToLogin } from '../auth/session';
 import {
@@ -52,7 +52,7 @@ interface NormalizedErrorPayload {
   code?: string;
   timestamp?: string;
   path?: string;
-  fieldErrors?: BackendFieldError[];
+  fieldErrors?: BackendFieldErrors;
 }
 
 function isBffErrorEnvelope(payload: unknown): payload is BffErrorEnvelope {
@@ -74,9 +74,14 @@ function isBackendErrorResponse(payload: unknown): payload is BackendErrorRespon
 
 function resolveDisplayMessage(
   message: string,
-  fieldErrors?: BackendFieldError[]
+  fieldErrors?: BackendFieldErrors
 ): string {
-  return resolveUserMessage(message, { fieldErrors });
+  const firstFieldError = fieldErrors ? Object.values(fieldErrors)[0] : undefined;
+  return resolveUserMessage(message, {
+    fieldErrors: firstFieldError
+      ? [{ field: 'field', message: firstFieldError }]
+      : undefined,
+  });
 }
 
 function normalizeErrorPayload(payload: unknown, status: number): NormalizedErrorPayload {
@@ -87,7 +92,7 @@ function normalizeErrorPayload(payload: unknown, status: number): NormalizedErro
     const fieldErrors =
       payload.error.fieldErrors ||
       (details && typeof details === 'object' && 'fieldErrors' in details
-        ? (details as { fieldErrors?: BackendFieldError[] }).fieldErrors
+        ? (details as { fieldErrors?: BackendFieldErrors }).fieldErrors
         : undefined);
     const message = resolveDisplayMessage(payload.error.message || fallback, fieldErrors);
 

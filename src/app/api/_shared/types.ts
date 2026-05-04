@@ -1,15 +1,11 @@
-export interface ApiFieldError {
-  field: string;
-  message: string;
-}
-
 export interface ApiError {
   message: string;
+  status?: number;
   code?: string;
   details?: unknown;
   timestamp?: string;
   path?: string;
-  fieldErrors?: ApiFieldError[];
+  fieldErrors?: Record<string, string>;
 }
 
 export interface PaginatedResponse<T> {

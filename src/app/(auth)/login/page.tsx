@@ -59,7 +59,7 @@ export default function LoginPage() {
         className="hidden lg:flex lg:w-1/2 relative bg-cover"
         // O caminho da imagem na pasta 'public'
         style={{
-          backgroundImage: "url('https://www.innovatismc.com.br/wp-content/uploads/2023/12/EpitacioBrito_D0111.png')",
+          backgroundColor: "#1F4E79",
           backgroundPosition: "center 20%",
         }}
       >
