@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { X, Users, Building, GraduationCap, MapPin, Mail, Phone, Globe, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   type Parceiro,
   type ParceiroTipo,
@@ -115,9 +117,26 @@ export function NovoParceiroModal({
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const {
+    fieldErrors: apiFieldErrors,
+    globalError: submitError,
+    clearErrors,
+    handleSubmitError,
+  } = useFormApiErrors<keyof FormData>({
+    fieldMap: {
+      name: "nome",
+      acronym: "sigla",
+      cnpj: "cnpj",
+      email: "email",
+      phone: "telefone",
+      site: "site",
+      address: "endereco",
+      city: "municipio",
+      state: "uf",
+    },
+  });
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,7 +163,7 @@ export function NovoParceiroModal({
     if (!isOpen) {
       setForm(INITIAL_FORM);
       setErrors({});
-      setSubmitError(null);
+      clearErrors();
       setIsSubmitting(false);
       setIsZipCodeLoading(false);
       setZipCodeLookupError(null);
@@ -230,7 +249,7 @@ export function NovoParceiroModal({
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setSubmitError(null);
+      clearErrors();
 
     try {
       await onSubmit({
@@ -251,11 +270,8 @@ export function NovoParceiroModal({
 
       onClose();
     } catch (submitFailure) {
-      setSubmitError(
-        submitFailure instanceof Error
-          ? submitFailure.message
-          : "Não foi possível cadastrar o parceiro."
-      );
+      const fallback = getUserErrorMessage(submitFailure, "Não foi possível cadastrar o parceiro.");
+      handleSubmitError(submitFailure, fallback);
     } finally {
       setIsSubmitting(false);
     }
@@ -361,8 +377,8 @@ export function NovoParceiroModal({
                       errors.nome ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.nome && (
-                    <p className="text-xs text-red-600">{errors.nome}</p>
+                  {(errors.nome || apiFieldErrors.nome) && (
+                    <p className="text-xs text-red-600">{errors.nome || apiFieldErrors.nome}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -438,8 +454,8 @@ export function NovoParceiroModal({
                       </option>
                     ))}
                   </select>
-                  {errors.uf && (
-                    <p className="text-xs text-red-600">{errors.uf}</p>
+                  {(errors.uf || apiFieldErrors.uf) && (
+                    <p className="text-xs text-red-600">{errors.uf || apiFieldErrors.uf}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -456,8 +472,8 @@ export function NovoParceiroModal({
                       errors.municipio ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.municipio && (
-                    <p className="text-xs text-red-600">{errors.municipio}</p>
+                  {(errors.municipio || apiFieldErrors.municipio) && (
+                    <p className="text-xs text-red-600">{errors.municipio || apiFieldErrors.municipio}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -491,8 +507,8 @@ export function NovoParceiroModal({
                       errors.email ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.email && (
-                    <p className="text-xs text-red-600">{errors.email}</p>
+                  {(errors.email || apiFieldErrors.email) && (
+                    <p className="text-xs text-red-600">{errors.email || apiFieldErrors.email}</p>
                   )}
                 </div>
                 <div className="space-y-2">

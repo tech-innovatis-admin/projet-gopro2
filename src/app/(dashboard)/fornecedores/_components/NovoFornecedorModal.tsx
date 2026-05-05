@@ -4,6 +4,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Building2, Loader2, X } from "lucide-react";
 import { CompanyResponsiblePersonSection } from "./CompanyResponsiblePersonSection";
 import { type Fornecedor } from "../types";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 interface NovoFornecedorModalProps {
   isOpen: boolean;
@@ -114,16 +116,35 @@ function hasRequiredCompanyFields(formData: FormData) {
 export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedorModalProps) {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [responsavel, setResponsavel] = useState<ResponsavelFornecedor | undefined>(undefined);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    globalError: submitError,
+    handleSubmitError,
+    clearErrors,
+    setFieldErrors,
+    setGlobalError,
+  } = useFormApiErrors<keyof FormData>({
+    fieldMap: {
+      name: "nome",
+      tradeName: "razaoSocial",
+      cnpj: "cnpj",
+      email: "email",
+      phone: "telefone",
+      address: "endereco",
+      city: "municipio",
+      state: "uf",
+      responsiblePersonId: "responsavelPersonId",
+    },
+  });
 
   useEffect(() => {
     if (!isOpen) {
       setFormData(INITIAL_FORM);
       setResponsavel(undefined);
-      setSubmitError(null);
+      clearErrors();
       setIsSaving(false);
       setIsResolvingZipCode(false);
       setZipCodeLookupError(null);
@@ -175,7 +196,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
     event?.preventDefault();
 
     if (!hasRequiredCompanyFields(formData)) {
-      setSubmitError(
+      setGlobalError(
         "Preencha os campos obrigatorios: razao social, nome fantasia, CNPJ, e-mail, telefone, endereco, cidade e UF.",
       );
       return;
@@ -183,12 +204,12 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
 
     const cnpjDigits = onlyDigits(formData.cnpj);
     if (cnpjDigits.length !== 14) {
-      setSubmitError("Informe um CNPJ valido com 14 digitos.");
+      setFieldErrors((prev) => ({ ...prev, cnpj: "Informe um CNPJ valido com 14 digitos." }));
       return;
     }
 
     setIsSaving(true);
-    setSubmitError(null);
+    clearErrors();
 
     try {
       await onSubmit({
@@ -207,11 +228,8 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
       });
       onClose();
     } catch (error) {
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel cadastrar o fornecedor.",
-      );
+      const fallback = getUserErrorMessage(error, "Nao foi possivel cadastrar o fornecedor.");
+      handleSubmitError(error, fallback);
     } finally {
       setIsSaving(false);
     }
@@ -239,7 +257,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Razao Social" required>
+            <Field label="Razao Social" required error={fieldErrors.nome}>
               <input
                 type="text"
                 value={formData.nome}
@@ -250,7 +268,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Nome Fantasia" required>
+            <Field label="Nome Fantasia" required error={fieldErrors.razaoSocial}>
               <input
                 type="text"
                 value={formData.razaoSocial}
@@ -261,7 +279,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="CNPJ" required>
+            <Field label="CNPJ" required error={fieldErrors.cnpj}>
               <input
                 type="text"
                 value={formData.cnpj}
@@ -273,7 +291,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="E-mail" required>
+            <Field label="E-mail" required error={fieldErrors.email}>
               <input
                 type="email"
                 value={formData.email}
@@ -284,7 +302,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Telefone" required>
+            <Field label="Telefone" required error={fieldErrors.telefone}>
               <input
                 type="text"
                 value={formData.telefone}
@@ -338,7 +356,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               </div>
             </Field>
 
-            <Field label="Endereco" required className="md:col-span-2">
+            <Field label="Endereco" required className="md:col-span-2" error={fieldErrors.endereco}>
               <input
                 type="text"
                 value={formData.endereco}
@@ -349,7 +367,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Cidade" required>
+            <Field label="Cidade" required error={fieldErrors.municipio}>
               <input
                 type="text"
                 value={formData.municipio}
@@ -360,7 +378,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="UF" required>
+            <Field label="UF" required error={fieldErrors.uf}>
               <input
                 type="text"
                 value={formData.uf}
@@ -451,11 +469,13 @@ function Field({
   label,
   required,
   className,
+  error,
   children,
 }: {
   label: string;
   required?: boolean;
   className?: string;
+  error?: string;
   children: ReactNode;
 }) {
   return (
@@ -464,6 +484,7 @@ function Field({
         {label} {required ? <span className="text-red-500">*</span> : null}
       </label>
       {children}
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

@@ -9,11 +9,17 @@ export interface PageResponseDTO<T> {
 }
 
 export type BackendFieldErrors = Record<string, string>;
+export type BackendFieldError = {
+  field: string;
+  message: string;
+};
 
 export interface BackendErrorResponse {
   status?: number;
   message?: string;
   fieldErrors?: BackendFieldErrors;
+  timestamp?: string;
+  path?: string;
 }
 
 export interface BffErrorEnvelope {
