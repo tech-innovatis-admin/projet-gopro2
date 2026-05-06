@@ -148,7 +148,7 @@ export function NovoParceiroModal({
   }, [isOpen]);
 
   // Fecha ao pressionar ESC
-  useEffect(() => {
+  /* useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -156,7 +156,7 @@ export function NovoParceiroModal({
       document.addEventListener("keydown", handleEsc);
       return () => document.removeEventListener("keydown", handleEsc);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose]); */
 
   // Reset form ao fechar
   useEffect(() => {
@@ -284,7 +284,7 @@ export function NovoParceiroModal({
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={() => !isSubmitting && onClose()}
+        // onClick={() => !isSubmitting && onClose()}
       />
 
       {/* Modal */}
