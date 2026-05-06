@@ -1453,7 +1453,6 @@ export default function ContratoLayout({
         {showEditPopup && (
           <div
             className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
-            onClick={() => setShowEditPopup(false)}
           >
             <div
               className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
@@ -1533,9 +1532,3 @@ function formatDate(iso: string) {
     return iso;
   }
 }
-
-
-
-
-
-

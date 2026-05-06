@@ -88,11 +88,11 @@ export function NovoArquivoModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
-      onClick={(event) => {
+      /* onClick={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
           onClose();
         }
-      }}
+      }} */
     >
       <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">

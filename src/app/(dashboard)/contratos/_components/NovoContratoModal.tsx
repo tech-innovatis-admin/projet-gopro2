@@ -131,9 +131,7 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
 
   // Handle click outside
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
+    // Modal não fecha ao clicar fora - apenas via botão X ou ação do formulário
   };
 
   // Validation
