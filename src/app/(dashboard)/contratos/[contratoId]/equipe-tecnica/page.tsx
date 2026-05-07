@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -171,7 +171,7 @@ function hasRequiredMemberFields(formData: MembroFormData) {
 }
 
 function formatDateBr(value?: string) {
-  if (!value) return "Período não informado";
+  if (!value) return "PerÃ­odo nÃ£o informado";
   const parts = value.split("-");
   if (parts.length !== 3) return value;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -196,15 +196,15 @@ function getContractTypeLabel(value?: ContractTypeEnum | null) {
   if (value === "BOLSA") return "Bolsa";
   if (value === "RPA") return "RPA";
   if (value === "CLT") return "CLT";
-  return "Não informado";
+  return "NÃ£o informado";
 }
 
 function buildPeriodLabel(startDate?: string, endDate?: string) {
-  if (!startDate && !endDate) return "Período não informado";
+  if (!startDate && !endDate) return "PerÃ­odo nÃ£o informado";
   if (startDate && endDate) {
     return `${formatDateBr(startDate)} ate ${formatDateBr(endDate)}`;
   }
-  if (startDate) return `Início: ${formatDateBr(startDate)}`;
+  if (startDate) return `InÃ­cio: ${formatDateBr(startDate)}`;
   return `Fim: ${formatDateBr(endDate)}`;
 }
 
@@ -615,7 +615,7 @@ export default function EquipeTecnicaPage() {
           } catch (error) {
             avatarUploadWarning = getErrorMessage(
               error,
-              "Pessoa salva, mas a foto não foi enviada.",
+              "Pessoa salva, mas a foto nÃ£o foi enviada.",
             );
           }
         }
@@ -706,7 +706,7 @@ export default function EquipeTecnicaPage() {
         setActionError(warnings.join(" "));
       }
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível salvar o membro."));
+      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel salvar o membro."));
     } finally {
       setIsSaving(false);
     }
@@ -715,7 +715,7 @@ export default function EquipeTecnicaPage() {
   const linkExistingPerson = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato inválido.");
+      setActionError("ID do contrato invÃ¡lido.");
       return;
     }
     if (!selectedPersonId || typeof selectedPersonId !== "number") {
@@ -750,7 +750,7 @@ export default function EquipeTecnicaPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível vincular a pessoa."));
+      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel vincular a pessoa."));
     } finally {
       setIsLinking(false);
     }
@@ -768,7 +768,7 @@ export default function EquipeTecnicaPage() {
       await deleteProjectPeople(membro.projectPeopleId);
       await loadMembros();
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível remover o membro."));
+      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel remover o membro."));
     }
   };
 
@@ -824,7 +824,7 @@ export default function EquipeTecnicaPage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Seu perfil pode consultar a equipe tecnica, mas não pode criar, vincular, editar ou remover pessoas.
+          Seu perfil pode consultar a equipe tecnica, mas nÃ£o pode criar, vincular, editar ou remover pessoas.
         </div>
       )}
 
@@ -964,7 +964,7 @@ export default function EquipeTecnicaPage() {
                 )}
 
                 <div className="flex items-center justify-between text-gray-600">
-                  <span>Vínculo: {membro.vinculo || "Não informado"}</span>
+                  <span>VÃ­nculo: {membro.vinculo || "NÃ£o informado"}</span>
                   <span>{membro.cargaHoraria ? `${membro.cargaHoraria}h` : "0h"}</span>
                 </div>
 
@@ -1163,7 +1163,7 @@ function MemberFormModal({
       .catch(() => {
         if (!isMounted) return;
         setUfOptions([]);
-        setUfLookupError("Não foi possível carregar os estados.");
+        setUfLookupError("NÃ£o foi possÃ­vel carregar os estados.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -1288,19 +1288,19 @@ function MemberFormModal({
             </Field>
 
             <Field label="Papel" required>
-              <select
+              <Dropdown
+                options={Object.entries(papelLabels).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
                 value={formData.papel}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, papel: e.target.value as Papel }))
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, papel: (value || prev.papel) as Papel }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                {Object.entries(papelLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                placeholder="Selecione..."
+                disabled={isSaving}
+                className="w-full"
+              />
             </Field>
 
             <Field label="CPF (opcional)">
@@ -1456,7 +1456,7 @@ function MemberFormModal({
               ) : null}
             </Field>
 
-            <Field label="Vínculo institucional">
+            <Field label="Ví­nculo institucional">
               <input
                 type="text"
                 value={formData.vinculo}
@@ -1466,7 +1466,7 @@ function MemberFormModal({
               />
             </Field>
 
-            <Field label="Carga horaria (h)">
+            <Field label="Carga horária (h)">
               <input
                 type="number"
                 min={0}
@@ -1479,45 +1479,47 @@ function MemberFormModal({
                 }
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
               />
-            </Field>
-
-            <Field label="Tipo de contrato">
-              <select
-                value={formData.contractType}
-                onChange={(e) =>
+            </Field>            <Field label="Tipo de contrato">
+              <Dropdown
+                options={[
+                  { value: "", label: "Não informado" },
+                  { value: "BOLSA", label: "Bolsa" },
+                  { value: "RPA", label: "RPA" },
+                  { value: "CLT", label: "CLT" },
+                ]}
+                value={formData.contractType || ""}
+                onChange={(value) =>
                   setFormData((prev) => ({
                     ...prev,
-                    contractType: (e.target.value || "") as ContractTypeEnum | "",
+                    contractType: (value || "") as ContractTypeEnum | "",
                   }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                <option value="">Não informado</option>
-                <option value="BOLSA">Bolsa</option>
-                <option value="RPA">RPA</option>
-                <option value="CLT">CLT</option>
-              </select>
-            </Field>
-
-            <Field label="Status">
-              <select
-                value={formData.status}
-                onChange={(e) =>
+                placeholder="Não informado"
+                disabled={isSaving}
+                className="w-full"
+              />
+            </Field>            <Field label="Status">
+              <Dropdown
+                options={[
+                  { value: "", label: "Não informado" },
+                  { value: "PENDENTE", label: "Pendente" },
+                  { value: "ATIVO", label: "Ativo" },
+                  { value: "ENCERRADO", label: "Encerrado" },
+                ]}
+                value={formData.status || ""}
+                onChange={(value) =>
                   setFormData((prev) => ({
                     ...prev,
-                    status: (e.target.value || "") as StatusProjectPeopleEnum | "",
+                    status: (value || "") as StatusProjectPeopleEnum | "",
                   }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                <option value="">Não informado</option>
-                <option value="PENDENTE">Pendente</option>
-                <option value="ATIVO">Ativo</option>
-                <option value="ENCERRADO">Encerrado</option>
-              </select>
+                placeholder="Não informado"
+                disabled={isSaving}
+                className="w-full"
+              />
             </Field>
 
-            <Field label="Data início">
+            <Field label="Data iní­cio">
               <DatePicker
                 value={formData.startDate}
                 onChange={(value) => setFormData((prev) => ({ ...prev, startDate: value }))}
@@ -1657,40 +1659,38 @@ function LinkExistingMemberModal({
         <div className="p-6 space-y-4">
           {people.length === 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              Não ha pessoas disponiveis para vincular.
+              Não há pessoas disponíveis para vincular.
             </div>
           ) : (
             <>
               <Field label="Pessoa">
-                <select
-                  value={selectedPersonId}
-                  onChange={(e) =>
-                    setSelectedPersonId(e.target.value ? Number(e.target.value) : "")
-                  }
-                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                >
-                  <option value="">Selecione...</option>
-                  {people.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.fullName}
-                      {person.cpf ? ` - CPF ${formatCPF(person.cpf)}` : ""}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  options={people.map((person) => ({
+                    value: String(person.id),
+                    label: `${person.fullName}${person.cpf ? ` - CPF ${formatCPF(person.cpf)}` : ""}`,
+                  }))}
+                  value={selectedPersonId ? String(selectedPersonId) : undefined}
+                  onChange={(value) => setSelectedPersonId(value ? Number(value) : "")}
+                  placeholder="Pesquise por nome ou CPF"
+                  searchable
+                  disabled={isLinking}
+                  emptyText="Nenhuma pessoa disponí­vel"
+                  className="w-full"
+                />
               </Field>
 
               <Field label="Papel">
-                <select
+                <Dropdown
+                  options={Object.entries(papelLabels).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
                   value={linkPapel}
-                  onChange={(e) => setLinkPapel(e.target.value as Papel)}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                >
-                  {Object.entries(papelLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setLinkPapel((value || linkPapel) as Papel)}
+                  placeholder="Selecione..."
+                  disabled={isLinking}
+                  className="w-full"
+                />
               </Field>
 
               <Field label="Vínculo institucional">
@@ -1703,7 +1703,7 @@ function LinkExistingMemberModal({
                 />
               </Field>
 
-              <Field label="Carga horaria (h)">
+              <Field label="Carga horária (h)">
                 <input
                   type="number"
                   min={0}

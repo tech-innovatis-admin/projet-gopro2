@@ -26,6 +26,15 @@ import {
   User,
   Users,
   X,
+  Handshake,
+  FileUser,
+  Building2,
+  Send,
+  SendIcon,
+  SendHorizonalIcon,
+  ShieldAlertIcon,
+  UserRoundSearch,
+  
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listMyNotifications } from "@/src/lib/api/endpoints";
@@ -181,9 +190,9 @@ const baseNavigationItems: NavItem[] = [
     href: "/gestão",
     icon: Users,
     children: [
-      { label: "Parceiros", href: "/parceiros", icon: FolderOpen },
-      { label: "Fornecedores", href: "/fornecedores", icon: FileText },
-      { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: Users },
+      { label: "Parceiros", href: "/parceiros", icon: Handshake },
+      { label: "Fornecedores", href: "/fornecedores", icon: Building2 },
+      { label: "Pessoas em Projetos", href: "/recursos-humanos/pessoas", icon: FileUser },
     ],
   },
 ];
@@ -351,7 +360,7 @@ export function NavBar() {
       { label: "Usuários", href: "/admin/usuarios", icon: Users },
     ];
     if (hasSuperadminPrivileges) {
-      adminChildren.unshift({ label: "Convites", href: "/admin/convites", icon: Shield });
+      adminChildren.unshift({ label: "Convites", href: "/admin/convites", icon: Send });
       adminChildren.push({ label: "Auditoria", href: "/admin/auditoria", icon: Activity });
     }
 
@@ -381,8 +390,8 @@ export function NavBar() {
         href: adminHomeHref,
         icon: Shield,
         children: [
-          { label: "Convites", href: "/admin/convites", icon: Shield },
-          { label: "Usuários", href: "/admin/usuarios", icon: Users },
+          { label: "Convites", href: "/admin/convites", icon: SendIcon },
+          { label: "Usuários", href: "/admin/usuarios", icon: UserRoundSearch },
           { label: "Auditoria", href: "/admin/auditoria", icon: Activity },
         ],
       },
@@ -694,7 +703,7 @@ export function NavBar() {
                       onClick={() => router.push(adminHomeHref)}
                       className="cursor-pointer gap-2"
                     >
-                      <Shield className="h-4 w-4" />
+                      <ShieldAlertIcon className="h-4 w-4" />
                       Administração
                     </DropdownMenuItem>
                   )}
@@ -703,7 +712,7 @@ export function NavBar() {
                     onClick={handleLogout}
                     className="cursor-pointer gap-2 text-red-600 focus:text-red-600"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut color="#ff0000" />
                     Sair
                   </DropdownMenuItem>
                 </DropdownMenuContent>

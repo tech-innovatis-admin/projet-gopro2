@@ -375,7 +375,6 @@ export default function EmpresasPage() {
       responsavelPersonId: "",
       responsavel: undefined,
       tipoServico: "",
-      tipoEmpresa: "INDEPENDENTE",
       valorContrato: undefined,
       dataInicio: "",
       dataFim: "",
@@ -893,10 +892,22 @@ function CompanyFormModal({
               <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
             </Field>
             <Field label="Tipo de Empresa">
-              <select value={formData.tipoEmpresa || "INDEPENDENTE"} onChange={(e) => setFormData({ ...formData, tipoEmpresa: e.target.value as TipoEmpresa })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]">
-                <option value="INDEPENDENTE">Independente</option>
-                <option value="INCUBADA">Incubada</option>
-              </select>
+              <Dropdown
+                options={[
+                  { value: "INDEPENDENTE", label: "Independente" },
+                  { value: "INCUBADA", label: "Incubada" },
+                ]}
+                value={formData.tipoEmpresa || "INDEPENDENTE"}
+                onChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    tipoEmpresa: (value || "INDEPENDENTE") as TipoEmpresa,
+                  })
+                }
+                placeholder="Selecione..."
+                disabled={isSaving}
+                className="w-full"
+              />
             </Field>
             <Field label="Valor do Contrato (R$)">
               <input type="text" inputMode="numeric" value={formatCurrencyInput(formData.valorContrato)} onChange={(e) => setFormData({ ...formData, valorContrato: parseCurrencyInput(e.target.value) })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="R$ 0,00" />
