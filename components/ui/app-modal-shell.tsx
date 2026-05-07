@@ -1,10 +1,14 @@
 'use client';
 
-import { type ReactNode, useEffect, useId, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useState } from 'react';
 import { X } from 'lucide-react';
 import { ConfirmDiscardModal } from './confirm-discard-modal';
 
 type ModalTone = 'brand' | 'info' | 'warning' | 'danger' | 'neutral';
+
+type AppModalShellFooterControls = {
+  requestClose: () => void;
+};
 
 type AppModalShellProps = {
   isOpen: boolean;
@@ -14,12 +18,12 @@ type AppModalShellProps = {
   tone?: ModalTone;
   onClose: () => void;
   children?: ReactNode;
-  footer?: ReactNode;
+  footer?: ReactNode | ((controls: AppModalShellFooterControls) => ReactNode);
   maxWidthClassName?: string;
   bodyClassName?: string;
   closeDisabled?: boolean;
   zIndexClassName?: string;
-  // Novas props para segurança
+  // Props para segurança de descarte
   isDirty?: boolean;
   closeOnBackdropClick?: boolean;
   onDiscardConfirm?: () => void;
@@ -83,30 +87,33 @@ export function AppModalShell({
   const palette = toneStyles[tone];
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
-  // Determinar se pode fechar baseado em estado
   const canClose = !closeDisabled;
   const shouldAskForConfirm = isDirty && !showDiscardConfirm;
 
-  // Função para lidar com tentativa de fechar
-  const handleCloseAttempt = () => {
+  const handleCloseAttempt = useCallback(() => {
     if (!canClose) return;
-    
+
     if (shouldAskForConfirm) {
       setShowDiscardConfirm(true);
     } else {
       onClose();
     }
-  };
+  }, [canClose, onClose, shouldAskForConfirm]);
 
-  // Função confirmação de descarte
-  const handleDiscardConfirm = () => {
+  const handleDiscardConfirm = useCallback(() => {
     setShowDiscardConfirm(false);
     onDiscardConfirm?.();
     onClose();
-  };
+  }, [onClose, onDiscardConfirm]);
 
   useEffect(() => {
-    if (!isOpen || !canClose) {
+    if (!isOpen) {
+      setShowDiscardConfirm(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !canClose || showDiscardConfirm) {
       return undefined;
     }
 
@@ -119,18 +126,20 @@ export function AppModalShell({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canClose, isOpen, shouldAskForConfirm]);
+  }, [canClose, handleCloseAttempt, isOpen, showDiscardConfirm]);
 
   if (!isOpen) {
     return null;
   }
+
+  const resolvedFooter =
+    typeof footer === 'function' ? footer({ requestClose: handleCloseAttempt }) : footer;
 
   return (
     <>
       <div
         className={`fixed inset-0 ${zIndexClassName} bg-slate-950/45 p-4 backdrop-blur-sm`}
         onClick={() => {
-          // Só fechar por backdrop se permitido e não for operação crítica
           if (closeOnBackdropClick && !closeDisabled) {
             handleCloseAttempt();
           }
@@ -180,14 +189,15 @@ export function AppModalShell({
 
             <div className={`overflow-y-auto px-6 py-5 ${bodyClassName}`}>{children}</div>
 
-            {footer && (
-              <div className="border-t border-slate-200 bg-slate-50/90 px-6 py-4">{footer}</div>
+            {resolvedFooter && (
+              <div className="border-t border-slate-200 bg-slate-50/90 px-6 py-4">
+                {resolvedFooter}
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Modal de confirmação de descarte */}
       <ConfirmDiscardModal
         isOpen={showDiscardConfirm}
         onConfirm={handleDiscardConfirm}

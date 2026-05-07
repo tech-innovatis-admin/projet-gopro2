@@ -178,6 +178,19 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   metaIds: [],
 });
 
+const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
+  if (!draft) return false;
+
+  const selectedMetaIds = (draft.metaIds ?? []).filter(Boolean);
+  return (
+    (draft.descricao ?? '').trim().length > 0 ||
+    toPositiveInt(draft.quantidade, 1) !== 1 ||
+    toPositiveInt(draft.meses, 1) !== 1 ||
+    toMoneyValue(draft.valorUnitario) > 0 ||
+    selectedMetaIds.length > 0
+  );
+};
+
 const calculateDraftTotal = (draft: Partial<ItemRubrica>) => {
   const quantidade = toPositiveInt(draft.quantidade, 0);
   const meses = toPositiveInt(draft.meses, 0);
@@ -492,6 +505,38 @@ export default function RubricasPage() {
         : null,
     [editingItem, rubricas]
   );
+  const originalEditingItem = useMemo(
+    () =>
+      editingItem
+        ? currentEditRubrica?.itens.find((item) => item.id === editingItem) ?? null
+        : null,
+    [currentEditRubrica, editingItem]
+  );
+  const isCreateItemDirty = isItemDraftDirty(newItem);
+  const isEditItemDirty = useMemo(() => {
+    if (!editForm || !originalEditingItem) return false;
+
+    const currentMetaIds =
+      editForm.metaIds && editForm.metaIds.length > 0
+        ? getOrderedSelectedMetaIds(editForm.metaIds, metas)
+        : editForm.metaId
+          ? getOrderedSelectedMetaIds([editForm.metaId], metas)
+          : [];
+    const originalMetaIds =
+      originalEditingItem.metaIds && originalEditingItem.metaIds.length > 0
+        ? getOrderedSelectedMetaIds(originalEditingItem.metaIds, metas)
+        : originalEditingItem.metaId
+          ? getOrderedSelectedMetaIds([originalEditingItem.metaId], metas)
+          : [];
+
+    return (
+      (editForm.descricao ?? '').trim() !== (originalEditingItem.descricao ?? '').trim() ||
+      toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
+      toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
+      toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
+      JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
+    );
+  }, [editForm, metas, originalEditingItem]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -1716,6 +1761,7 @@ export default function RubricasPage() {
           }
         }}
         closeDisabled={isSubmitting}
+        isDirty={isCreateItemDirty}
       >
         {currentCreateRubrica && (
           <form
@@ -1844,7 +1890,11 @@ export default function RubricasPage() {
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
               <button
                 type="button"
-                onClick={closeAddItemModal}
+                onClick={() => {
+                  if (!isSubmitting) {
+                    closeAddItemModal();
+                  }
+                }}
                 disabled={isSubmitting}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1879,6 +1929,7 @@ export default function RubricasPage() {
           }
         }}
         closeDisabled={isSubmitting}
+        isDirty={isEditItemDirty}
       >
         {editForm && currentEditRubrica && (
           <form

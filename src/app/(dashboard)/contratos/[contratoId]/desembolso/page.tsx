@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Calendar,
@@ -296,6 +296,27 @@ export default function DesembolsoPage() {
     parcelaModalState?.mode === "edit"
       ? "Atualize os dados do desembolso e salve diretamente por este modal."
       : "Cadastre um novo desembolso previsto e salve diretamente por este modal.";
+  const parcelaModalInitialDraft = useMemo<ParcelaModalDraft>(() => {
+    if (parcelaModalState?.mode === "edit") {
+      const parcela = parcelas.find((item) => item.id === parcelaModalState.parcelaId);
+      if (parcela) {
+        return {
+          dataPrevista: parcela.dataPrevista ?? "",
+          valorPrevistoCents: Math.round(parseNumber(parcela.valorPrevisto) * 100),
+          status: parcela.status,
+          observacao: parcela.observacao ?? "",
+        };
+      }
+    }
+
+    return createEmptyParcelaModalDraft();
+  }, [parcelaModalState, parcelas]);
+  const isParcelaModalDirty =
+    Boolean(parcelaModalState) &&
+    (parcelaModalDraft.dataPrevista !== parcelaModalInitialDraft.dataPrevista ||
+      parcelaModalDraft.valorPrevistoCents !== parcelaModalInitialDraft.valorPrevistoCents ||
+      parcelaModalDraft.status !== parcelaModalInitialDraft.status ||
+      parcelaModalDraft.observacao !== parcelaModalInitialDraft.observacao);
 
   const openCreateParcelaModal = () => {
     if (!canManageChildren) return;
@@ -697,11 +718,12 @@ export default function DesembolsoPage() {
         onClose={closeParcelaModal}
         closeDisabled={isSaving}
         maxWidthClassName="max-w-2xl"
-        footer={
+        isDirty={isParcelaModalDirty}
+        footer={({ requestClose }) => (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={closeParcelaModal}
+              onClick={requestClose}
               disabled={isSaving}
               className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
             >
@@ -721,7 +743,7 @@ export default function DesembolsoPage() {
                   : "Criar desembolso"}
             </button>
           </div>
-        }
+        )}
       >
         {parcelaModalState && (
           <form

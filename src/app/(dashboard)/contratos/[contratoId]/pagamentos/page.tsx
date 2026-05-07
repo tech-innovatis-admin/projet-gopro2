@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
+import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
 import { DatePicker } from '@/components/ui/DatePicker';
+import { useModalCloseGuard } from '@/src/hooks/useModalCloseGuard';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 import {
   createCompany,
@@ -4016,19 +4018,31 @@ function SubitemModal({
   onOpenLinkExistingCompany: () => void;
   onSubmit: () => void;
 }) {
+  const hasFilledData =
+    form.nome.trim().length > 0 ||
+    form.vinculoTipo !== 'none' ||
+    form.personId.length > 0 ||
+    form.organizationId.length > 0;
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isPersisting,
+    onClose,
+  });
+
   if (!isOpen) return null;
 
   const showPersonSelector = form.vinculoTipo === 'person';
   const showCompanySelector = form.vinculoTipo === 'company';
-
   return (
-    <ModalShell
-      title={title}
-      subtitle={subtitle}
-      onClose={onClose}
-      maxWidthClassName="max-w-2xl"
-    >
-      <div className="space-y-5 p-6">
+    <>
+      <ModalShell
+        title={title}
+        subtitle={subtitle}
+        onClose={requestClose}
+        maxWidthClassName="max-w-2xl"
+      >
+        <div className="space-y-5 p-6">
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-gray-700">
             Nome do pagamento <span className="text-red-500">*</span>
@@ -4045,7 +4059,7 @@ function SubitemModal({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">V?nculo do pagamento</label>
+          <label className="block text-sm font-medium text-gray-700">Vínculo do pagamento</label>
           <select
             value={form.vinculoTipo}
             onChange={(event) => {
@@ -4214,7 +4228,7 @@ function SubitemModal({
         <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isPersisting}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
           >
@@ -4231,8 +4245,10 @@ function SubitemModal({
             {submitLabel}
           </button>
         </div>
-      </div>
-    </ModalShell>
+        </div>
+      </ModalShell>
+      <ConfirmDiscardModal {...discardConfirmProps} isLoading={isPersisting} />
+    </>
   );
 }
 

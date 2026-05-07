@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Upload, FileText, Trash2, AlertCircle, Loader2 } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { listPartners, listPublicAgencies } from "@/src/lib/api/endpoints";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import type {
@@ -57,6 +59,29 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const PAGE_SIZE = 20;
 
+function createInitialFormData(): PreProjetoFormData {
+  return {
+    titulo: "",
+    objeto: "",
+    govIf: "",
+    tipo: "",
+    primaryPartnerId: null,
+    primaryPartnerName: "",
+    primaryClientId: null,
+    primaryClientName: "",
+    localidade: "",
+    valorTotal: "",
+    documentos: {},
+  };
+}
+
+const INITIAL_FILE_ERRORS: Record<TipoDocumento, string> = {
+  contrato: "",
+  tr: "",
+  planoTrabalho: "",
+  outro: "",
+};
+
 interface NovoPreProjetoModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -83,26 +108,9 @@ export default function NovoPreProjetoModal({
   onClose,
   onSubmit,
 }: NovoPreProjetoModalProps) {
-  const [formData, setFormData] = useState<PreProjetoFormData>({
-    titulo: "",
-    objeto: "",
-    govIf: "",
-    tipo: "",
-    primaryPartnerId: null,
-    primaryPartnerName: "",
-    primaryClientId: null,
-    primaryClientName: "",
-    localidade: "",
-    valorTotal: "",
-    documentos: {},
-  });
+  const [formData, setFormData] = useState<PreProjetoFormData>(() => createInitialFormData());
   const [errors, setErrors] = useState<PreProjetoFormErrors>({});
-  const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>({
-    contrato: "",
-    tr: "",
-    planoTrabalho: "",
-    outro: "",
-  });
+  const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>(INITIAL_FILE_ERRORS);
   const [partnerOptions, setPartnerOptions] = useState<SelectOption[]>([]);
   const [clientOptions, setClientOptions] = useState<SelectOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
@@ -112,6 +120,34 @@ export default function NovoPreProjetoModal({
 
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const hasFilledData = useMemo(
+    () =>
+      formData.titulo.trim().length > 0 ||
+      formData.objeto.trim().length > 0 ||
+      formData.govIf.length > 0 ||
+      formData.tipo.length > 0 ||
+      formData.primaryPartnerId !== null ||
+      formData.primaryClientId !== null ||
+      formData.localidade.trim().length > 0 ||
+      formData.valorTotal.trim().length > 0 ||
+      Object.keys(formData.documentos).length > 0,
+    [formData]
+  );
+
+  const resetFormState = useCallback(() => {
+    setFormData(createInitialFormData());
+    setErrors({});
+    setFileErrors(INITIAL_FILE_ERRORS);
+    setSubmitError(null);
+  }, []);
+
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   const loadOptions = useCallback(async () => {
     setIsLoadingOptions(true);
@@ -156,22 +192,12 @@ export default function NovoPreProjetoModal({
     return () => clearTimeout(focusTimeout);
   }, [isOpen, loadOptions]);
 
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen && !isSubmitting) {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [isOpen, isSubmitting, onClose]);
-
   const handleBackdropClick = (event: React.MouseEvent) => {
     if (isSubmitting) {
       return;
     }
     if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-      onClose();
+      requestClose();
     }
   };
 
@@ -288,22 +314,7 @@ export default function NovoPreProjetoModal({
   };
 
   const handleReset = () => {
-    setFormData({
-      titulo: "",
-      objeto: "",
-      govIf: "",
-      tipo: "",
-      primaryPartnerId: null,
-      primaryPartnerName: "",
-      primaryClientId: null,
-      primaryClientName: "",
-      localidade: "",
-      valorTotal: "",
-      documentos: {},
-    });
-    setErrors({});
-    setFileErrors({ contrato: "", tr: "", planoTrabalho: "", outro: "" });
-    setSubmitError(null);
+    resetFormState();
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -352,7 +363,7 @@ export default function NovoPreProjetoModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSubmitting}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Fechar modal"
@@ -584,7 +595,7 @@ export default function NovoPreProjetoModal({
           <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -607,6 +618,7 @@ export default function NovoPreProjetoModal({
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

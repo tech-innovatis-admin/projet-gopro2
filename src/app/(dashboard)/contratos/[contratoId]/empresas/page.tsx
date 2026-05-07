@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, UserCircle2, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { CompanyResponsiblePersonSection } from "@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection";
 import {
   createCompany,
@@ -717,6 +719,17 @@ function CompanyFormModal({
 }) {
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const hasFilledData = Object.values(formData).some((value) => {
+    if (typeof value === "string") return value.trim().length > 0;
+    if (typeof value === "number") return value > 0;
+    return value !== undefined && value !== null;
+  });
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen: true,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSaving,
+    onClose,
+  });
 
   const handleLookupZipCode = async (rawZipCode?: string) => {
     const normalizedZipCode = digits(rawZipCode ?? formData.cep);
@@ -763,7 +776,7 @@ function CompanyFormModal({
             <div className="h-6 w-6"><BriefcaseBusinessIcon /></div>
             <h2 className="text-lg font-bold">{isEditingItem ? "Editar Empresa" : "Nova Empresa"}</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors"><X className="h-5 w-5" /></button>
+          <button onClick={requestClose} disabled={isSaving} className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-60"><X className="h-5 w-5" /></button>
         </div>
 
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
@@ -903,19 +916,20 @@ function CompanyFormModal({
         <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div>
             {isEditingItem && onDelete && (
-              <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); onClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
+              <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); requestClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
                 <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vínculo
               </button>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button onClick={requestClose} disabled={isSaving} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60">Cancelar</button>
             <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || digits(formData.cnpj).length !== 14} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
             </button>
           </div>
         </div>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} isLoading={isSaving} />
     </div>
   );
 }

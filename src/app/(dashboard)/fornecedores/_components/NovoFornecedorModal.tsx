@@ -1,10 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, Loader2, X } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { CompanyResponsiblePersonSection } from "./CompanyResponsiblePersonSection";
 import { type Fornecedor } from "../types";
 import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 interface NovoFornecedorModalProps {
@@ -139,17 +141,34 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
       responsiblePersonId: "responsavelPersonId",
     },
   });
+  const resetFormState = useCallback(() => {
+    setFormData(INITIAL_FORM);
+    setResponsavel(undefined);
+    clearErrors();
+    setIsSaving(false);
+    setIsResolvingZipCode(false);
+    setZipCodeLookupError(null);
+  }, [clearErrors]);
+  const hasFilledData = useMemo(
+    () =>
+      (Object.keys(INITIAL_FORM) as Array<keyof FormData>).some(
+        (field) => formData[field] !== INITIAL_FORM[field]
+      ),
+    [formData]
+  );
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSaving,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   useEffect(() => {
     if (!isOpen) {
-      setFormData(INITIAL_FORM);
-      setResponsavel(undefined);
-      clearErrors();
-      setIsSaving(false);
-      setIsResolvingZipCode(false);
-      setZipCodeLookupError(null);
+      resetFormState();
     }
-  }, [isOpen]);
+  }, [isOpen, resetFormState]);
 
   if (!isOpen) return null;
 
@@ -247,7 +266,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
           </div>
           <button
             type="button"
-            onClick={onClose}
+          onClick={requestClose}
             disabled={isSaving}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-60"
           >
@@ -436,7 +455,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSaving}
             className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
           >
@@ -460,6 +479,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
             )}
           </button>
         </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
       </div>
     </div>
   );

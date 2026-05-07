@@ -1,10 +1,12 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Users, Building, GraduationCap, MapPin, Mail, Phone, Globe, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { cn } from "@/lib/utils";
 import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   type Parceiro,
@@ -139,6 +141,28 @@ export function NovoParceiroModal({
   });
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const resetFormState = useCallback(() => {
+    setForm(INITIAL_FORM);
+    setErrors({});
+    clearErrors();
+    setIsSubmitting(false);
+    setIsZipCodeLoading(false);
+    setZipCodeLookupError(null);
+  }, [clearErrors]);
+  const hasFilledData = useMemo(
+    () =>
+      (Object.keys(INITIAL_FORM) as Array<keyof FormData>).some(
+        (field) => form[field] !== INITIAL_FORM[field]
+      ),
+    [form]
+  );
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   // Foca no primeiro input ao abrir
   useEffect(() => {
@@ -161,14 +185,9 @@ export function NovoParceiroModal({
   // Reset form ao fechar
   useEffect(() => {
     if (!isOpen) {
-      setForm(INITIAL_FORM);
-      setErrors({});
-      clearErrors();
-      setIsSubmitting(false);
-      setIsZipCodeLoading(false);
-      setZipCodeLookupError(null);
+      resetFormState();
     }
-  }, [isOpen]);
+  }, [isOpen, resetFormState]);
 
   // Handler de mudança de campo
   const handleChange = (field: keyof FormData, value: string) => {
@@ -309,8 +328,8 @@ export function NovoParceiroModal({
               </div>
             </div>
             <button
-              onClick={onClose}
-                disabled={isSubmitting}
+              onClick={requestClose}
+              disabled={isSubmitting}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="h-5 w-5 text-gray-500" />
@@ -568,7 +587,7 @@ export function NovoParceiroModal({
               <Button
                 type="button"
                 variant="outline"
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={isSubmitting}
                 className="px-5"
               >
@@ -585,6 +604,7 @@ export function NovoParceiroModal({
           </form>
         </div>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </>
   );
 }
