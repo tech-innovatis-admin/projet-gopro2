@@ -17,6 +17,7 @@ export function normalizeApiError(
   if (typeof error === 'string') {
     return {
       message: error,
+      status: statusCode,
       code: `HTTP_${statusCode}`,
       timestamp: new Date().toISOString(),
       path: context?.endpoint,
@@ -28,6 +29,8 @@ export function normalizeApiError(
     const fieldErrors = extractFieldErrors(errorObj);
     return {
       message: (errorObj.message as string) || getDefaultErrorMessage(statusCode),
+      status:
+        typeof errorObj.status === 'number' ? (errorObj.status as number) : statusCode,
       code: (errorObj.code as string) || `HTTP_${statusCode}`,
       details: errorObj.details || errorObj,
       timestamp: (errorObj.timestamp as string) || new Date().toISOString(),
@@ -38,6 +41,7 @@ export function normalizeApiError(
 
   return {
     message: getDefaultErrorMessage(statusCode),
+    status: statusCode,
     code: `HTTP_${statusCode}`,
     details: error,
     timestamp: new Date().toISOString(),
@@ -58,30 +62,25 @@ function getDefaultErrorMessage(statusCode: number): string {
   return getStatusErrorMessage(statusCode) || `Erro ${statusCode}: Requisição falhou`;
 }
 
-function isApiFieldError(item: unknown): item is { field: string; message: string } {
-  return (
-    typeof item === 'object' &&
-    item !== null &&
-    typeof (item as { field?: unknown }).field === 'string' &&
-    typeof (item as { message?: unknown }).message === 'string'
-  );
-}
-
 function extractFieldErrors(errorObj: Record<string, unknown>) {
-  if (Array.isArray(errorObj.fieldErrors)) {
-    return errorObj.fieldErrors
-      .filter(isApiFieldError)
-      .map((item) => ({ field: item.field, message: item.message }));
+  if (isFieldErrorsObject(errorObj.fieldErrors)) {
+    return errorObj.fieldErrors;
   }
 
   const details = errorObj.details;
-  if (details && typeof details === 'object' && Array.isArray((details as { fieldErrors?: unknown[] }).fieldErrors)) {
-    return (details as { fieldErrors: unknown[] }).fieldErrors
-      .filter(isApiFieldError)
-      .map((item) => ({ field: item.field, message: item.message }));
+  if (details && typeof details === 'object' && isFieldErrorsObject((details as { fieldErrors?: unknown }).fieldErrors)) {
+    return (details as { fieldErrors: Record<string, string> }).fieldErrors;
   }
 
   return undefined;
+}
+
+function isFieldErrorsObject(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((item) => typeof item === 'string');
 }
 
 export function createErrorResponse(
@@ -101,16 +100,14 @@ export function createErrorResponse(
     {
       error: {
         message: error.message,
+        status: error.status ?? statusCode,
         code: error.code,
         ...(process.env.NODE_ENV === 'development' || statusCode >= 500
           ? { details: error.details }
           : {}),
-        ...(error.fieldErrors?.length
+        ...(error.fieldErrors && Object.keys(error.fieldErrors).length > 0
           ? {
               fieldErrors: error.fieldErrors,
-              ...(process.env.NODE_ENV === 'development' || statusCode >= 500
-                ? {}
-                : { details: { fieldErrors: error.fieldErrors } }),
             }
           : {}),
         timestamp: error.timestamp,

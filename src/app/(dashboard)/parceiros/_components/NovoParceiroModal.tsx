@@ -1,9 +1,13 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Users, Building, GraduationCap, MapPin, Mail, Phone, Globe, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { cn } from "@/lib/utils";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
   type Parceiro,
   type ParceiroTipo,
@@ -115,11 +119,50 @@ export function NovoParceiroModal({
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const {
+    fieldErrors: apiFieldErrors,
+    globalError: submitError,
+    clearErrors,
+    handleSubmitError,
+  } = useFormApiErrors<keyof FormData>({
+    fieldMap: {
+      name: "nome",
+      acronym: "sigla",
+      cnpj: "cnpj",
+      email: "email",
+      phone: "telefone",
+      site: "site",
+      address: "endereco",
+      city: "municipio",
+      state: "uf",
+    },
+  });
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const resetFormState = useCallback(() => {
+    setForm(INITIAL_FORM);
+    setErrors({});
+    clearErrors();
+    setIsSubmitting(false);
+    setIsZipCodeLoading(false);
+    setZipCodeLookupError(null);
+  }, [clearErrors]);
+  const hasFilledData = useMemo(
+    () =>
+      (Object.keys(INITIAL_FORM) as Array<keyof FormData>).some(
+        (field) => form[field] !== INITIAL_FORM[field]
+      ),
+    [form]
+  );
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   // Foca no primeiro input ao abrir
   useEffect(() => {
@@ -129,7 +172,7 @@ export function NovoParceiroModal({
   }, [isOpen]);
 
   // Fecha ao pressionar ESC
-  useEffect(() => {
+  /* useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -137,19 +180,14 @@ export function NovoParceiroModal({
       document.addEventListener("keydown", handleEsc);
       return () => document.removeEventListener("keydown", handleEsc);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose]); */
 
   // Reset form ao fechar
   useEffect(() => {
     if (!isOpen) {
-      setForm(INITIAL_FORM);
-      setErrors({});
-      setSubmitError(null);
-      setIsSubmitting(false);
-      setIsZipCodeLoading(false);
-      setZipCodeLookupError(null);
+      resetFormState();
     }
-  }, [isOpen]);
+  }, [isOpen, resetFormState]);
 
   // Handler de mudança de campo
   const handleChange = (field: keyof FormData, value: string) => {
@@ -230,7 +268,7 @@ export function NovoParceiroModal({
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setSubmitError(null);
+      clearErrors();
 
     try {
       await onSubmit({
@@ -251,11 +289,8 @@ export function NovoParceiroModal({
 
       onClose();
     } catch (submitFailure) {
-      setSubmitError(
-        submitFailure instanceof Error
-          ? submitFailure.message
-          : "Não foi possível cadastrar o parceiro."
-      );
+      const fallback = getUserErrorMessage(submitFailure, "Não foi possível cadastrar o parceiro.");
+      handleSubmitError(submitFailure, fallback);
     } finally {
       setIsSubmitting(false);
     }
@@ -268,7 +303,7 @@ export function NovoParceiroModal({
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={() => !isSubmitting && onClose()}
+        // onClick={() => !isSubmitting && onClose()}
       />
 
       {/* Modal */}
@@ -293,8 +328,8 @@ export function NovoParceiroModal({
               </div>
             </div>
             <button
-              onClick={onClose}
-                disabled={isSubmitting}
+              onClick={requestClose}
+              disabled={isSubmitting}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="h-5 w-5 text-gray-500" />
@@ -361,8 +396,8 @@ export function NovoParceiroModal({
                       errors.nome ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.nome && (
-                    <p className="text-xs text-red-600">{errors.nome}</p>
+                  {(errors.nome || apiFieldErrors.nome) && (
+                    <p className="text-xs text-red-600">{errors.nome || apiFieldErrors.nome}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -438,8 +473,8 @@ export function NovoParceiroModal({
                       </option>
                     ))}
                   </select>
-                  {errors.uf && (
-                    <p className="text-xs text-red-600">{errors.uf}</p>
+                  {(errors.uf || apiFieldErrors.uf) && (
+                    <p className="text-xs text-red-600">{errors.uf || apiFieldErrors.uf}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -456,8 +491,8 @@ export function NovoParceiroModal({
                       errors.municipio ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.municipio && (
-                    <p className="text-xs text-red-600">{errors.municipio}</p>
+                  {(errors.municipio || apiFieldErrors.municipio) && (
+                    <p className="text-xs text-red-600">{errors.municipio || apiFieldErrors.municipio}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -491,8 +526,8 @@ export function NovoParceiroModal({
                       errors.email ? "border-red-300" : "border-gray-200"
                     )}
                   />
-                  {errors.email && (
-                    <p className="text-xs text-red-600">{errors.email}</p>
+                  {(errors.email || apiFieldErrors.email) && (
+                    <p className="text-xs text-red-600">{errors.email || apiFieldErrors.email}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -552,7 +587,7 @@ export function NovoParceiroModal({
               <Button
                 type="button"
                 variant="outline"
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={isSubmitting}
                 className="px-5"
               >
@@ -569,6 +604,7 @@ export function NovoParceiroModal({
           </form>
         </div>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, FileText, UploadCloud, X } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import type { ContractDocumentCategory } from "../page";
 
 type NewFilePayload = {
@@ -52,11 +54,30 @@ export function NovoArquivoModal({
   const [category, setCategory] = useState<ContractDocumentCategory>("OUTRO");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasFilledData = category !== "OUTRO" || file !== null;
+  const resetModalState = useCallback(() => {
+    setCategory("OUTRO");
+    setFile(null);
+    setError(null);
+  }, []);
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetModalState,
+  });
 
   const currentFileName = useMemo(() => {
     if (!file) return null;
     return `${file.name} (${formatFileSize(file.size)})`;
   }, [file]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetModalState();
+    }
+  }, [isOpen, resetModalState]);
 
   const handleFileChange = (nextFile: File | null) => {
     if (!nextFile) {
@@ -90,7 +111,7 @@ export function NovoArquivoModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
       onClick={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
-          onClose();
+          requestClose();
         }
       }}
     >
@@ -102,7 +123,7 @@ export function NovoArquivoModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSubmitting}
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
             aria-label="Fechar modal"
@@ -163,7 +184,7 @@ export function NovoArquivoModal({
           <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
@@ -179,6 +200,7 @@ export function NovoArquivoModal({
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

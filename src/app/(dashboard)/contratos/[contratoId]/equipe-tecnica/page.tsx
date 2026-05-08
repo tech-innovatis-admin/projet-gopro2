@@ -42,7 +42,9 @@ import {
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { MoneyInput } from "../desembolso/_components/MoneyImput";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import {
   formatCPF,
   unformatCPF,
@@ -1123,6 +1125,31 @@ function MemberFormModal({
   const [ufLookupError, setUfLookupError] = useState<string | null>(null);
   const [cityLookupError, setCityLookupError] = useState<string | null>(null);
   const [allowManualCityEntry, setAllowManualCityEntry] = useState(false);
+  const hasFilledData =
+    formData.nome.trim().length > 0 ||
+    formData.papel !== "COORDENADOR" ||
+    formData.cpf.trim().length > 0 ||
+    formData.email.trim().length > 0 ||
+    formData.telefone.trim().length > 0 ||
+    formData.birthDate.trim().length > 0 ||
+    formData.state.trim().length > 0 ||
+    formData.city.trim().length > 0 ||
+    formData.vinculo.trim().length > 0 ||
+    Number(formData.cargaHoraria) > 0 ||
+    formData.contractType !== "" ||
+    formData.status !== "" ||
+    formData.startDate.trim().length > 0 ||
+    formData.endDate.trim().length > 0 ||
+    (typeof formData.baseAmount === "number" && formData.baseAmount > 0) ||
+    formData.endereco.trim().length > 0 ||
+    formData.notes.trim().length > 0 ||
+    Boolean(avatarFile);
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen: true,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSaving,
+    onClose,
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -1190,7 +1217,8 @@ function MemberFormModal({
             </h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            disabled={isSaving}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors"
           >
             <X className="h-5 w-5" />
@@ -1561,7 +1589,8 @@ function MemberFormModal({
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
+              onClick={requestClose}
+              disabled={isSaving}
               className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Cancelar
@@ -1580,6 +1609,7 @@ function MemberFormModal({
           </div>
         </div>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} isLoading={isSaving} />
     </div>
   );
 }

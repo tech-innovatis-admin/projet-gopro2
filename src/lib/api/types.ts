@@ -8,26 +8,27 @@ export interface PageResponseDTO<T> {
   last: boolean;
 }
 
-export interface BackendFieldError {
+export type BackendFieldErrors = Record<string, string>;
+export type BackendFieldError = {
   field: string;
   message: string;
-}
+};
 
 export interface BackendErrorResponse {
-  timestamp?: string;
   status?: number;
-  error?: string;
   message?: string;
+  fieldErrors?: BackendFieldErrors;
+  timestamp?: string;
   path?: string;
-  fieldErrors?: BackendFieldError[];
 }
 
 export interface BffErrorEnvelope {
   error: {
+    status?: number;
     message: string;
     code?: string;
     details?: unknown;
-    fieldErrors?: BackendFieldError[];
+    fieldErrors?: BackendFieldErrors;
     timestamp?: string;
     path?: string;
   };
@@ -39,7 +40,7 @@ export class HttpError extends Error {
   code?: string;
   timestamp?: string;
   path?: string;
-  fieldErrors?: BackendFieldError[];
+  fieldErrors?: BackendFieldErrors;
 
   constructor(
     message: string,
@@ -49,7 +50,7 @@ export class HttpError extends Error {
       code?: string;
       timestamp?: string;
       path?: string;
-      fieldErrors?: BackendFieldError[];
+      fieldErrors?: BackendFieldErrors;
     }
   ) {
     super(message);

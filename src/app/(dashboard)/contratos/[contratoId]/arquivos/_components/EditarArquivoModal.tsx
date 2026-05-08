@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, Pencil, UploadCloud, X } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import type { ContractDocument, ContractDocumentCategory } from "../page";
 
 type ReplacePayload = {
@@ -57,11 +59,28 @@ export function EditarArquivoModal({
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasFilledData = file !== null || (arquivo ? category !== arquivo.category : false);
+  const resetModalState = useCallback(() => {
+    setCategory(arquivo?.category ?? "OUTRO");
+    setFile(null);
+    setError(null);
+  }, [arquivo?.category]);
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetModalState,
+  });
 
   const replacementFileLabel = useMemo(() => {
     if (!file) return null;
     return `${file.name} (${formatFileSize(file.size)})`;
   }, [file]);
+
+  useEffect(() => {
+    resetModalState();
+  }, [arquivo?.id, isOpen, resetModalState]);
 
   const handleFileChange = (nextFile: File | null) => {
     if (!nextFile) {
@@ -100,7 +119,7 @@ export function EditarArquivoModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
       onClick={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
-          onClose();
+          requestClose();
         }
       }}
     >
@@ -114,7 +133,7 @@ export function EditarArquivoModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSubmitting}
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
             aria-label="Fechar modal"
@@ -187,7 +206,7 @@ export function EditarArquivoModal({
           <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
@@ -203,6 +222,7 @@ export function EditarArquivoModal({
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

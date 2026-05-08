@@ -45,6 +45,16 @@ interface RemanejamentoModalProps {
 
 const REMANEJAMENTO_FORM_ID = 'rubrica-remanejamento-form';
 
+function createInitialForm(itemOrigemId: string): RemanejamentoForm {
+  return {
+    itemOrigemId,
+    itemDestinoId: '',
+    valor: 0,
+    data: new Date().toISOString().split('T')[0],
+    motivo: '',
+  };
+}
+
 export function RemanejamentoModal({
   isOpen,
   onClose,
@@ -52,14 +62,17 @@ export function RemanejamentoModal({
   itemOrigem,
   rubricas,
 }: RemanejamentoModalProps) {
-  const [form, setForm] = useState<RemanejamentoForm>({
-    itemOrigemId: itemOrigem.id,
-    itemDestinoId: '',
-    valor: 0,
-    data: new Date().toISOString().split('T')[0],
-    motivo: '',
-  });
+  const [form, setForm] = useState<RemanejamentoForm>(() => createInitialForm(itemOrigem.id));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const hasFilledData =
+    form.itemDestinoId.length > 0 ||
+    form.valor > 0 ||
+    form.motivo.trim().length > 0 ||
+    form.data !== createInitialForm(itemOrigem.id).data;
+  const resetForm = () => {
+    setForm(createInitialForm(itemOrigem.id));
+    setErrors({});
+  };
 
   const itemOrigemAtual = rubricas
     .flatMap((rubrica) => rubrica.itens)
@@ -134,11 +147,13 @@ export function RemanejamentoModal({
       icon={<ArrowRight className="h-5 w-5" />}
       tone="brand"
       maxWidthClassName="max-w-3xl"
-      footer={
+      isDirty={hasFilledData}
+      onDiscardConfirm={resetForm}
+      footer={({ requestClose }) => (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             Cancelar
@@ -151,7 +166,7 @@ export function RemanejamentoModal({
             Confirmar remanejamento
           </button>
         </div>
-      }
+      )}
     >
       <form id={REMANEJAMENTO_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">

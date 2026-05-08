@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserCircle2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppModalShell } from "@/components/ui/app-modal-shell";
@@ -336,16 +336,26 @@ function CreateResponsiblePersonModal({
   const [form, setForm] = useState<CreatePersonFormState>(DEFAULT_CREATE_PERSON_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const hasFilledData = useMemo(
+    () =>
+      (Object.keys(DEFAULT_CREATE_PERSON_FORM) as Array<keyof CreatePersonFormState>).some(
+        (field) => form[field] !== DEFAULT_CREATE_PERSON_FORM[field],
+      ),
+    [form],
+  );
+  const resetFormState = useCallback(() => {
+    setForm(DEFAULT_CREATE_PERSON_FORM);
+    setError(null);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    setForm(DEFAULT_CREATE_PERSON_FORM);
-    setError(null);
+    resetFormState();
     setIsSaving(false);
-  }, [isOpen]);
+  }, [isOpen, resetFormState]);
 
   if (!isOpen) {
     return null;
@@ -401,9 +411,11 @@ function CreateResponsiblePersonModal({
       maxWidthClassName="max-w-xl"
       zIndexClassName="z-[60]"
       closeDisabled={isSaving}
-      footer={
+      isDirty={hasFilledData}
+      onDiscardConfirm={resetFormState}
+      footer={({ requestClose }) => (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+          <Button type="button" variant="outline" onClick={requestClose} disabled={isSaving}>
             Cancelar
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={isSaving} className="gap-2">
@@ -415,7 +427,7 @@ function CreateResponsiblePersonModal({
             {isSaving ? "Salvando..." : "Cadastrar pessoa"}
           </Button>
         </div>
-      }
+      )}
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
