@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Label } from "@/components/ui/label";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { ProjectCreatedModal } from "./_components/ProjectCreatedModal";
 import {
   createPartner,
@@ -520,6 +521,7 @@ const formatPhoneInput = (value: string) => {
 };
 
 function NovoContratoPageContent() {
+  type InlineModalKey = "partner" | "client" | "secretary" | "coordinator";
   const router = useRouter();
   const searchParams = useSearchParams();
   const isPopupMode = searchParams.get("popup") === "1";
@@ -562,6 +564,7 @@ function NovoContratoPageContent() {
   const [isAddingParcela, setIsAddingParcela] = useState(false);
   const [editingParcelaId, setEditingParcelaId] = useState<string | null>(null);
   const [showCoordinatorModal, setShowCoordinatorModal] = useState(false);
+  const [pendingModalClose, setPendingModalClose] = useState<InlineModalKey | null>(null);
   const [isCreatingCoordinator, setIsCreatingCoordinator] = useState(false);
   const [coordinatorForm, setCoordinatorForm] = useState<CoordinatorForm>(
     initialCoordinatorFormState
@@ -1378,6 +1381,30 @@ function NovoContratoPageContent() {
   };
 
   const closePartnerModal = () => {
+    const isDirty =
+      partnerForm.name.trim() ||
+      partnerForm.tradeName.trim() ||
+      partnerForm.cnpj.trim() ||
+      partnerForm.email.trim() ||
+      partnerForm.phone.trim() ||
+      partnerForm.address.trim() ||
+      partnerForm.site.trim() ||
+      partnerForm.city.trim() ||
+      partnerForm.state.trim() ||
+      partnerForm.acronym.trim() ||
+      partnerForm.partnersType !== initialPartnerCreateFormState.partnersType;
+    if (isDirty) {
+      setPendingModalClose("partner");
+      return;
+    }
+    setShowPartnerModal(false);
+    setPartnerForm(initialPartnerCreateFormState);
+    setPartnerFormError(null);
+    setPartnerCityOptions([]);
+    setPartnerCityLookupError(null);
+    setIsPartnerCityLoading(false);
+  };
+  const forceClosePartnerModal = () => {
     setShowPartnerModal(false);
     setPartnerForm(initialPartnerCreateFormState);
     setPartnerFormError(null);
@@ -1461,6 +1488,27 @@ function NovoContratoPageContent() {
   };
 
   const closeClientModal = () => {
+    const isDirty =
+      clientForm.name.trim() ||
+      clientForm.cnpj.trim() ||
+      clientForm.sigla.trim() ||
+      clientForm.code.trim() ||
+      clientForm.email.trim() ||
+      clientForm.phone.trim() ||
+      clientForm.address.trim() ||
+      clientForm.contactPerson.trim() ||
+      clientForm.city.trim() ||
+      clientForm.state.trim() ||
+      clientForm.publicAgencyType !== initialClientCreateFormState.publicAgencyType;
+    if (isDirty) {
+      setPendingModalClose("client");
+      return;
+    }
+    setShowClientModal(false);
+    setClientForm(initialClientCreateFormState);
+    setClientFormError(null);
+  };
+  const forceCloseClientModal = () => {
     setShowClientModal(false);
     setClientForm(initialClientCreateFormState);
     setClientFormError(null);
@@ -1531,6 +1579,24 @@ function NovoContratoPageContent() {
   };
 
   const closeSecretaryModal = () => {
+    const isDirty =
+      secretaryForm.name.trim() ||
+      secretaryForm.cnpj.trim() ||
+      secretaryForm.sigla.trim() ||
+      secretaryForm.code.trim() ||
+      secretaryForm.email.trim() ||
+      secretaryForm.phone.trim() ||
+      secretaryForm.address.trim() ||
+      secretaryForm.contactPerson.trim();
+    if (isDirty) {
+      setPendingModalClose("secretary");
+      return;
+    }
+    setShowSecretaryModal(false);
+    setSecretaryForm(initialSecretaryCreateFormState);
+    setSecretaryFormError(null);
+  };
+  const forceCloseSecretaryModal = () => {
     setShowSecretaryModal(false);
     setSecretaryForm(initialSecretaryCreateFormState);
     setSecretaryFormError(null);
@@ -1609,6 +1675,18 @@ function NovoContratoPageContent() {
   };
 
   const closeCoordinatorModal = () => {
+    const isDirty =
+      coordinatorForm.fullName.trim() ||
+      coordinatorForm.cpf.trim() ||
+      coordinatorForm.email.trim() ||
+      coordinatorForm.phone.trim() ||
+      coordinatorForm.birthDate.trim() ||
+      coordinatorForm.city.trim() ||
+      coordinatorForm.state.trim();
+    if (isDirty) {
+      setPendingModalClose("coordinator");
+      return;
+    }
     setShowCoordinatorModal(false);
     setCoordinatorForm(initialCoordinatorFormState);
     setCoordinatorFormError(null);
@@ -1616,6 +1694,60 @@ function NovoContratoPageContent() {
     setIsCoordinatorCityLoading(false);
     setCoordinatorCityOptions([]);
   };
+  const forceCloseCoordinatorModal = () => {
+    setShowCoordinatorModal(false);
+    setCoordinatorForm(initialCoordinatorFormState);
+    setCoordinatorFormError(null);
+    setCoordinatorCityLookupError(null);
+    setIsCoordinatorCityLoading(false);
+    setCoordinatorCityOptions([]);
+  };
+
+  const confirmDiscardPendingModalClose = () => {
+    if (pendingModalClose === "partner") forceClosePartnerModal();
+    if (pendingModalClose === "client") forceCloseClientModal();
+    if (pendingModalClose === "secretary") forceCloseSecretaryModal();
+    if (pendingModalClose === "coordinator") forceCloseCoordinatorModal();
+    setPendingModalClose(null);
+  };
+
+  useEffect(() => {
+    if (pendingModalClose) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+
+      if (showCoordinatorModal) {
+        closeCoordinatorModal();
+        return;
+      }
+      if (showSecretaryModal) {
+        closeSecretaryModal();
+        return;
+      }
+      if (showClientModal) {
+        closeClientModal();
+        return;
+      }
+      if (showPartnerModal) {
+        closePartnerModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [
+    showPartnerModal,
+    showClientModal,
+    showSecretaryModal,
+    showCoordinatorModal,
+    pendingModalClose,
+    closePartnerModal,
+    closeClientModal,
+    closeSecretaryModal,
+    closeCoordinatorModal,
+  ]);
 
   const openCoordinatorModal = () => {
     setCoordinatorForm(initialCoordinatorFormState);
@@ -3682,7 +3814,6 @@ function NovoContratoPageContent() {
       {showPartnerModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closePartnerModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -3961,7 +4092,6 @@ function NovoContratoPageContent() {
       {showClientModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeClientModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -4234,7 +4364,6 @@ function NovoContratoPageContent() {
       {showSecretaryModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeSecretaryModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -4422,7 +4551,6 @@ function NovoContratoPageContent() {
       {showCoordinatorModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeCoordinatorModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -4633,6 +4761,11 @@ function NovoContratoPageContent() {
           </div>
         </div>
       )}
+      <ConfirmDiscardModal
+        isOpen={pendingModalClose !== null}
+        onCancel={() => setPendingModalClose(null)}
+        onConfirm={confirmDiscardPendingModalClose}
+      />
     </div>
   );
 }
