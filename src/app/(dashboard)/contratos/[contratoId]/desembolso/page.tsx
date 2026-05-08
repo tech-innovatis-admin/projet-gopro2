@@ -13,6 +13,7 @@ import {
 import { AppModalShell } from "@/components/ui/app-modal-shell";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { Dropdown } from "@/components/ui/dropdown";
 import { MoneyInput } from "./_components/MoneyImput";
 import {
   createDisbursementSchedule,
@@ -76,6 +77,18 @@ const statusOptions: {
   { value: "RECEBIDO", label: "Recebido", color: "bg-green-100 text-green-800" },
   { value: "CANCELADO", label: "Cancelado", color: "bg-red-100 text-red-800" },
 ];
+
+const statusDropdownOptions = statusOptions.map((option) => ({
+  value: option.value,
+  label: option.label,
+  icon: (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${option.color}`}
+    >
+      {option.label}
+    </span>
+  ),
+}));
 
 const EMPTY_PARCELA_MODAL_DRAFT: ParcelaModalDraft = {
   dataPrevista: "",
@@ -784,24 +797,38 @@ export default function DesembolsoPage() {
                 />
               </div>
 
+
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-700">Status</label>
-                <select
+                <Dropdown
+                  options={[
+                    {
+                      value: 'previsto',
+                      label: 'Previsto',
+                    },
+                    {
+                      value: 'parcial',
+                      label: 'Parcial',
+                    },
+                    {
+                      value: 'recebido',
+                      label: 'Recebido',
+                    },
+                    {
+                      value: 'cancelado',
+                      label: 'Cancelado',
+                    },
+                  ]}
                   value={parcelaModalDraft.status}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setParcelaModalDraft((prev) => ({
                       ...prev,
-                      status: event.target.value as StatusDisbursementScheduleEnum,
+                      status: (value ?? "PREVISTO") as StatusDisbursementScheduleEnum,
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/15"
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Selecione o status"
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm leading-none text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/15"
+                />
               </div>
 
               <div className="md:col-span-2">

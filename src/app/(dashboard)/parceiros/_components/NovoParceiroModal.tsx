@@ -8,12 +8,15 @@ import { cn } from "@/lib/utils";
 import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { fetchCitiesByState as fetchCitiesByStateLookup } from "@/src/lib/ibge";
 import {
   type Parceiro,
   type ParceiroTipo,
   type ParceiroStatus,
   UF_LIST,
 } from "../types";
+import { Dropdown } from "@/components/ui/dropdown";
+import { type DropdownOption } from "@/components/ui/dropdown";
 
 // =============================================================================
 // MODAL PARA NOVO PARCEIRO
@@ -121,6 +124,10 @@ export function NovoParceiroModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const [municipioOptions, setMunicipioOptions] = useState<DropdownOption[]>([]);
+  const [isMunicipioLoading, setIsMunicipioLoading] = useState(false);
+  const [municipioLookupError, setMunicipioLookupError] = useState<string | null>(null);
+  const [allowManualMunicipioEntry, setAllowManualMunicipioEntry] = useState(false);
   const {
     fieldErrors: apiFieldErrors,
     globalError: submitError,
@@ -148,6 +155,10 @@ export function NovoParceiroModal({
     setIsSubmitting(false);
     setIsZipCodeLoading(false);
     setZipCodeLookupError(null);
+    setMunicipioOptions([]);
+    setIsMunicipioLoading(false);
+    setMunicipioLookupError(null);
+    setAllowManualMunicipioEntry(false);
   }, [clearErrors]);
   const hasFilledData = useMemo(
     () =>
@@ -163,6 +174,7 @@ export function NovoParceiroModal({
     onClose,
     onDiscardConfirm: resetFormState,
   });
+  const municipioDropdownOptions = useMemo(() => municipioOptions, [municipioOptions]);
 
   // Foca no primeiro input ao abrir
   useEffect(() => {
@@ -197,6 +209,38 @@ export function NovoParceiroModal({
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
   };
+
+  useEffect(() => {
+    const selectedUf = form.uf.trim().toUpperCase();
+
+    setMunicipioLookupError(null);
+    setAllowManualMunicipioEntry(false);
+
+    if (!selectedUf) {
+      setMunicipioOptions([]);
+      setIsMunicipioLoading(false);
+      return;
+    }
+
+    setIsMunicipioLoading(true);
+
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
+        setMunicipioOptions(lookup.options);
+        setAllowManualMunicipioEntry(lookup.allowManualEntry);
+        setMunicipioLookupError(lookup.message ?? null);
+      })
+      .catch((error) => {
+        setMunicipioOptions([]);
+        setAllowManualMunicipioEntry(true);
+        setMunicipioLookupError(
+          getUserErrorMessage(error, "Nao foi possivel carregar os municipios da UF selecionada.")
+        );
+      })
+      .finally(() => {
+        setIsMunicipioLoading(false);
+      });
+  }, [form.uf]);
 
   const handleZipCodeChange = async (rawValue: string) => {
     const formattedZipCode = formatZipCode(rawValue);
@@ -458,21 +502,24 @@ export function NovoParceiroModal({
                     <MapPin className="h-4 w-4 text-gray-400" />
                     UF <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <Dropdown
+                    options={UF_LIST.map((uf) => ({ label: uf, value: uf }))}
                     value={form.uf}
-                    onChange={(e) => handleChange("uf", e.target.value.toUpperCase())}
+                    onChange={(value) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        uf: (value ?? "").toUpperCase(),
+                        municipio: "",
+                      }));
+                      setMunicipioLookupError(null);
+                      setAllowManualMunicipioEntry(false);
+                    }}
+                    placeholder="Selecione"
                     className={cn(
                       "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors bg-white",
                       errors.uf ? "border-red-300" : "border-gray-200"
                     )}
-                  >
-                    <option value="">Selecione</option>
-                    {UF_LIST.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   {(errors.uf || apiFieldErrors.uf) && (
                     <p className="text-xs text-red-600">{errors.uf || apiFieldErrors.uf}</p>
                   )}
@@ -481,16 +528,40 @@ export function NovoParceiroModal({
                   <label className="text-sm font-medium text-gray-700">
                     Município <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={form.municipio}
-                    onChange={(e) => handleChange("municipio", e.target.value)}
-                    placeholder="Ex.: São Luís"
-                    className={cn(
-                      "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
-                      errors.municipio ? "border-red-300" : "border-gray-200"
-                    )}
-                  />
+                  {allowManualMunicipioEntry && form.uf ? (
+                    <input
+                      type="text"
+                      value={form.municipio}
+                      onChange={(e) => handleChange("municipio", e.target.value)}
+                      placeholder="Digite o município"
+                      className={cn(
+                        "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                        errors.municipio ? "border-red-300" : "border-gray-200"
+                      )}
+                    />
+                  ) : (
+                    <Dropdown
+                      options={municipioDropdownOptions}
+                      value={form.municipio || undefined}
+                      onChange={(value) => handleChange("municipio", value ?? "")}
+                      placeholder={
+                        !form.uf
+                          ? "Selecione a UF primeiro"
+                          : isMunicipioLoading
+                            ? "Carregando municípios..."
+                            : "Selecione o município"
+                      }
+                      disabled={!form.uf || isMunicipioLoading || municipioDropdownOptions.length === 0}
+                      searchable
+                      className={cn(
+                        "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors bg-white",
+                        errors.municipio ? "border-red-300" : "border-gray-200"
+                      )}
+                    />
+                  )}
+                  {municipioLookupError ? (
+                    <p className="text-xs text-amber-600">{municipioLookupError}</p>
+                  ) : null}
                   {(errors.municipio || apiFieldErrors.municipio) && (
                     <p className="text-xs text-red-600">{errors.municipio || apiFieldErrors.municipio}</p>
                   )}

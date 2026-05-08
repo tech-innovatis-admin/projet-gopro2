@@ -62,6 +62,7 @@ import type {
   ProjectCompanyDetailedResponseDTO,
   ProjectPeopleDetailedResponseDTO,
 } from '@/src/lib/api/types';
+import { Dropdown } from '@/components/ui/dropdown';
 
 type ID = string;
 
@@ -4058,26 +4059,37 @@ function SubitemModal({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">Vínculo do pagamento</label>
-          <select
+        <Field label="Vínculo do pagamento">
+          <Dropdown
+            options={[
+              {
+                value: 'none',
+                label: 'Sem vínculo',
+              },
+              {
+                value: 'person',
+                label: 'Pessoa vinculada ao projeto',
+              },
+              {
+                value: 'company',
+                label: 'Empresa vinculada ao projeto',
+              },
+            ]}
             value={form.vinculoTipo}
-            onChange={(event) => {
-              const nextType = event.target.value as SubitemLinkType;
+            onChange={(value) => {
+              const nextType = (value || 'none') as SubitemLinkType;
+
               onChange({
                 vinculoTipo: nextType,
                 personId: nextType === 'person' ? form.personId : '',
                 organizationId: nextType === 'company' ? form.organizationId : '',
               });
             }}
+            placeholder="Selecione..."
             disabled={isPersisting}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-          >
-            <option value="none">Sem vínculo</option>
-            <option value="person">Pessoa vinculada ao projeto</option>
-            <option value="company">Empresa vinculada ao projeto</option>
-          </select>
-        </div>
+            className="w-full"
+          />
+        </Field>
 
         {linksError ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -4125,28 +4137,31 @@ function SubitemModal({
                 Nenhuma pessoa vinculada ao projeto.
               </div>
             ) : (
-              <select
-                value={form.personId}
-                onChange={(event) => {
-                  const nextPersonId = event.target.value;
-                  const selectedPerson = projectPeople.find((person) => person.personId === nextPersonId);
+            <Dropdown
+              options={projectPeople.map((person) => ({
+                value: person.personId,
+                label: person.label,
+              }))}
+              value={form.personId}
+              onChange={(value) => {
+                const nextPersonId = value || '';
 
-                  onChange({
-                    personId: nextPersonId,
-                    organizationId: '',
-                    nome: form.nome.trim() ? form.nome : selectedPerson?.fullName ?? form.nome,
-                  });
-                }}
-                disabled={isPersisting}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                <option value="">Selecione uma pessoa</option>
-                {projectPeople.map((person) => (
-                  <option key={person.projectLinkId} value={person.personId}>
-                    {person.label}
-                  </option>
-                ))}
-              </select>
+                const selectedPerson = projectPeople.find(
+                  (person) => person.personId === nextPersonId
+                );
+
+                onChange({
+                  personId: nextPersonId,
+                  organizationId: '',
+                  nome: form.nome.trim()
+                    ? form.nome
+                    : selectedPerson?.fullName ?? form.nome,
+                });
+              }}
+              placeholder="Selecione uma pessoa"
+              disabled={isPersisting}
+              className="w-full"
+            />
             )}
           </div>
         ) : null}
@@ -4906,5 +4921,25 @@ function LinkExistingCompanyModal({
         </div>
       </div>
     </ModalShell>
+  );
+}
+function Field({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className || ""}`}>
+      <label className="block text-sm font-medium text-gray-700">
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </label>
+      {children}
+    </div>
   );
 }

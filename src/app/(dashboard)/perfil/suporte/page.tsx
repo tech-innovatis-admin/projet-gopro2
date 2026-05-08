@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { NavBar } from "@/components/ui/NavBar";
 import { Home, ChevronRight, Send, Mail, Phone, MessageSquare, CheckCircle, AlertCircle } from "lucide-react";
+import { Dropdown } from "@/components/ui/dropdown";
 
 export default function SuportePage() {
   const [formData, setFormData] = useState({
@@ -175,21 +176,18 @@ export default function SuportePage() {
               <label htmlFor="assunto" className="block text-sm font-medium text-gray-700 mb-2">
                 Assunto <span className="text-red-500">*</span>
               </label>
-              <select
-                id="assunto"
-                name="assunto"
+              <Dropdown 
+                options={[
+                  { value: "duvida", label: "Dúvida sobre o sistema" },
+                  { value: "reportar", label: "Reportar problema" },
+                  { value: "sugestao", label: "Sugestão de melhoria" },
+                  { value: "solicitacao", label: "Solicitação de suporte" },
+                  { value: "outro", label: "Outro" },
+                ]}
                 value={formData.assunto}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-transparent text-sm bg-white"
-              >
-                <option value="">Selecione o assunto</option>
-                <option value="duvida">Dúvida sobre o sistema</option>
-                <option value="problema">Reportar problema</option>
-                <option value="sugestao">Sugestão de melhoria</option>
-                <option value="solicitacao">Solicitação de funcionalidade</option>
-                <option value="outro">Outro</option>
-              </select>
+                onChange={(value) => setFormData((prev) => ({ ...prev, assunto: value ?? "" }))}
+                placeholder="Selecione o assunto"
+              />
             </div>
 
             {/* Mensagem */}
@@ -239,3 +237,4 @@ export default function SuportePage() {
     </div>
   );
 }
+

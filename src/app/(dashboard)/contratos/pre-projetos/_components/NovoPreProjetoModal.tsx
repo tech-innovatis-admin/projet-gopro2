@@ -17,6 +17,7 @@ import type {
   PartnerResponseDTO,
   PublicAgencyResponseDTO,
 } from "@/src/lib/api/types";
+import { Dropdown } from "@/components/ui/dropdown";
 
 export type TipoDocumento = "contrato" | "tr" | "planoTrabalho" | "outro";
 export type PreProjetoDocumentos = Partial<Record<TipoDocumento, File>>;
@@ -428,33 +429,32 @@ export default function NovoPreProjetoModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Gov/IF" required error={errors.govIf}>
-                <select
+                <Dropdown
+                  options={[
+                    { value: "IF", label: "IF" },
+                    { value: "Gov", label: "Gov" },
+                  ]}
                   value={formData.govIf}
-                  onChange={(event) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      govIf: event.target.value as "IF" | "Gov" | "",
-                    }));
+                  onChange={(value) => {
+                    setFormData((prev) => ({ ...prev, govIf: value as "IF" | "Gov" | "" }));
                     if (errors.govIf) {
                       setErrors((prev) => ({ ...prev, govIf: undefined }));
                     }
                   }}
-                  className={inputClassName(Boolean(errors.govIf))}
-                  disabled={isSubmitting}
-                >
-                  <option value="">Selecione...</option>
-                  <option value="IF">IF</option>
-                  <option value="Gov">Gov</option>
-                </select>
+                />
               </FormField>
 
               <FormField label="Tipo de Contrato" required error={errors.tipo}>
-                <select
+                <Dropdown
+                  options={[
+                    { value: "PROJETO", label: "Projeto" },
+                    { value: "PRODUTO", label: "Produto" },
+                  ]}
                   value={formData.tipo}
-                  onChange={(event) => {
+                  onChange={(value) => {
                     setFormData((prev) => ({
                       ...prev,
-                      tipo: event.target.value as "PROJETO" | "PRODUTO" | "",
+                      tipo: value as "PROJETO" | "PRODUTO" | "",
                     }));
                     if (errors.tipo) {
                       setErrors((prev) => ({ ...prev, tipo: undefined }));
@@ -462,21 +462,21 @@ export default function NovoPreProjetoModal({
                   }}
                   className={inputClassName(Boolean(errors.tipo))}
                   disabled={isSubmitting}
-                >
-                  <option value="">Selecione...</option>
-                  <option value="PROJETO">Projeto</option>
-                  <option value="PRODUTO">Produto</option>
-                </select>
+                />
               </FormField>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Parceiro Primario" required error={errors.primaryPartnerId}>
-                <select
-                  value={formData.primaryPartnerId ?? ""}
-                  onChange={(event) => {
-                    const id = event.target.value ? Number(event.target.value) : null;
-                    const selected = partnerOptions.find((partner) => partner.id === id);
+                <Dropdown
+                  options={partnerOptions.map((partner) => ({
+                    value: String(partner.id),
+                    label: partner.name,
+                  }))}
+                  value={formData.primaryPartnerId ? String(formData.primaryPartnerId) : undefined}
+                  onChange={(value) => {
+                    const id = value ? Number(value) : null;
+                    const selected = partnerOptions.find((partner) => String(partner.id) === value);
                     setFormData((prev) => ({
                       ...prev,
                       primaryPartnerId: id,
@@ -486,26 +486,22 @@ export default function NovoPreProjetoModal({
                       setErrors((prev) => ({ ...prev, primaryPartnerId: undefined }));
                     }
                   }}
+                  placeholder="Selecione..."
                   className={inputClassName(Boolean(errors.primaryPartnerId))}
                   disabled={isSubmitting || isLoadingOptions}
-                >
-                  <option value="">
-                    {isLoadingOptions ? "Carregando parceiros..." : "Selecione..."}
-                  </option>
-                  {partnerOptions.map((partner) => (
-                    <option key={partner.id} value={partner.id}>
-                      {partner.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
 
               <FormField label="Cliente Primario" required error={errors.primaryClientId}>
-                <select
-                  value={formData.primaryClientId ?? ""}
-                  onChange={(event) => {
-                    const id = event.target.value ? Number(event.target.value) : null;
-                    const selected = clientOptions.find((client) => client.id === id);
+                <Dropdown
+                  options={clientOptions.map((client) => ({
+                    value: String(client.id),
+                    label: client.name,
+                  }))}
+                  value={formData.primaryClientId ? String(formData.primaryClientId) : undefined}
+                  onChange={(value) => {
+                    const id = value ? Number(value) : null;
+                    const selected = clientOptions.find((client) => String(client.id) === value);
                     setFormData((prev) => ({
                       ...prev,
                       primaryClientId: id,
@@ -515,18 +511,10 @@ export default function NovoPreProjetoModal({
                       setErrors((prev) => ({ ...prev, primaryClientId: undefined }));
                     }
                   }}
+                  placeholder="Selecione..."
                   className={inputClassName(Boolean(errors.primaryClientId))}
                   disabled={isSubmitting || isLoadingOptions}
-                >
-                  <option value="">
-                    {isLoadingOptions ? "Carregando clientes..." : "Selecione..."}
-                  </option>
-                  {clientOptions.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
             </div>
 
