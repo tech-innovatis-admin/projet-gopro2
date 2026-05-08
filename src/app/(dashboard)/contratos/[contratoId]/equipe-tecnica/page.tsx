@@ -171,7 +171,7 @@ function hasRequiredMemberFields(formData: MembroFormData) {
 }
 
 function formatDateBr(value?: string) {
-  if (!value) return "PerÃ­odo nÃ£o informado";
+  if (!value) return "Perí­odo não informado";
   const parts = value.split("-");
   if (parts.length !== 3) return value;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -196,15 +196,15 @@ function getContractTypeLabel(value?: ContractTypeEnum | null) {
   if (value === "BOLSA") return "Bolsa";
   if (value === "RPA") return "RPA";
   if (value === "CLT") return "CLT";
-  return "NÃ£o informado";
+  return "Não informado";
 }
 
 function buildPeriodLabel(startDate?: string, endDate?: string) {
-  if (!startDate && !endDate) return "PerÃ­odo nÃ£o informado";
+  if (!startDate && !endDate) return "Perí­odo não informado";
   if (startDate && endDate) {
     return `${formatDateBr(startDate)} ate ${formatDateBr(endDate)}`;
   }
-  if (startDate) return `InÃ­cio: ${formatDateBr(startDate)}`;
+  if (startDate) return `Iní­cio: ${formatDateBr(startDate)}`;
   return `Fim: ${formatDateBr(endDate)}`;
 }
 
@@ -615,7 +615,7 @@ export default function EquipeTecnicaPage() {
           } catch (error) {
             avatarUploadWarning = getErrorMessage(
               error,
-              "Pessoa salva, mas a foto nÃ£o foi enviada.",
+              "Pessoa salva, mas a foto não foi enviada.",
             );
           }
         }
@@ -706,7 +706,7 @@ export default function EquipeTecnicaPage() {
         setActionError(warnings.join(" "));
       }
     } catch (error) {
-      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel salvar o membro."));
+      setActionError(getErrorMessage(error, "Não foi possível salvar o membro."));
     } finally {
       setIsSaving(false);
     }
@@ -715,7 +715,7 @@ export default function EquipeTecnicaPage() {
   const linkExistingPerson = async () => {
     if (!ensureCanManageChildren()) return;
     if (!projectId) {
-      setActionError("ID do contrato invÃ¡lido.");
+      setActionError("ID do contrato inválido.");
       return;
     }
     if (!selectedPersonId || typeof selectedPersonId !== "number") {
@@ -750,7 +750,7 @@ export default function EquipeTecnicaPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel vincular a pessoa."));
+      setActionError(getErrorMessage(error, "Não foi possível vincular a pessoa."));
     } finally {
       setIsLinking(false);
     }
@@ -768,7 +768,7 @@ export default function EquipeTecnicaPage() {
       await deleteProjectPeople(membro.projectPeopleId);
       await loadMembros();
     } catch (error) {
-      setActionError(getErrorMessage(error, "NÃ£o foi possÃ­vel remover o membro."));
+      setActionError(getErrorMessage(error, "Não foi possível remover o membro."));
     }
   };
 
@@ -824,7 +824,7 @@ export default function EquipeTecnicaPage() {
 
       {!loadingAccess && !canManageChildren && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Seu perfil pode consultar a equipe tecnica, mas nÃ£o pode criar, vincular, editar ou remover pessoas.
+          Seu perfil pode consultar a equipe tecnica, mas não pode criar, vincular, editar ou remover pessoas.
         </div>
       )}
 
@@ -964,7 +964,7 @@ export default function EquipeTecnicaPage() {
                 )}
 
                 <div className="flex items-center justify-between text-gray-600">
-                  <span>VÃ­nculo: {membro.vinculo || "NÃ£o informado"}</span>
+                  <span>VÃ­nculo: {membro.vinculo || "Não informado"}</span>
                   <span>{membro.cargaHoraria ? `${membro.cargaHoraria}h` : "0h"}</span>
                 </div>
 
@@ -1163,7 +1163,7 @@ function MemberFormModal({
       .catch(() => {
         if (!isMounted) return;
         setUfOptions([]);
-        setUfLookupError("NÃ£o foi possÃ­vel carregar os estados.");
+        setUfLookupError("Não foi possível carregar os estados.");
       })
       .finally(() => {
         if (!isMounted) return;
@@ -1193,7 +1193,7 @@ function MemberFormModal({
       .catch(() => {
         if (!isMounted) return;
         setCityOptions([]);
-        setCityLookupError("Nao foi possivel carregar as cidades deste estado.");
+        setCityLookupError("ão foi possível carregar as cidades deste estado.");
         setAllowManualCityEntry(true);
       })
       .finally(() => {

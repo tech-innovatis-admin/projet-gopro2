@@ -110,9 +110,7 @@ export function Dropdown({
         Math.max(VIEWPORT_PADDING, triggerRect.left),
         viewportWidth - width - VIEWPORT_PADDING
       );
-      const top = shouldOpenUpward
-        ? triggerRect.top - maxHeight - MENU_GAP
-        : triggerRect.bottom + MENU_GAP;
+      const top = shouldOpenUpward ? triggerRect.top - MENU_GAP : triggerRect.bottom + MENU_GAP;
 
       setOpenUpward(shouldOpenUpward);
       setMenuPosition({
@@ -184,14 +182,15 @@ export function Dropdown({
       <div
         ref={menuRef}
         className={cn(
-          "absolute bg-white border border-zinc-200 rounded-lg shadow-lg z-[100000] overflow-hidden transition-all duration-150 ease-out",
+          "fixed bg-white border border-zinc-200 rounded-lg shadow-lg z-[100000] overflow-hidden transition-all duration-150 ease-out",
           openUpward ? "origin-bottom" : "origin-top",
           menuClassName
         )}
         style={{
-          top: "calc(100% + 4px)",
-          left: 0,
-          width: "100%",
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
+          transform: openUpward ? "translateY(-100%)" : "none",
         }}
         role="listbox"
       >
@@ -336,7 +335,9 @@ export function Dropdown({
         </button>
       )}
 
-      {dropdownMenu}
+      {dropdownMenu && typeof document !== "undefined"
+        ? createPortal(dropdownMenu, document.body)
+        : null}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { Search, X, ChevronDown, Filter } from "lucide-react";
+import { Search, X, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dropdown } from "@/components/ui/dropdown";
 import {
   type ParceirosFiltersState,
   type ParceiroTipo,
@@ -79,80 +80,75 @@ export function ParceirosFilters({
         {/* Filtros em linha */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Tipo */}
-          <div className="relative">
-            <select
+          <div className="min-w-[140px]">
+            <Dropdown
+              options={[
+                { value: "IFES", label: TIPO_SHORT_LABELS.IFES },
+                { value: "FUNDACAO", label: TIPO_SHORT_LABELS.FUNDACAO },
+              ]}
               value={filters.tipo}
-              onChange={(e) => handleChange("tipo", e.target.value as ParceiroTipo | "")}
+              onChange={(value) => handleChange("tipo", (value ?? "") as ParceiroTipo | "")}
+              placeholder="Todos os tipos"
               className={cn(
-                "appearance-none pl-3 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors cursor-pointer min-w-[140px]",
+                "h-[42px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm transition-colors",
                 filters.tipo && "border-[#004225] bg-[#004225]/5"
               )}
-            >
-              <option value="">Todos os tipos</option>
-              <option value="IFES">{TIPO_SHORT_LABELS.IFES}</option>
-              <option value="FUNDACAO">{TIPO_SHORT_LABELS.FUNDACAO}</option>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            />
           </div>
 
           {/* UF */}
-          <div className="relative">
-            <select
+          <div className="min-w-[100px]">
+            <Dropdown
+              options={UF_LIST.map((uf) => ({ value: uf, label: uf }))}
               value={filters.uf}
-              onChange={(e) => handleChange("uf", e.target.value)}
+              onChange={(value) => handleChange("uf", value ?? "")}
+              placeholder="Todos UF"
               className={cn(
-                "appearance-none pl-3 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors cursor-pointer min-w-[100px]",
+                "h-[42px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm transition-colors",
                 filters.uf && "border-[#004225] bg-[#004225]/5"
               )}
-            >
-              <option value="">Todos UF</option>
-              {UF_LIST.map((uf) => (
-                <option key={uf} value={uf}>
-                  {uf}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            />
           </div>
 
           {/* Status */}
-          <div className="relative">
-            <select
+          <div className="min-w-[120px]">
+            <Dropdown
+              options={[
+                { value: "ATIVO", label: "Ativo" },
+                { value: "INATIVO", label: "Inativo" },
+              ]}
               value={filters.status}
-              onChange={(e) => handleChange("status", e.target.value as ParceiroStatus | "")}
+              onChange={(value) => handleChange("status", (value ?? "") as ParceiroStatus | "")}
+              placeholder="Todos status"
               className={cn(
-                "appearance-none pl-3 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors cursor-pointer min-w-[120px]",
+                "h-[42px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm transition-colors",
                 filters.status && "border-[#004225] bg-[#004225]/5"
               )}
-            >
-              <option value="">Todos status</option>
-              <option value="ATIVO">Ativo</option>
-              <option value="INATIVO">Inativo</option>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            />
           </div>
 
           {/* Ordenação */}
-          <div className="relative">
-            <select
+          <div className="min-w-[160px]">
+            <Dropdown
+              options={[
+                { value: "nome-asc", label: "Nome (A-Z)" },
+                { value: "nome-desc", label: "Nome (Z-A)" },
+                { value: "uf-asc", label: "UF (A-Z)" },
+                { value: "tipo-asc", label: "Tipo (A-Z)" },
+                { value: "contratosAtivos-desc", label: "Mais contratos" },
+                { value: "contratosAtivos-asc", label: "Menos contratos" },
+              ]}
               value={`${filters.sortBy}-${filters.sortDir}`}
-              onChange={(e) => {
-                const [sortBy, sortDir] = e.target.value.split("-") as [
+              onChange={(value) => {
+                const selectedValue = value ?? "nome-asc";
+                const [sortBy, sortDir] = selectedValue.split("-") as [
                   ParceirosFiltersState["sortBy"],
                   ParceirosFiltersState["sortDir"]
                 ];
                 onFiltersChange({ ...filters, sortBy, sortDir, page: 1 });
               }}
-              className="appearance-none pl-3 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors cursor-pointer min-w-[160px]"
-            >
-              <option value="nome-asc">Nome (A-Z)</option>
-              <option value="nome-desc">Nome (Z-A)</option>
-              <option value="uf-asc">UF (A-Z)</option>
-              <option value="tipo-asc">Tipo (A-Z)</option>
-              <option value="contratosAtivos-desc">Mais contratos</option>
-              <option value="contratosAtivos-asc">Menos contratos</option>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              className="h-[42px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm transition-colors"
+            />
           </div>
 
           {/* Limpar filtros */}

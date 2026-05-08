@@ -3,11 +3,13 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, Loader2, X } from "lucide-react";
 import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { CompanyResponsiblePersonSection } from "./CompanyResponsiblePersonSection";
-import { type Fornecedor } from "../types";
+import { type Fornecedor, UF_LIST } from "../types";
 import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { fetchCitiesByState as fetchCitiesByStateLookup } from "@/src/lib/ibge";
 
 interface NovoFornecedorModalProps {
   isOpen: boolean;
@@ -121,6 +123,10 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
   const [isSaving, setIsSaving] = useState(false);
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const [municipioOptions, setMunicipioOptions] = useState<DropdownOption[]>([]);
+  const [isMunicipioLoading, setIsMunicipioLoading] = useState(false);
+  const [municipioLookupError, setMunicipioLookupError] = useState<string | null>(null);
+  const [allowManualMunicipioEntry, setAllowManualMunicipioEntry] = useState(false);
   const {
     fieldErrors,
     globalError: submitError,
@@ -148,7 +154,12 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
     setIsSaving(false);
     setIsResolvingZipCode(false);
     setZipCodeLookupError(null);
+    setMunicipioOptions([]);
+    setIsMunicipioLoading(false);
+    setMunicipioLookupError(null);
+    setAllowManualMunicipioEntry(false);
   }, [clearErrors]);
+  const municipioDropdownOptions = useMemo(() => municipioOptions, [municipioOptions]);
   const hasFilledData = useMemo(
     () =>
       (Object.keys(INITIAL_FORM) as Array<keyof FormData>).some(
@@ -169,6 +180,38 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
       resetFormState();
     }
   }, [isOpen, resetFormState]);
+
+  useEffect(() => {
+    const selectedUf = formData.uf.trim().toUpperCase();
+
+    setMunicipioLookupError(null);
+    setAllowManualMunicipioEntry(false);
+
+    if (!selectedUf) {
+      setMunicipioOptions([]);
+      setIsMunicipioLoading(false);
+      return;
+    }
+
+    setIsMunicipioLoading(true);
+
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
+        setMunicipioOptions(lookup.options);
+        setAllowManualMunicipioEntry(lookup.allowManualEntry);
+        setMunicipioLookupError(lookup.message ?? null);
+      })
+      .catch((error) => {
+        setMunicipioOptions([]);
+        setAllowManualMunicipioEntry(true);
+        setMunicipioLookupError(
+          getUserErrorMessage(error, "Nao foi possivel carregar os municipios da UF selecionada.")
+        );
+      })
+      .finally(() => {
+        setIsMunicipioLoading(false);
+      });
+  }, [formData.uf]);
 
   if (!isOpen) return null;
 
@@ -386,26 +429,53 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Cidade" required error={fieldErrors.municipio}>
-              <input
-                type="text"
-                value={formData.municipio}
-                onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="Cidade"
-                disabled={isSaving}
-              />
+            <Field label="Município" required error={fieldErrors.municipio}>
+              {allowManualMunicipioEntry && formData.uf ? (
+                <input
+                  type="text"
+                  value={formData.municipio}
+                  onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                  placeholder="Digite a cidade"
+                  disabled={isSaving}
+                />
+              ) : (
+                <Dropdown
+                  options={municipioDropdownOptions}
+                  value={formData.municipio || undefined}
+                  onChange={(value) => setFormData({ ...formData, municipio: value ?? "" })}
+                  placeholder={
+                    !formData.uf
+                      ? "Selecione a UF primeiro"
+                      : isMunicipioLoading
+                        ? "Carregando cidades..."
+                        : "Selecione a cidade"
+                  }
+                  disabled={!formData.uf || isMunicipioLoading || municipioDropdownOptions.length === 0 || isSaving}
+                  searchable
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] bg-white"
+                />
+              )}
+              {municipioLookupError ? (
+                <p className="text-xs text-amber-600">{municipioLookupError}</p>
+              ) : null}
             </Field>
 
             <Field label="UF" required error={fieldErrors.uf}>
-              <input
-                type="text"
-                value={formData.uf}
-                onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase().slice(0, 2) })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="UF"
-                maxLength={2}
+              <Dropdown
+                options={UF_LIST.map((uf) => ({ value: uf, label: uf }))}
+                value={formData.uf || undefined}
+                onChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    uf: (value ?? "").toUpperCase(),
+                    municipio: "",
+                  }))
+                }
+                placeholder="Selecione a UF"
+                searchable
                 disabled={isSaving}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] bg-white"
               />
             </Field>
 

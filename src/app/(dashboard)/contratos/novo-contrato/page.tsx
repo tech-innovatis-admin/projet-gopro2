@@ -587,6 +587,10 @@ function NovoContratoPageContent() {
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [clientForm, setClientForm] = useState<ClientCreateForm>(initialClientCreateFormState);
   const [clientFormError, setClientFormError] = useState<string | null>(null);
+  const [clientCityOptions, setClientCityOptions] = useState<DropdownOption[]>([]);
+  const [isClientCityLoading, setIsClientCityLoading] = useState(false);
+  const [clientCityLookupError, setClientCityLookupError] = useState<string | null>(null);
+  const [allowManualClientCityEntry, setAllowManualClientCityEntry] = useState(false);
   const [showSecretaryModal, setShowSecretaryModal] = useState(false);
   const [isCreatingSecretary, setIsCreatingSecretary] = useState(false);
   const [secretaryForm, setSecretaryForm] = useState<SecretaryCreateForm>(
@@ -716,6 +720,7 @@ function NovoContratoPageContent() {
   );
   const partnerUfDropdownOptions = useMemo(() => ufOptions, [ufOptions]);
   const partnerCityDropdownOptions = useMemo(() => partnerCityOptions, [partnerCityOptions]);
+  const clientCityDropdownOptions = useMemo(() => clientCityOptions, [clientCityOptions]);
 
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => 
     tipoOptions.map(opt => ({ value: opt.value, label: opt.label })),
@@ -997,6 +1002,38 @@ function NovoContratoPageContent() {
       isMounted = false;
     };
   }, [partnerForm.state]);
+
+  useEffect(() => {
+    const selectedUf = clientForm.state.trim().toUpperCase();
+
+    setClientCityLookupError(null);
+    setAllowManualClientCityEntry(false);
+
+    if (!selectedUf) {
+      setClientCityOptions([]);
+      setIsClientCityLoading(false);
+      return;
+    }
+
+    setIsClientCityLoading(true);
+
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
+        setClientCityOptions(lookup.options);
+        setAllowManualClientCityEntry(lookup.allowManualEntry);
+        setClientCityLookupError(lookup.message ?? null);
+      })
+      .catch((error) => {
+        setClientCityOptions([]);
+        setAllowManualClientCityEntry(true);
+        setClientCityLookupError(
+          getUserErrorMessage(error, "Nao foi possivel carregar as cidades da UF selecionada.")
+        );
+      })
+      .finally(() => {
+        setIsClientCityLoading(false);
+      });
+  }, [clientForm.state]);
 
   // Validation
   const validateField = (
@@ -3130,22 +3167,12 @@ function NovoContratoPageContent() {
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Status <span className="text-red-500">*</span>
                             </label>
-                            <select
-                              value={newParcela.status ?? "PREVISTO"}
-                              onChange={(e) =>
-                                setNewParcela({
-                                  ...newParcela,
-                                  status: e.target.value as StatusDesembolso,
-                                })
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                            >
-                              {statusDesembolsoOptions.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
+                            <Dropdown
+                              options={statusDesembolsoOptions}
+                              value={newParcela.status || undefined}
+                              onChange={(value) => setNewParcela({ ...newParcela, status: value as StatusDesembolso })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
                           </div>
 
                           <div>
@@ -3719,22 +3746,15 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Tipo <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={partnerForm.partnersType}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        partnersType: event.target.value as PartnersTypeEnum,
-                      }))
+                  <Dropdown
+                    options={partnerTypeOptions}
+                    value={partnerForm.partnersType || undefined}
+                    onChange={(value) =>
+                      setPartnerForm((prev) => ({ ...prev, partnersType: (value || "FUNDACAO") as PartnersTypeEnum }))
                     }
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  >
-                    {partnerTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione o tipo"
+                    className="h-10"
+                  />
                 </div>
 
                 <div>
@@ -4010,22 +4030,18 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Tipo de órgão <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={clientForm.publicAgencyType}
-                    onChange={(event) =>
+                  <Dropdown
+                    options={publicAgencyTypeOptions}
+                    value={clientForm.publicAgencyType || undefined}
+                    onChange={(value) =>
                       setClientForm((prev) => ({
                         ...prev,
-                        publicAgencyType: event.target.value as PublicAgencyTypeEnum,
+                        publicAgencyType: (value || "PREFEITURA") as PublicAgencyTypeEnum,
                       }))
                     }
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  >
-                    {publicAgencyTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione o tipo"
+                    className="h-10"
+                  />
                 </div>
 
                 <div>
@@ -4042,14 +4058,14 @@ function NovoContratoPageContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Codigo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
                   <input
                     type="text"
                     value={clientForm.code}
                     onChange={(event) =>
                       setClientForm((prev) => ({ ...prev, code: event.target.value }))
                     }
-                    placeholder="Codigo"
+                    placeholder="Código"
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -4090,32 +4106,64 @@ function NovoContratoPageContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Cidade</label>
-                  <input
-                    type="text"
-                    value={clientForm.city}
-                    onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, city: event.target.value }))
-                    }
-                    placeholder="Cidade"
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  />
+                  {allowManualClientCityEntry && clientForm.state ? (
+                    <input
+                      type="text"
+                      value={clientForm.city}
+                      onChange={(event) =>
+                        setClientForm((prev) => ({ ...prev, city: event.target.value }))
+                      }
+                      placeholder="Digite a cidade"
+                      className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    />
+                  ) : (
+                    <Dropdown
+                      options={clientCityDropdownOptions}
+                      value={clientForm.city || undefined}
+                      onChange={(value) =>
+                        setClientForm((prev) => ({ ...prev, city: value || "" }))
+                      }
+                      placeholder={
+                        !clientForm.state
+                          ? "Selecione a UF primeiro"
+                          : isClientCityLoading
+                            ? "Carregando cidades..."
+                            : "Selecione a cidade"
+                      }
+                      disabled={
+                        !clientForm.state ||
+                        isClientCityLoading ||
+                        clientCityDropdownOptions.length === 0
+                      }
+                      searchable
+                      className="h-10"
+                    />
+                  )}
+                  {clientCityLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{clientCityLookupError}</p>
+                  ) : null}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Estado</label>
-                  <input
-                    type="text"
-                    value={clientForm.state}
-                    onChange={(event) =>
+                  <Dropdown
+                    options={ufDropdownOptions}
+                    value={clientForm.state || undefined}
+                    onChange={(value) =>
                       setClientForm((prev) => ({
                         ...prev,
-                        state: event.target.value.toUpperCase().slice(0, 2),
+                        state: (value || "").toUpperCase(),
+                        city: "",
                       }))
                     }
-                    placeholder="UF"
-                    maxLength={2}
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                    disabled={isUfLoading || ufDropdownOptions.length === 0}
+                    searchable
+                    className="h-10"
                   />
+                  {ufLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{ufLookupError}</p>
+                  ) : null}
                 </div>
               </div>
 

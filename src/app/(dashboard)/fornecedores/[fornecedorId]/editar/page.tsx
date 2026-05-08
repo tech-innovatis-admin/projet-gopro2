@@ -12,6 +12,7 @@ import {
   mapCompanyToFornecedor,
   mapFornecedorFormToCompanyUpdateDTO,
 } from "../../mappers";
+import { Dropdown } from "@/components/ui/dropdown";
 
 type ViaCepResponse = {
   erro?: boolean;
@@ -216,17 +217,15 @@ export default function EditarFornecedorPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Status *</label>
-              <select
+              <Dropdown
+                options={(Object.keys(STATUS_CONFIG) as FornecedorStatus[]).map((st) => ({
+                  value: st,
+                  label: STATUS_CONFIG[st].label
+                }))}
                 value={formData.status || "ATIVO"}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as FornecedorStatus })}
+                onChange={(value) => setFormData({ ...formData, status: value as FornecedorStatus })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
-              >
-                {(Object.keys(STATUS_CONFIG) as FornecedorStatus[]).map((st) => (
-                  <option key={st} value={st}>
-                    {STATUS_CONFIG[st].label}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
@@ -273,46 +272,24 @@ export default function EditarFornecedorPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">UF *</label>
-              <select
+              <Dropdown
+                options={UF_LIST.map((uf) => ({ value: uf, label: uf }))}
                 value={formData.uf || ""}
-                onChange={(e) => setFormData({ ...formData, uf: e.target.value, municipio: "" })}
-                className={cn(
-                  "w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent",
-                  errors.uf ? "border-red-500" : "border-gray-300"
-                )}
-              >
-                <option value="">Selecione...</option>
-                {UF_LIST.map((uf) => (
-                  <option key={uf} value={uf}>
-                    {uf}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setFormData({ ...formData, uf: value, municipio: "" })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
+              />
               {errors.uf && <p className="text-xs text-red-500 mt-1">{errors.uf}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Município *</label>
-              <select
+              <Dropdown
+                options={municipiosDisponiveis.map((mun) => ({ value: mun, label: mun }))}
                 value={formData.municipio || ""}
-                onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, municipio: value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent"
                 disabled={!formData.uf}
-                className={cn(
-                  "w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1F4E79] focus:border-transparent",
-                  errors.municipio ? "border-red-500" : "border-gray-300",
-                  !formData.uf && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                <option value="">{formData.uf ? "Selecione..." : "Selecione UF primeiro"}</option>
-                {formData.municipio && !municipiosDisponiveis.includes(formData.municipio) && (
-                  <option value={formData.municipio}>{formData.municipio}</option>
-                )}
-                {municipiosDisponiveis.map((mun) => (
-                  <option key={mun} value={mun}>
-                    {mun}
-                  </option>
-                ))}
-              </select>
+              />
               {errors.municipio && <p className="text-xs text-red-500 mt-1">{errors.municipio}</p>}
             </div>
 

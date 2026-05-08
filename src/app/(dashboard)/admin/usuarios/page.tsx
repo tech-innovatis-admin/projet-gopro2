@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavBar } from "@/components/ui/NavBar";
 import { Button } from "@/components/ui/button";
+import { Dropdown } from "@/components/ui/dropdown";
 import {
   listAdminUsers,
   updateAdminUser,
@@ -218,38 +219,32 @@ export default function AdminUsuariosPage() {
               <label htmlFor="roleFilter" className="text-sm font-medium text-zinc-700">
                 Filtrar por perfil
               </label>
-              <select
-                id="roleFilter"
+              <Dropdown
+                options={roleOptions.map((option) => ({
+                  value: option,
+                  label: roleLabels[option],
+                }))}
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value as UserRoleEnum | "")}
+                onChange={(value) => setRoleFilter((value ?? "") as UserRoleEnum | "")}
+                placeholder="Todos"
                 className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-              >
-                <option value="">Todos</option>
-                {roleOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {roleLabels[option]}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="space-y-1">
               <label htmlFor="statusFilter" className="text-sm font-medium text-zinc-700">
                 Filtrar por status
               </label>
-              <select
-                id="statusFilter"
+              <Dropdown
+                options={statusOptions.map((option) => ({
+                  value: option,
+                  label: statusLabels[option],
+                }))}
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as UserStatusEnum | "")}
+                onChange={(value) => setStatusFilter((value ?? "") as UserStatusEnum | "")}
+                placeholder="Todos"
                 className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-              >
-                <option value="">Todos</option>
-                {statusOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {statusLabels[option]}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="flex items-end">
@@ -312,36 +307,32 @@ export default function AdminUsuariosPage() {
                         </td>
                         <td className="px-3 py-2">{user.email}</td>
                         <td className="px-3 py-2">
-                          <select
+                          <Dropdown
+                            options={roleOptions.map((option) => ({
+                              value: option,
+                              label: roleLabels[option],
+                            }))}
                             value={draft?.role ?? user.role}
-                            onChange={(event) =>
-                              handleDraftRole(user.id, event.target.value as UserRoleEnum)
+                            onChange={(value) =>
+                              handleDraftRole(user.id, (value ?? user.role) as UserRoleEnum)
                             }
-                            className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm"
+                            className="h-9 min-w-[150px] rounded-md border border-zinc-300 bg-white px-2 text-sm"
                             disabled={isDisabled}
-                          >
-                            {roleOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {roleLabels[option]}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </td>
                         <td className="px-3 py-2">
-                          <select
+                          <Dropdown
+                            options={statusOptions.map((option) => ({
+                              value: option,
+                              label: statusLabels[option],
+                            }))}
                             value={draft?.status ?? user.status}
-                            onChange={(event) =>
-                              handleDraftStatus(user.id, event.target.value as UserStatusEnum)
+                            onChange={(value) =>
+                              handleDraftStatus(user.id, (value ?? user.status) as UserStatusEnum)
                             }
-                            className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm"
+                            className="h-9 min-w-[140px] rounded-md border border-zinc-300 bg-white px-2 text-sm"
                             disabled={isDisabled}
-                          >
-                            {statusOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {statusLabels[option]}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </td>
                         <td className="px-3 py-2">{formatDate(user.lastLoginAt)}</td>
                         <td className="px-3 py-2">

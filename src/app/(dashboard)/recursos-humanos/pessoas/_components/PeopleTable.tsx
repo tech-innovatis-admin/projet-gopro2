@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, Users, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dropdown } from "@/components/ui/dropdown";
 import { type PersonFilters, type PersonWithProjects } from "../types";
 
 interface PeopleTableProps {
@@ -110,65 +111,56 @@ export function PeopleTable({
 
         {showFilters && (
           <div className="p-3 bg-gray-50 rounded-lg mb-3 grid grid-cols-2 md:grid-cols-3 gap-3">
-            <select
-              value={filters.state || ""}
-              onChange={(event) =>
+            <Dropdown
+              options={uniqueStates.map((state) => ({ value: state, label: state }))}
+              value={filters.state}
+              onChange={(value) =>
                 setFilters((prev) => ({
                   ...prev,
-                  state: event.target.value || undefined,
+                  state: value || undefined,
                   city: undefined,
                 }))
               }
+              placeholder="Todos os estados"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
-            >
-              <option value="">Todos os estados</option>
-              {uniqueStates.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </select>
+            />
 
-            <select
-              value={filters.city || ""}
-              onChange={(event) =>
+            <Dropdown
+              options={citiesForState.map((city) => ({ value: city, label: city }))}
+              value={filters.city}
+              onChange={(value) =>
                 setFilters((prev) => ({
                   ...prev,
-                  city: event.target.value || undefined,
+                  city: value || undefined,
                 }))
               }
+              placeholder="Todas as cidades"
+              disabled={citiesForState.length === 0}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
-            >
-              <option value="">Todas as cidades</option>
-              {citiesForState.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
+            />
 
-            <select
+            <Dropdown
+              options={[
+                { value: "true", label: "Com projeto ativo" },
+                { value: "false", label: "Sem projeto ativo" },
+              ]}
               value={
                 filters.hasActiveProject === undefined
-                  ? ""
+                  ? undefined
                   : filters.hasActiveProject
                   ? "true"
                   : "false"
               }
-              onChange={(event) => {
-                const value = event.target.value;
+              onChange={(value) => {
                 setFilters((prev) => ({
                   ...prev,
                   hasActiveProject:
                     value === "" ? undefined : value === "true",
                 }));
               }}
+              placeholder="Todos"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
-            >
-              <option value="">Todos</option>
-              <option value="true">Com projeto ativo</option>
-              <option value="false">Sem projeto ativo</option>
-            </select>
+            />
 
             <input
               type="text"

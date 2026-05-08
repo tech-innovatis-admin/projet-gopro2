@@ -33,6 +33,7 @@ import { type DocumentResponseDTO } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
+import { Dropdown } from "@/components/ui/dropdown";
 
 export type ContractDocumentCategory =
   | "CONTRATO"
@@ -463,20 +464,16 @@ export default function ArquivosPage() {
 
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm text-gray-600">Filtrar por tipo:</label>
-        <select
+        <Dropdown
+          options={CATEGORY_OPTIONS.map((category) => ({
+            value: category,
+            label: CATEGORY_LABELS[category],
+          }))}
           value={filterCategory}
-          onChange={(event) =>
-            setFilterCategory(event.target.value as FilterCategory)
-          }
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="ALL">Todos</option>
-          {CATEGORY_OPTIONS.map((category) => (
-            <option key={category} value={category}>
-              {CATEGORY_LABELS[category]}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setFilterCategory(value as FilterCategory)}
+          placeholder="Selecione..."
+          className="min-w-[280px]"
+        />
         <span className="text-sm text-gray-500">
           {filteredDocuments.length} arquivo(s)
         </span>
