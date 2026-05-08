@@ -26,6 +26,7 @@ import {
   type ProjectUpdateDTO,
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { formatDateOnlyToPtBr } from "@/src/lib/date-only";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1526,9 +1527,5 @@ function ExecutionModeBadge({
 }
 
 function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR");
-  } catch {
-    return iso;
-  }
+  return formatDateOnlyToPtBr(iso);
 }

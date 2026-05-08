@@ -35,6 +35,7 @@ import {
   type ProjectResponseDTO,
   type ProjectStatusEnum,
 } from "@/src/lib/api/types";
+import { compareDateOnly, formatDateOnlyToPtBr, isDateOnly } from "@/src/lib/date-only";
 
 // Tipos
 type ContratoTipo = "PROJETO" | "PRODUTO";
@@ -361,14 +362,19 @@ function matchesContratoFilters(
     return false;
   }
 
-  if (filters.periodoInicio && new Date(contrato.dataInicio) < new Date(filters.periodoInicio)) {
+  if (
+    filters.periodoInicio &&
+    isDateOnly(contrato.dataInicio) &&
+    compareDateOnly(contrato.dataInicio, filters.periodoInicio) < 0
+  ) {
     return false;
   }
 
   if (
     filters.periodoFim &&
     contrato.dataTermino &&
-    new Date(contrato.dataTermino) > new Date(filters.periodoFim)
+    isDateOnly(contrato.dataTermino) &&
+    compareDateOnly(contrato.dataTermino, filters.periodoFim) > 0
   ) {
     return false;
   }
@@ -1421,16 +1427,7 @@ function TipoBadge({ tipo }: { tipo: ContratoTipo }) {
 }
 
 function formatDate(iso: string) {
-  if (!iso) {
-    return "-";
-  }
-
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  return date.toLocaleDateString("pt-BR");
+  return formatDateOnlyToPtBr(iso);
 }
 
 
