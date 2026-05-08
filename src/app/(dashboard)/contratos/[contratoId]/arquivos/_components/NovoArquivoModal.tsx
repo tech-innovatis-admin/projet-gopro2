@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, FileText, UploadCloud, X } from "lucide-react";
 import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
+import {
+  DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatFileSize,
+  validateUploadFile,
+} from "@/src/lib/upload";
 import type { ContractDocumentCategory } from "../page";
 
 type NewFilePayload = {
@@ -36,14 +42,7 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
 };
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ContractDocumentCategory[];
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 export function NovoArquivoModal({
   isOpen,
@@ -84,10 +83,14 @@ export function NovoArquivoModal({
       setFile(null);
       return;
     }
-    if (nextFile.size > MAX_FILE_SIZE) {
-      setError(
-        `Arquivo maior que o permitido (${formatFileSize(MAX_FILE_SIZE)}).`
-      );
+    const fileValidationError = validateUploadFile({
+      file: nextFile,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+      allowedTypesLabel: "PDF, DOC, DOCX, XLS, XLSX, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
+      setError(fileValidationError);
       return;
     }
     setError(null);
@@ -164,7 +167,7 @@ export function NovoArquivoModal({
             />
             <p className="text-xs text-gray-500">
               Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, JPEG.
-              Tamanho máximo: {formatFileSize(MAX_FILE_SIZE)}.
+              Tamanho máximo: {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)}.
             </p>
             {currentFileName && (
               <div className="inline-flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700">
