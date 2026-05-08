@@ -71,6 +71,12 @@ import {
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
 import {
+  formatFileSize,
+  IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  validateUploadFile,
+} from "@/src/lib/upload";
+import {
   canManageContractChildren,
   fetchCurrentUser,
 } from "@/src/lib/auth/session";
@@ -224,10 +230,9 @@ const documentoLabels: Record<TipoDocumento, string> = {
   outro: "Outro Documento",
 };
 
-const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const TITLE_CHAR_LIMIT = 255;
 const SCOPE_CHAR_LIMIT = 1000;
-const ALLOWED_DOCUMENT_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const ALLOWED_DOCUMENT_TYPES = ["application/pdf", ...IMAGE_UPLOAD_ALLOWED_MIME_TYPES];
 
 const DEFAULT_MAX_CONTRACT_VALUE = 9999999999999.99;
 const configuredMaxContractValue = Number(process.env.NEXT_PUBLIC_PROJECT_MAX_CONTRACT_VALUE);
@@ -1204,18 +1209,16 @@ function NovoContratoPageContent() {
       return;
     }
 
-    if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+    const fileValidationError = validateUploadFile({
+      file,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: ALLOWED_DOCUMENT_TYPES,
+      allowedTypesLabel: "PDF, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Máximo de 20MB por arquivo.",
-      }));
-      return;
-    }
-
-    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
-      setFileErrors((prev) => ({
-        ...prev,
-        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG e JPEG.",
+        [tipo]: fileValidationError,
       }));
       return;
     }
@@ -2956,7 +2959,7 @@ function NovoContratoPageContent() {
                 </div>
                 <p className="text-xs text-gray-500">
                   Os arquivos serão enviados automaticamente após o cadastro do projeto.
-                  Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: 20MB por arquivo.
+                  Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)} por arquivo.
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

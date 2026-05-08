@@ -28,6 +28,12 @@ import { generateDocumentDownloadUrl } from "@/src/lib/api/endpoints/documents";
 import { type AuditLogResponseDTO, type AuthUserResponseDTO } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import {
+  formatFileSize,
+  IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  validateUploadFile,
+} from "@/src/lib/upload";
+import {
   resolveContext,
   resolveEntity,
 } from "@/src/lib/audit/presentation";
@@ -35,7 +41,6 @@ import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
 import { ProfileHeader } from "./_components";
 
 const ACTIVITY_CARDS_PER_PAGE = 4;
-const MAX_PROFILE_PHOTO_BYTES = 20 * 1024 * 1024;
 const AUDIT_FETCH_PAGE_SIZE = 50;
 const MAX_AUDIT_FETCH_PAGES = 30;
 
@@ -81,21 +86,6 @@ function isUuid(value?: string | null): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value.trim()
   );
-}
-
-function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
-  }
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const kb = bytes / 1024;
-  if (kb < 1024) {
-    return `${kb.toFixed(1)} KB`;
-  }
-  const mb = kb / 1024;
-  return `${mb.toFixed(1)} MB`;
 }
 
 function getHealthScore(user: AuthUserResponseDTO): number {
@@ -513,8 +503,13 @@ export default function PerfilPage() {
       return;
     }
 
-    if (file.size > MAX_PROFILE_PHOTO_BYTES) {
-      setProfileFormError("A imagem excede o limite de 20MB.");
+    const fileValidationError = validateUploadFile({
+      file,
+      allowedMimeTypes: IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+      allowedTypesLabel: "JPG, JPEG e PNG",
+    });
+    if (fileValidationError) {
+      setProfileFormError(fileValidationError);
       setAvatarFile(null);
       return;
     }
@@ -897,7 +892,9 @@ export default function PerfilPage() {
                     <div className="min-w-0 space-y-1">
                       <p className="truncate text-sm font-semibold text-gray-900">{currentUser.fullName}</p>
                       <p className="truncate text-xs text-gray-600">@{currentUser.username || "sem-usuário"}</p>
-                      <p className="text-xs text-gray-500">Formatos recomendados: JPG e PNG (max. 20MB).</p>
+                      <p className="text-xs text-gray-500">
+                        Formatos recomendados: JPG, JPEG e PNG (máx. {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)}).
+                      </p>
                     </div>
                   </div>
 

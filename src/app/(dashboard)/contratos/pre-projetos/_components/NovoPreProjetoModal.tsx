@@ -6,6 +6,12 @@ import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { listPartners, listPublicAgencies } from "@/src/lib/api/endpoints";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import {
+  IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatFileSize,
+  validateUploadFile,
+} from "@/src/lib/upload";
 import type {
   PageResponseDTO,
   PartnerResponseDTO,
@@ -55,8 +61,7 @@ const documentoLabels: Record<TipoDocumento, string> = {
   outro: "Outro Documento",
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const ALLOWED_TYPES = ["application/pdf", ...IMAGE_UPLOAD_ALLOWED_MIME_TYPES];
 const PAGE_SIZE = 20;
 
 function createInitialFormData(): PreProjetoFormData {
@@ -233,18 +238,16 @@ export default function NovoPreProjetoModal({
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    const fileValidationError = validateUploadFile({
+      file,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: ALLOWED_TYPES,
+      allowedTypesLabel: "PDF, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Máximo: 20MB.",
-      }));
-      return;
-    }
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setFileErrors((prev) => ({
-        ...prev,
-        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG ou JPEG.",
+        [tipo]: fileValidationError,
       }));
       return;
     }
@@ -567,7 +570,7 @@ export default function NovoPreProjetoModal({
                 <h3 className="text-sm font-semibold text-gray-900">Documentos (opcional)</h3>
               </div>
               <p className="text-xs text-gray-500">
-                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho máximo: 20MB por arquivo.
+                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho máximo: {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)} por arquivo.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
