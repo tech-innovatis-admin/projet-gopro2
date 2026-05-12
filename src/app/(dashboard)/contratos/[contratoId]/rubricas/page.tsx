@@ -18,7 +18,12 @@ import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
+import { Dropdown } from '@/components/ui/dropdown';
 import {
+  createCompany,
+  createPeople,
+  createProjectCompany,
+  createProjectPeople,
   createBudgetCategory,
   createBudgetItem,
   createBudgetTransfer,
@@ -28,6 +33,10 @@ import {
   listBudgetItems,
   listBudgetTransfers,
   listGoals,
+  listCompanies,
+  listPeople,
+  listProjectCompaniesDetailed,
+  listProjectPeopleDetailed,
   updateBudgetCategory,
   updateBudgetItem,
 } from '@/src/lib/api/endpoints';
@@ -46,6 +55,12 @@ import {
   type BudgetTransferRequestDTO,
   type GoalResponseDTO,
   type PageResponseDTO,
+  type CompanyRequestDTO,
+  type CompanyResponseDTO,
+  type PeopleRequestDTO,
+  type PeopleResponseDTO,
+  type ProjectCompanyDetailedResponseDTO,
+  type ProjectPeopleDetailedResponseDTO,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -87,6 +102,8 @@ interface ItemRubrica {
   metaId?: string;
   metaIds?: string[];
   notes?: string;
+  vinculoTipo?: 'none' | 'person' | 'company';
+  vinculoNome?: string;
   subitens?: Subitem[];
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
@@ -106,6 +123,30 @@ interface MetaOption {
   numero: number;
   titulo: string;
 }
+
+type ProjectLinkedPerson = {
+  personId: string;
+  fullName: string;
+  label: string;
+};
+
+type ProjectLinkedCompany = {
+  companyId: string;
+  name: string;
+  label: string;
+};
+
+type RubricaLinkMode = 'new' | 'edit';
+
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+const uniqueDropdownOptions = <T extends { value: string; label: string }>(options: T[]) => {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  });
+};
 
 interface RubricaEditForm {
   nome: string;
@@ -169,6 +210,8 @@ const isPersistedId = (id: string) => /^\d+$/.test(id);
 const toPersistedId = (id: string) => Number.parseInt(id, 10);
 const META_IDS_NOTES_PREFIX = '[[GOPRO_META_IDS:';
 const META_IDS_NOTES_SUFFIX = ']]';
+const LINK_NOTES_PREFIX = '[[GOPRO_ITEM_LINK:';
+const LINK_NOTES_SUFFIX = ']]';
 
 const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   descricao: '',
@@ -176,6 +219,8 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   meses: 1,
   valorUnitario: 0,
   metaIds: [],
+  vinculoTipo: 'none',
+  vinculoNome: '',
 });
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
@@ -187,7 +232,9 @@ const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
     toPositiveInt(draft.quantidade, 1) !== 1 ||
     toPositiveInt(draft.meses, 1) !== 1 ||
     toMoneyValue(draft.valorUnitario) > 0 ||
-    selectedMetaIds.length > 0
+    selectedMetaIds.length > 0 ||
+    (draft.vinculoTipo ?? 'none') !== 'none' ||
+    (draft.vinculoNome ?? '').trim().length > 0
   );
 };
 
@@ -308,6 +355,44 @@ const parseBudgetItemMetaNotes = (notes?: string | null) => {
   };
 };
 
+const parseBudgetItemLinkNotes = (notes?: string | null) => {
+  if (!notes?.trim()) {
+    return {
+      vinculoTipo: 'none' as 'none' | 'person' | 'company',
+      vinculoNome: '',
+      cleanedNotes: undefined as string | undefined,
+    };
+  }
+
+  const lines = notes
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let vinculoTipo: 'none' | 'person' | 'company' = 'none';
+  let vinculoNome = '';
+  const remainingLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith(LINK_NOTES_PREFIX) && line.endsWith(LINK_NOTES_SUFFIX)) {
+      const payload = line.slice(LINK_NOTES_PREFIX.length, -LINK_NOTES_SUFFIX.length);
+      const [tipo, ...nomeParts] = payload.split('|');
+      if (tipo === 'person' || tipo === 'company') {
+        vinculoTipo = tipo;
+        vinculoNome = nomeParts.join('|').trim();
+      }
+      continue;
+    }
+    remainingLines.push(line);
+  }
+
+  return {
+    vinculoTipo,
+    vinculoNome,
+    cleanedNotes: remainingLines.length > 0 ? remainingLines.join('\n') : undefined,
+  };
+};
+
 const buildBudgetItemNotes = (notes: string | undefined, selectedMetaIds: string[]) => {
   const cleanedNotes = notes?.trim() || '';
   const orderedMetaIds = Array.from(new Set(selectedMetaIds.filter(Boolean)));
@@ -318,6 +403,12 @@ const buildBudgetItemNotes = (notes: string | undefined, selectedMetaIds: string
 
   const metadata = `${META_IDS_NOTES_PREFIX}${orderedMetaIds.join(',')}${META_IDS_NOTES_SUFFIX}`;
   return cleanedNotes ? `${metadata}\n${cleanedNotes}` : metadata;
+};
+
+const buildItemLinkMetadata = (tipo: 'none' | 'person' | 'company', nome?: string) => {
+  const trimmedNome = (nome ?? '').trim();
+  if (tipo === 'none' || !trimmedNome) return undefined;
+  return `${LINK_NOTES_PREFIX}${tipo}|${trimmedNome}${LINK_NOTES_SUFFIX}`;
 };
 
 function MetaSelectionField({
@@ -428,6 +519,36 @@ export default function RubricasPage() {
 
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [metas, setMetas] = useState<MetaOption[]>([]);
+  const [projectPeople, setProjectPeople] = useState<ProjectLinkedPerson[]>([]);
+  const [projectCompanies, setProjectCompanies] = useState<ProjectLinkedCompany[]>([]);
+  const [basePeople, setBasePeople] = useState<PeopleResponseDTO[]>([]);
+  const [baseCompanies, setBaseCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [isLinkPersonOpen, setIsLinkPersonOpen] = useState(false);
+  const [isLinkCompanyOpen, setIsLinkCompanyOpen] = useState(false);
+  const [isCreatePersonOpen, setIsCreatePersonOpen] = useState(false);
+  const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
+  const [linkMode, setLinkMode] = useState<RubricaLinkMode>('new');
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [selectedBasePersonId, setSelectedBasePersonId] = useState('');
+  const [selectedBaseCompanyId, setSelectedBaseCompanyId] = useState('');
+  const [personForm, setPersonForm] = useState({
+    fullName: '',
+    cpf: '',
+    email: '',
+    phone: '',
+    city: '',
+    state: '',
+  });
+  const [companyForm, setCompanyForm] = useState({
+    name: '',
+    tradeName: '',
+    cnpj: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    state: '',
+  });
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -552,14 +673,38 @@ export default function RubricasPage() {
     }
 
     try {
-      const [allCategories, allItems, allGoals, allTransfers] = await Promise.all([
+      const [allCategories, allItems, allGoals, allTransfers, allProjectPeople, allProjectCompanies] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
         fetchAllPages((query) => listGoals({ ...query, projectId })).catch(
           () => [] as GoalResponseDTO[]
         ),
         fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
+        fetchAllPages((query) => listProjectPeopleDetailed({ ...query, projectId })).catch(
+          () => [] as ProjectPeopleDetailedResponseDTO[]
+        ),
+        fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })).catch(
+          () => [] as ProjectCompanyDetailedResponseDTO[]
+        ),
       ]);
+
+      setProjectPeople(
+        allProjectPeople
+          .filter((link) => link.isActive && Number.isFinite(link.personId))
+          .map((link) => {
+            const fullName = link.personFullName?.trim() || `Pessoa ${link.personId}`;
+            return { personId: String(link.personId), fullName, label: fullName };
+          })
+      );
+
+      setProjectCompanies(
+        allProjectCompanies
+          .filter((link) => link.isActive && Number.isFinite(link.companyId))
+          .map((link) => {
+            const name = link.companyName?.trim() || `Empresa ${link.companyId}`;
+            return { companyId: String(link.companyId), name, label: name };
+          })
+      );
 
       const projectGoals = (allGoals as GoalResponseDTO[])
         .filter((goal) => goal.projectId === projectId)
@@ -595,7 +740,8 @@ export default function RubricasPage() {
           valorPlanejado > 0
             ? valorPlanejado
             : Number((quantidade * meses * valorUnitario).toFixed(2));
-        const parsedNotes = parseBudgetItemMetaNotes(item.notes);
+        const parsedLinkNotes = parseBudgetItemLinkNotes(item.notes);
+        const parsedNotes = parseBudgetItemMetaNotes(parsedLinkNotes.cleanedNotes);
         const selectedMetaIds =
           parsedNotes.metaIds.length > 0
             ? parsedNotes.metaIds
@@ -613,6 +759,8 @@ export default function RubricasPage() {
           metaId: selectedMetaIds[0],
           metaIds: selectedMetaIds,
           notes: parsedNotes.cleanedNotes,
+          vinculoTipo: parsedLinkNotes.vinculoTipo,
+          vinculoNome: parsedLinkNotes.vinculoNome,
           subitens: [],
         };
 
@@ -671,6 +819,84 @@ export default function RubricasPage() {
       setIsLoading(false);
     }
   }, [projectId]);
+
+  const loadBasePeople = useCallback(async () => {
+    const all = await fetchAllPages((query) => listPeople(query));
+    setBasePeople(all);
+  }, []);
+
+  const loadBaseCompanies = useCallback(async () => {
+    const all = await fetchAllPages((query) => listCompanies(query));
+    setBaseCompanies(all);
+  }, []);
+
+  const applyLinkedPerson = useCallback(
+    (personId: number) => {
+      const linked = basePeople.find((person) => person.id === personId);
+      const nome = linked?.fullName ?? '';
+      if (linkMode === 'edit') {
+        setEditForm((current) =>
+          current ? { ...current, vinculoTipo: 'person', vinculoNome: nome } : current
+        );
+      } else {
+        setNewItem((current) => ({ ...current, vinculoTipo: 'person', vinculoNome: nome }));
+      }
+    },
+    [basePeople, linkMode]
+  );
+
+  const applyLinkedCompany = useCallback(
+    (companyId: number) => {
+      const linked = baseCompanies.find((company) => company.id === companyId);
+      const nome = linked?.tradeName?.trim() || linked?.name || '';
+      if (linkMode === 'edit') {
+        setEditForm((current) =>
+          current ? { ...current, vinculoTipo: 'company', vinculoNome: nome } : current
+        );
+      } else {
+        setNewItem((current) => ({ ...current, vinculoTipo: 'company', vinculoNome: nome }));
+      }
+    },
+    [baseCompanies, linkMode]
+  );
+
+  const handleLinkExistingPerson = useCallback(async (personId: number) => {
+    if (!Number.isFinite(projectId)) throw new Error('ID do contrato inválido.');
+    await createProjectPeople({ projectId, personId });
+    await loadData();
+    await loadBasePeople();
+    applyLinkedPerson(personId);
+    setIsLinkPersonOpen(false);
+  }, [projectId, loadData, loadBasePeople, applyLinkedPerson]);
+
+  const handleLinkExistingCompany = useCallback(async (companyId: number) => {
+    if (!Number.isFinite(projectId)) throw new Error('ID do contrato inválido.');
+    await createProjectCompany({ projectId, companyId });
+    await loadData();
+    await loadBaseCompanies();
+    applyLinkedCompany(companyId);
+    setIsLinkCompanyOpen(false);
+  }, [projectId, loadData, loadBaseCompanies, applyLinkedCompany]);
+
+  const handleCreateLinkedPerson = useCallback(async (payload: PeopleRequestDTO) => {
+    if (!Number.isFinite(projectId)) throw new Error('ID do contrato inválido.');
+    const created = await createPeople(payload);
+    await createProjectPeople({ projectId, personId: created.id });
+    await loadData();
+    await loadBasePeople();
+    applyLinkedPerson(created.id);
+    setIsCreatePersonOpen(false);
+  }, [projectId, loadData, loadBasePeople, applyLinkedPerson]);
+
+  const handleCreateLinkedCompany = useCallback(async (payload: CompanyRequestDTO) => {
+    if (!Number.isFinite(projectId)) throw new Error('ID do contrato inválido.');
+    const created = await createCompany(payload);
+    await createProjectCompany({ projectId, companyId: created.id });
+    await loadData();
+    await loadBaseCompanies();
+    applyLinkedCompany(created.id);
+    setIsCreateCompanyOpen(false);
+  }, [projectId, loadData, loadBaseCompanies, applyLinkedCompany]);
 
   useEffect(() => {
     void loadData();
@@ -788,6 +1014,10 @@ export default function RubricasPage() {
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(newItem);
+    const linkMetadata = buildItemLinkMetadata(
+      (newItem.vinculoTipo as 'none' | 'person' | 'company' | undefined) ?? 'none',
+      newItem.vinculoNome
+    );
 
     setIsSubmitting(true);
     setActionError(null);
@@ -804,7 +1034,10 @@ export default function RubricasPage() {
         plannedAmount: valorTotal,
         executedAmount: 0,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
-        notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
+        notes: buildBudgetItemNotes(
+          [linkMetadata, newItem.notes].filter(Boolean).join('\n'),
+          selectedMetaIds
+        ),
         createdBy: actorUserId,
       };
 
@@ -863,6 +1096,10 @@ export default function RubricasPage() {
     const valorUnitario = toMoneyValue(editForm.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(editForm);
+    const linkMetadata = buildItemLinkMetadata(
+      (editForm.vinculoTipo as 'none' | 'person' | 'company' | undefined) ?? 'none',
+      editForm.vinculoNome
+    );
 
     setIsSubmitting(true);
     setActionError(null);
@@ -878,7 +1115,10 @@ export default function RubricasPage() {
         unitCost: valorUnitario,
         plannedAmount: valorTotal,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
-        notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
+        notes: buildBudgetItemNotes(
+          [linkMetadata, editForm.notes].filter(Boolean).join('\n'),
+          selectedMetaIds
+        ),
         updatedBy: actorUserId,
       });
 
@@ -1842,6 +2082,90 @@ export default function RubricasPage() {
               </div>
 
               <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-medium text-gray-700">Vínculo do item</label>
+                <Dropdown
+                  options={[
+                    { value: 'none', label: 'Sem vínculo' },
+                    { value: 'person', label: 'Pessoa vinculada ao projeto' },
+                    { value: 'company', label: 'Empresa vinculada ao projeto' },
+                  ]}
+                  value={(newItem.vinculoTipo ?? 'none') as 'none' | 'person' | 'company'}
+                  onChange={(value) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      vinculoTipo: (value || 'none') as 'none' | 'person' | 'company',
+                      vinculoNome: (value || 'none') === 'none' ? '' : (current.vinculoNome ?? ''),
+                    }))
+                  }
+                  placeholder="Selecione..."
+                  disabled={isSubmitting}
+                  className="w-full"
+                />
+                {(newItem.vinculoTipo ?? 'none') === 'person' ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Pessoa vinculada</h3>
+                        <p className="text-xs text-gray-500">Selecione uma pessoa já existente no sistema ou cadastre uma nova.</p>
+                      </div>
+                      <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                        <button type="button" onClick={() => { setLinkMode('new'); setLinkError(null); void loadBasePeople().then(() => setIsLinkPersonOpen(true)).catch((e)=>setLinkError(toErrorMessage(e,'Não foi possível carregar pessoas.'))); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                          <Check className="h-4 w-4" />
+                          Vincular existente
+                        </button>
+                        <button type="button" onClick={() => { setLinkMode('new'); setLinkError(null); setIsCreatePersonOpen(true); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50">
+                          <Plus className="h-4 w-4" />
+                          Adicionar pessoa
+                        </button>
+                      </div>
+                    </div>
+                    <Dropdown
+                      options={uniqueDropdownOptions(projectPeople.map((person) => ({ value: person.personId, label: person.label })))}
+                      value={projectPeople.find((person) => person.fullName === (newItem.vinculoNome ?? ''))?.personId ?? ''}
+                      onChange={(value) => {
+                        const selected = projectPeople.find((person) => person.personId === (value || ''));
+                        setNewItem((current) => ({ ...current, vinculoNome: selected?.fullName ?? '' }));
+                      }}
+                      placeholder="Selecione uma pessoa"
+                      disabled={isSubmitting}
+                      className="w-full"
+                    />
+                  </div>
+                ) : null}
+                {(newItem.vinculoTipo ?? 'none') === 'company' ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Empresa vinculada</h3>
+                        <p className="text-xs text-gray-500">Selecione uma empresa já existente no sistema ou cadastre uma nova.</p>
+                      </div>
+                      <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                        <button type="button" onClick={() => { setLinkMode('new'); setLinkError(null); void loadBaseCompanies().then(() => setIsLinkCompanyOpen(true)).catch((e)=>setLinkError(toErrorMessage(e,'Não foi possível carregar empresas.'))); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                          <Check className="h-4 w-4" />
+                          Vincular existente
+                        </button>
+                        <button type="button" onClick={() => { setLinkMode('new'); setLinkError(null); setIsCreateCompanyOpen(true); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50">
+                          <Plus className="h-4 w-4" />
+                          Adicionar empresa
+                        </button>
+                      </div>
+                    </div>
+                    <Dropdown
+                      options={uniqueDropdownOptions(projectCompanies.map((company) => ({ value: company.companyId, label: company.label })))}
+                      value={projectCompanies.find((company) => company.name === (newItem.vinculoNome ?? ''))?.companyId ?? ''}
+                      onChange={(value) => {
+                        const selected = projectCompanies.find((company) => company.companyId === (value || ''));
+                        setNewItem((current) => ({ ...current, vinculoNome: selected?.name ?? '' }));
+                      }}
+                      placeholder="Selecione uma empresa"
+                      disabled={isSubmitting}
+                      className="w-full"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-gray-700">
                   Valor unitário <span className="text-red-500">*</span>
                 </label>
@@ -2022,6 +2346,62 @@ export default function RubricasPage() {
               </div>
 
               <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-medium text-gray-700">Vínculo do item</label>
+                <Dropdown
+                  options={[
+                    { value: 'none', label: 'Sem vínculo' },
+                    { value: 'person', label: 'Pessoa vinculada ao projeto' },
+                    { value: 'company', label: 'Empresa vinculada ao projeto' },
+                  ]}
+                  value={(editForm.vinculoTipo ?? 'none') as 'none' | 'person' | 'company'}
+                  onChange={(value) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            vinculoTipo: (value || 'none') as 'none' | 'person' | 'company',
+                            vinculoNome: (value || 'none') === 'none' ? '' : (current.vinculoNome ?? ''),
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Selecione..."
+                  disabled={isSubmitting}
+                  className="w-full"
+                />
+                {(editForm.vinculoTipo ?? 'none') === 'person' ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Pessoa vinculada</h3>
+                        <p className="text-xs text-gray-500">Selecione uma pessoa já vinculada ao projeto.</p>
+                      </div>
+                      <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                        <button type="button" onClick={() => { setLinkMode('edit'); setLinkError(null); void loadBasePeople().then(() => setIsLinkPersonOpen(true)).catch((e)=>setLinkError(toErrorMessage(e,'Não foi possível carregar pessoas.'))); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"><Check className="h-4 w-4" />Vincular existente</button>
+                        <button type="button" onClick={() => { setLinkMode('edit'); setLinkError(null); setIsCreatePersonOpen(true); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50"><Plus className="h-4 w-4" />Adicionar pessoa</button>
+                      </div>
+                    </div>
+                    <Dropdown options={uniqueDropdownOptions(projectPeople.map((person) => ({ value: person.personId, label: person.label })))} value={projectPeople.find((person) => person.fullName === (editForm.vinculoNome ?? ''))?.personId ?? ''} onChange={(value) => { const selected = projectPeople.find((person) => person.personId === (value || '')); setEditForm((current) => current ? { ...current, vinculoNome: selected?.fullName ?? '' } : current); }} placeholder="Selecione uma pessoa" disabled={isSubmitting} className="w-full" />
+                  </div>
+                ) : null}
+                {(editForm.vinculoTipo ?? 'none') === 'company' ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900">Empresa vinculada</h3>
+                        <p className="text-xs text-gray-500">Selecione uma empresa já vinculada ao projeto.</p>
+                      </div>
+                      <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                        <button type="button" onClick={() => { setLinkMode('edit'); setLinkError(null); void loadBaseCompanies().then(() => setIsLinkCompanyOpen(true)).catch((e)=>setLinkError(toErrorMessage(e,'Não foi possível carregar empresas.'))); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"><Check className="h-4 w-4" />Vincular existente</button>
+                        <button type="button" onClick={() => { setLinkMode('edit'); setLinkError(null); setIsCreateCompanyOpen(true); }} className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50"><Plus className="h-4 w-4" />Adicionar empresa</button>
+                      </div>
+                    </div>
+                    <Dropdown options={uniqueDropdownOptions(projectCompanies.map((company) => ({ value: company.companyId, label: company.label })))} value={projectCompanies.find((company) => company.name === (editForm.vinculoNome ?? ''))?.companyId ?? ''} onChange={(value) => { const selected = projectCompanies.find((company) => company.companyId === (value || '')); setEditForm((current) => current ? { ...current, vinculoNome: selected?.name ?? '' } : current); }} placeholder="Selecione uma empresa" disabled={isSubmitting} className="w-full" />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-gray-700">
                   Valor unitário <span className="text-red-500">*</span>
                 </label>
@@ -2118,7 +2498,7 @@ export default function RubricasPage() {
                 Tem certeza de que deseja excluir esta rubrica?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a rubrica e todos os itens vinculados.
+                Esta ação remove a rubrica e todos os itens vinculados.
               </p>
             </div>
 
@@ -2236,6 +2616,160 @@ export default function RubricasPage() {
           onComeback={handleComebackRemanejamento}
         />
       )}
+
+      <AppModalShell
+        isOpen={isLinkPersonOpen}
+        title="Vincular pessoa existente"
+        description="Escolha uma pessoa já cadastrada na base para vinculá-la ao projeto."
+        onClose={() => setIsLinkPersonOpen(false)}
+        tone="info"
+      >
+        <div className="space-y-3 p-5">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">Pessoa cadastrada <span className="text-red-500">*</span></label>
+            <Dropdown
+              options={uniqueDropdownOptions(basePeople.map((person) => {
+                const cpf = onlyDigits(person.cpf ?? '');
+                const label = cpf ? `${person.fullName} • CPF ${cpf}` : person.fullName;
+                return {
+                  value: String(person.id),
+                  label,
+                };
+              }))}
+              value={selectedBasePersonId}
+              onChange={(value) => setSelectedBasePersonId(value || '')}
+              placeholder="Selecione uma pessoa"
+              disabled={isSubmitting}
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setIsLinkPersonOpen(false)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"><X className="h-4 w-4" />Cancelar</button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedBasePersonId) return;
+                void handleLinkExistingPerson(Number(selectedBasePersonId));
+              }}
+              disabled={isSubmitting || !selectedBasePersonId}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              Vincular ao projeto
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell isOpen={isLinkCompanyOpen} title="Vincular empresa existente" description="Escolha uma empresa já cadastrada na base para vinculá-la ao projeto." onClose={() => setIsLinkCompanyOpen(false)} tone="info">
+        <div className="space-y-3 p-5">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">Empresa cadastrada <span className="text-red-500">*</span></label>
+            <Dropdown
+              options={uniqueDropdownOptions(baseCompanies.map((company) => {
+                const cnpj = onlyDigits(company.cnpj ?? '');
+                const name = company.tradeName?.trim() || company.name;
+                const label = cnpj ? `${name} • CNPJ ${cnpj}` : name;
+                return {
+                  value: String(company.id),
+                  label,
+                };
+              }))}
+              value={selectedBaseCompanyId}
+              onChange={(value) => setSelectedBaseCompanyId(value || '')}
+              placeholder="Selecione uma empresa"
+              disabled={isSubmitting}
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setIsLinkCompanyOpen(false)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"><X className="h-4 w-4" />Cancelar</button>
+            <button type="button" onClick={() => { if (!selectedBaseCompanyId) return; void handleLinkExistingCompany(Number(selectedBaseCompanyId)); }} disabled={isSubmitting || !selectedBaseCompanyId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"><Check className="h-4 w-4" />Vincular ao projeto</button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell isOpen={isCreatePersonOpen} title="Adicionar pessoa" description="Cadastre a pessoa e vincule-a automaticamente a este projeto." onClose={() => setIsCreatePersonOpen(false)} tone="brand">
+        <div className="space-y-3 p-5">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              Nome completo <span className="text-red-500">*</span>
+            </label>
+            <input type="text" value={personForm.fullName} onChange={(e) => setPersonForm((c) => ({ ...c, fullName: e.target.value }))} disabled={isSubmitting} autoFocus className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome da pessoa" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">CPF</label>
+              <input type="text" value={personForm.cpf} onChange={(e) => setPersonForm((c) => ({ ...c, cpf: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Somente números ou formatado" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Telefone</label>
+              <input type="text" value={personForm.phone} onChange={(e) => setPersonForm((c) => ({ ...c, phone: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Telefone para contato" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Cidade <span className="text-red-500">*</span></label>
+              <input type="text" value={personForm.city} onChange={(e) => setPersonForm((c) => ({ ...c, city: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">UF <span className="text-red-500">*</span></label>
+              <input type="text" value={personForm.state} onChange={(e) => setPersonForm((c) => ({ ...c, state: e.target.value }))} disabled={isSubmitting} maxLength={2} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm uppercase focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="UF" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">E-mail</label>
+            <input type="email" value={personForm.email} onChange={(e) => setPersonForm((c) => ({ ...c, email: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="email@exemplo.com" />
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setIsCreatePersonOpen(false)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"><X className="h-4 w-4" />Cancelar</button>
+            <button type="button" onClick={() => void handleCreateLinkedPerson(personForm)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"><Check className="h-4 w-4" />Salvar e vincular</button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell isOpen={isCreateCompanyOpen} title="Adicionar empresa" description="Cadastre a empresa e vincule-a automaticamente a este projeto." onClose={() => setIsCreateCompanyOpen(false)} tone="brand">
+        <div className="space-y-3 p-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Razão social <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))} disabled={isSubmitting} autoFocus className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razão social da empresa" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Nome fantasia <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.tradeName} onChange={(e) => setCompanyForm((c) => ({ ...c, tradeName: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia da empresa" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">CNPJ <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.cnpj} onChange={(e) => setCompanyForm((c) => ({ ...c, cnpj: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="00.000.000/0000-00" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">E-mail <span className="text-red-500">*</span></label>
+              <input type="email" value={companyForm.email} onChange={(e) => setCompanyForm((c) => ({ ...c, email: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="contato@empresa.com" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Telefone <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.phone} onChange={(e) => setCompanyForm((c) => ({ ...c, phone: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Telefone principal" />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Endereço <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.address} onChange={(e) => setCompanyForm((c) => ({ ...c, address: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Endereço da empresa" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">Cidade <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.city} onChange={(e) => setCompanyForm((c) => ({ ...c, city: e.target.value }))} disabled={isSubmitting} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-gray-700">UF <span className="text-red-500">*</span></label>
+              <input type="text" value={companyForm.state} onChange={(e) => setCompanyForm((c) => ({ ...c, state: e.target.value }))} disabled={isSubmitting} maxLength={2} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm uppercase focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="UF" />
+            </div>
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setIsCreateCompanyOpen(false)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"><X className="h-4 w-4" />Cancelar</button>
+            <button type="button" onClick={() => void handleCreateLinkedCompany(companyForm)} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"><Check className="h-4 w-4" />Salvar e vincular</button>
+          </div>
+        </div>
+      </AppModalShell>
     </div>
   );
 }

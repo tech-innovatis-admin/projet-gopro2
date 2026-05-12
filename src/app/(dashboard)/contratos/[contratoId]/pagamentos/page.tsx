@@ -4752,24 +4752,18 @@ function LinkExistingPersonModal({
             <label className="block text-sm font-medium text-gray-700">
               Pessoa cadastrada <span className="text-red-500">*</span>
             </label>
-            <select
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
-              disabled={isSaving}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-            >
-              <option value="">Selecione uma pessoa</option>
-              {people.map((person) => {
+            <Dropdown
+              options={people.map((person) => {
                 const cpf = onlyDigits(person.cpf ?? '');
                 const label = cpf ? `${person.fullName} • CPF ${cpf}` : person.fullName;
-
-                return (
-                  <option key={person.id} value={String(person.id)}>
-                    {label}
-                  </option>
-                );
+                return { value: String(person.id), label };
               })}
-            </select>
+              value={selectedId}
+              onChange={(value) => setSelectedId(value || '')}
+              placeholder="Selecione uma pessoa"
+              disabled={isSaving}
+              className="w-full"
+            />
           </div>
         )}
 
@@ -4870,26 +4864,20 @@ function LinkExistingCompanyModal({
             <label className="block text-sm font-medium text-gray-700">
               Empresa cadastrada <span className="text-red-500">*</span>
             </label>
-            <select
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
-              disabled={isSaving}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-            >
-              <option value="">Selecione uma empresa</option>
-              {companies.map((company) => {
+            <Dropdown
+              options={companies.map((company) => {
                 const cnpj = onlyDigits(company.cnpj ?? '');
                 const label = cnpj
                   ? `${companyNameLabel(company)} • CNPJ ${cnpj}`
                   : companyNameLabel(company);
-
-                return (
-                  <option key={company.id} value={String(company.id)}>
-                    {label}
-                  </option>
-                );
+                return { value: String(company.id), label };
               })}
-            </select>
+              value={selectedId}
+              onChange={(value) => setSelectedId(value || '')}
+              placeholder="Selecione uma empresa"
+              disabled={isSaving}
+              className="w-full"
+            />
           </div>
         )}
 
