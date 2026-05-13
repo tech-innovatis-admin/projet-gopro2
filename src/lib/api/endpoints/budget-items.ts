@@ -1,5 +1,6 @@
 import { http } from '../http';
 import type {
+  BudgetItemBeneficiaryAssignRequestDTO,
   BudgetItemRequestDTO,
   BudgetItemResponseDTO,
   BudgetItemUpdateDTO,
@@ -40,4 +41,15 @@ export function updateBudgetItem(id: number | string, payload: BudgetItemUpdateD
 
 export function deleteBudgetItem(id: number | string) {
   return http.delete<void>(`${BASE}/${id}`);
+}
+
+export function assignBudgetItemBeneficiary(
+  id: number | string,
+  payload: BudgetItemBeneficiaryAssignRequestDTO
+) {
+  return http.put<void>(`${BASE}/${id}/beneficiary`, { body: payload });
+}
+
+export function removeBudgetItemBeneficiary(id: number | string) {
+  return http.delete<void>(`${BASE}/${id}/beneficiary`);
 }

@@ -1062,6 +1062,10 @@ export interface BudgetItemResponseDTO {
   plannedAmount: number;
   executedAmount: number | null;
   goalId: number | null;
+  projectPeopleId: number | null;
+  projectCompanyId: number | null;
+  beneficiaryType: 'person' | 'company' | null;
+  contractedAmount: number | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string | null;
@@ -1079,12 +1083,22 @@ export interface BudgetItemRequestDTO {
   plannedAmount: number;
   executedAmount?: number;
   goalId?: number | null;
+  projectPeopleId?: number | null;
+  projectCompanyId?: number | null;
+  beneficiaryType?: 'person' | 'company' | null;
+  contractedAmount?: number | null;
   notes?: string;
   createdBy?: number;
 }
 
 export interface BudgetItemUpdateDTO extends Partial<BudgetItemRequestDTO> {
   updatedBy?: number;
+}
+
+export interface BudgetItemBeneficiaryAssignRequestDTO {
+  beneficiaryType: 'person' | 'company';
+  referenceId: number;
+  contractedAmount: number;
 }
 
 export interface BudgetTransferResponseDTO {
