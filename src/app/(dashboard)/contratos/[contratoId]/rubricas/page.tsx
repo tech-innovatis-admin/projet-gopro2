@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
+import { Dropdown } from '@/components/ui/dropdown';
 import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
@@ -21,13 +22,23 @@ import { ResizableTable } from '@/components/ui/resizable-table';
 import {
   createBudgetCategory,
   createBudgetItem,
+  assignBudgetItemBeneficiary,
+  removeBudgetItemBeneficiary,
   createBudgetTransfer,
+  createCompany,
+  createPeople,
+  createProjectCompany,
+  createProjectPeople,
   deleteBudgetCategory,
   deleteBudgetItem,
   listBudgetCategories,
   listBudgetItems,
   listBudgetTransfers,
+  listCompanies,
   listGoals,
+  listPeople,
+  listProjectCompaniesDetailed,
+  listProjectPeopleDetailed,
   updateBudgetCategory,
   updateBudgetItem,
 } from '@/src/lib/api/endpoints';
@@ -44,8 +55,10 @@ import {
 } from '@/src/lib/budget-transfers/comeback';
 import {
   type BudgetTransferRequestDTO,
+  type CompanyResponseDTO,
   type GoalResponseDTO,
   type PageResponseDTO,
+  type PeopleResponseDTO,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -68,6 +81,7 @@ type Lancamento = {
   valor: number;
   dataPag: string;
 };
+type BeneficiaryType = 'person' | 'company';
 
 type Subitem = {
   id: ID;
@@ -91,6 +105,17 @@ interface ItemRubrica {
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
   valorFinal?: number;
+  beneficiaryType?: BeneficiaryType;
+  beneficiaryReferenceId?: string;
+  unlinkedItem?: boolean;
+}
+interface ProjectPersonOption {
+  id: string;
+  label: string;
+}
+interface ProjectCompanyOption {
+  id: string;
+  label: string;
 }
 
 interface Rubrica {
@@ -176,6 +201,9 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   meses: 1,
   valorUnitario: 0,
   metaIds: [],
+  beneficiaryType: undefined,
+  beneficiaryReferenceId: undefined,
+  unlinkedItem: false,
 });
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
@@ -187,7 +215,10 @@ const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
     toPositiveInt(draft.quantidade, 1) !== 1 ||
     toPositiveInt(draft.meses, 1) !== 1 ||
     toMoneyValue(draft.valorUnitario) > 0 ||
-    selectedMetaIds.length > 0
+    selectedMetaIds.length > 0 ||
+    Boolean(draft.beneficiaryType) ||
+    Boolean(draft.beneficiaryReferenceId) ||
+    Boolean(draft.unlinkedItem)
   );
 };
 
@@ -428,6 +459,20 @@ export default function RubricasPage() {
 
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [metas, setMetas] = useState<MetaOption[]>([]);
+  const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
+  const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
+  const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
+  const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [showCreatePersonModal, setShowCreatePersonModal] = useState(false);
+  const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
+  const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
+  const [showLinkCompanyModal, setShowLinkCompanyModal] = useState(false);
+  const [selectedPersonToLink, setSelectedPersonToLink] = useState<string | undefined>(undefined);
+  const [selectedCompanyToLink, setSelectedCompanyToLink] = useState<string | undefined>(undefined);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [newCompanyTradeName, setNewCompanyTradeName] = useState('');
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyCnpj, setNewCompanyCnpj] = useState('');
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -545,6 +590,10 @@ export default function RubricasPage() {
     if (!Number.isFinite(projectId)) {
       setRubricas([]);
       setMetas([]);
+      setProjectPeopleOptions([]);
+      setProjectCompanyOptions([]);
+      setAvailablePeople([]);
+      setAvailableCompanies([]);
       setRemanejamentos([]);
       setLoadError('ID do contrato inválido para carregar rubricas.');
       setIsLoading(false);
@@ -552,13 +601,26 @@ export default function RubricasPage() {
     }
 
     try {
-      const [allCategories, allItems, allGoals, allTransfers] = await Promise.all([
+      const [
+        allCategories,
+        allItems,
+        allGoals,
+        allTransfers,
+        allProjectPeople,
+        allProjectCompanies,
+        allPeople,
+        allCompanies,
+      ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
         fetchAllPages((query) => listGoals({ ...query, projectId })).catch(
           () => [] as GoalResponseDTO[]
         ),
         fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
+        fetchAllPages((query) => listProjectPeopleDetailed({ ...query, projectId })),
+        fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })),
+        fetchAllPages((query) => listPeople(query)),
+        fetchAllPages((query) => listCompanies(query)),
       ]);
 
       const projectGoals = (allGoals as GoalResponseDTO[])
@@ -571,6 +633,42 @@ export default function RubricasPage() {
           numero: goal.numero,
           titulo: goal.titulo,
         }))
+      );
+
+      const projectPeople = allProjectPeople
+        .filter((item) => item.projectId === projectId && item.isActive)
+        .map((item) => ({
+          id: String(item.id),
+          label: item.personFullName?.trim() || `Pessoa #${item.personId}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+      setProjectPeopleOptions(projectPeople);
+
+      const projectCompanies = allProjectCompanies
+        .filter((item) => item.projectId === projectId && item.isActive)
+        .map((item) => ({
+          id: String(item.id),
+          label:
+            item.companyTradeName?.trim() ||
+            item.companyName?.trim() ||
+            `Empresa #${item.companyId}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+      setProjectCompanyOptions(projectCompanies);
+
+      const projectPeopleIds = new Set(
+        allProjectPeople.filter((item) => item.projectId === projectId).map((item) => item.personId)
+      );
+      const projectCompanyIds = new Set(
+        allProjectCompanies
+          .filter((item) => item.projectId === projectId)
+          .map((item) => item.companyId)
+      );
+      setAvailablePeople(
+        allPeople.filter((person) => person.isActive && !projectPeopleIds.has(person.id))
+      );
+      setAvailableCompanies(
+        allCompanies.filter((company) => company.isActive && !projectCompanyIds.has(company.id))
       );
 
       const categories = allCategories
@@ -613,6 +711,12 @@ export default function RubricasPage() {
           metaId: selectedMetaIds[0],
           metaIds: selectedMetaIds,
           notes: parsedNotes.cleanedNotes,
+          beneficiaryType: item.beneficiaryType ?? undefined,
+          beneficiaryReferenceId: item.projectPeopleId
+            ? String(item.projectPeopleId)
+            : item.projectCompanyId
+              ? String(item.projectCompanyId)
+              : undefined,
           subitens: [],
         };
 
@@ -666,6 +770,10 @@ export default function RubricasPage() {
       setLoadError(toErrorMessage(error, 'Não foi possível carregar as rubricas.'));
       setRubricas([]);
       setMetas([]);
+      setProjectPeopleOptions([]);
+      setProjectCompanyOptions([]);
+      setAvailablePeople([]);
+      setAvailableCompanies([]);
       setRemanejamentos([]);
     } finally {
       setIsLoading(false);
@@ -740,6 +848,27 @@ export default function RubricasPage() {
     [metas, resolveMetaIdsForDraft]
   );
 
+  const resolveBeneficiaryLabel = useCallback(
+    (item: ItemRubrica) => {
+      if (!item.beneficiaryType || !item.beneficiaryReferenceId) {
+        return 'Sem vínculo';
+      }
+
+      if (item.beneficiaryType === 'person') {
+        return (
+          projectPeopleOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
+          `Pessoa #${item.beneficiaryReferenceId}`
+        );
+      }
+
+      return (
+        projectCompanyOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
+        `Empresa #${item.beneficiaryReferenceId}`
+      );
+    },
+    [projectCompanyOptions, projectPeopleOptions]
+  );
+
   const toggleExpand = (rubricaId: string) => {
     setRubricas((current) =>
       current.map((rubrica) =>
@@ -770,6 +899,113 @@ export default function RubricasPage() {
     setNewItem(createEmptyItemDraft());
   };
 
+  const applyBeneficiarySelection = (
+    type: BeneficiaryType,
+    referenceId: string,
+    label: string
+  ) => {
+    if (type === 'person') {
+      setProjectPeopleOptions((current) => {
+        if (current.some((item) => item.id === referenceId)) return current;
+        return [...current, { id: referenceId, label }].sort((a, b) =>
+          a.label.localeCompare(b.label, 'pt-BR')
+        );
+      });
+    } else {
+      setProjectCompanyOptions((current) => {
+        if (current.some((item) => item.id === referenceId)) return current;
+        return [...current, { id: referenceId, label }].sort((a, b) =>
+          a.label.localeCompare(b.label, 'pt-BR')
+        );
+      });
+    }
+
+    setNewItem((current) => ({
+      ...current,
+      beneficiaryType: type,
+      beneficiaryReferenceId: referenceId,
+      unlinkedItem: false,
+    }));
+  };
+
+  const handleLinkExistingPerson = async () => {
+    if (!selectedPersonToLink) return;
+    const actorUserId = await requireCurrentUserId();
+    const personLabel =
+      availablePeople.find((person) => String(person.id) === selectedPersonToLink)?.fullName ??
+      `Pessoa #${selectedPersonToLink}`;
+    const linked = await createProjectPeople({
+      projectId,
+      personId: Number(selectedPersonToLink),
+      createdBy: actorUserId,
+    });
+    applyBeneficiarySelection('person', String(linked.id), personLabel);
+    setShowLinkPersonModal(false);
+    setSelectedPersonToLink(undefined);
+    await loadData();
+  };
+
+  const handleLinkExistingCompany = async () => {
+    if (!selectedCompanyToLink) return;
+    const actorUserId = await requireCurrentUserId();
+    const companyLabel =
+      availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)
+        ?.tradeName ||
+      availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)?.name ||
+      `Empresa #${selectedCompanyToLink}`;
+    const linked = await createProjectCompany({
+      projectId,
+      companyId: Number(selectedCompanyToLink),
+      createdBy: actorUserId,
+    });
+    applyBeneficiarySelection('company', String(linked.id), companyLabel);
+    setShowLinkCompanyModal(false);
+    setSelectedCompanyToLink(undefined);
+    await loadData();
+  };
+
+  const handleCreateAndLinkPerson = async () => {
+    if (!newPersonName.trim()) return;
+    const actorUserId = await requireCurrentUserId();
+    const personName = newPersonName.trim();
+    const person = await createPeople({ fullName: personName });
+    const linked = await createProjectPeople({
+      projectId,
+      personId: person.id,
+      createdBy: actorUserId,
+    });
+    applyBeneficiarySelection('person', String(linked.id), personName);
+    setShowCreatePersonModal(false);
+    setNewPersonName('');
+    await loadData();
+  };
+
+  const handleCreateAndLinkCompany = async () => {
+    if (!newCompanyName.trim() || !newCompanyTradeName.trim() || !newCompanyCnpj.trim()) return;
+    const actorUserId = await requireCurrentUserId();
+    const company = await createCompany({
+      name: newCompanyName.trim(),
+      tradeName: newCompanyTradeName.trim(),
+      cnpj: newCompanyCnpj.replace(/\D/g, ''),
+      email: 'na@na.com',
+      phone: '0000000000',
+      address: 'A definir',
+      city: 'A definir',
+      state: 'SP',
+    });
+    const linked = await createProjectCompany({
+      projectId,
+      companyId: company.id,
+      createdBy: actorUserId,
+    });
+    applyBeneficiarySelection('company', String(linked.id), newCompanyTradeName.trim());
+    setShowCreateCompanyModal(false);
+    setNewCompanyName('');
+    setNewCompanyTradeName('');
+    setNewCompanyCnpj('');
+    await loadData();
+  };
+
   const handleAddItem = async (rubricaId: string) => {
     if (!ensureCanManageChildren()) return;
     if (!newItem.descricao?.trim()) return;
@@ -780,6 +1016,10 @@ export default function RubricasPage() {
 
     if (newItem.quantidade == null || newItem.meses == null) {
       setActionError('Informe quantidade e meses antes de salvar o item.');
+      return;
+    }
+    if (!newItem.unlinkedItem && newItem.beneficiaryType && !newItem.beneficiaryReferenceId) {
+      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
       return;
     }
 
@@ -808,7 +1048,18 @@ export default function RubricasPage() {
         createdBy: actorUserId,
       };
 
-      await createBudgetItem(basePayload);
+      const createdItem = await createBudgetItem(basePayload);
+      if (
+        !newItem.unlinkedItem &&
+        newItem.beneficiaryType &&
+        newItem.beneficiaryReferenceId
+      ) {
+        await assignBudgetItemBeneficiary(createdItem.id, {
+          beneficiaryType: newItem.beneficiaryType,
+          referenceId: toPersistedId(newItem.beneficiaryReferenceId),
+          contractedAmount: valorTotal,
+        });
+      }
 
       await loadData();
       closeAddItemModal();
@@ -838,6 +1089,7 @@ export default function RubricasPage() {
     setEditForm({
       ...item,
       metaIds: resolveMetaIdsForDraft(item),
+      unlinkedItem: !item.beneficiaryType || !item.beneficiaryReferenceId,
     });
   };
 
@@ -857,12 +1109,23 @@ export default function RubricasPage() {
       setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
+    if (!editForm.unlinkedItem && editForm.beneficiaryType && !editForm.beneficiaryReferenceId) {
+      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
+      return;
+    }
 
     const quantidade = toPositiveInt(editForm.quantidade, 1);
     const meses = toPositiveInt(editForm.meses, 1);
     const valorUnitario = toMoneyValue(editForm.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(editForm);
+    const hadBeneficiaryBefore = Boolean(
+      originalEditingItem?.beneficiaryType && originalEditingItem?.beneficiaryReferenceId
+    );
+    const shouldBeUnlinked =
+      Boolean(editForm.unlinkedItem) ||
+      !editForm.beneficiaryType ||
+      !editForm.beneficiaryReferenceId;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -881,6 +1144,18 @@ export default function RubricasPage() {
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
         updatedBy: actorUserId,
       });
+
+      if (shouldBeUnlinked) {
+        if (hadBeneficiaryBefore) {
+          await removeBudgetItemBeneficiary(toPersistedId(editingItem));
+        }
+      } else if (editForm.beneficiaryType && editForm.beneficiaryReferenceId) {
+        await assignBudgetItemBeneficiary(toPersistedId(editingItem), {
+          beneficiaryType: editForm.beneficiaryType,
+          referenceId: toPersistedId(editForm.beneficiaryReferenceId),
+          contractedAmount: valorTotal,
+        });
+      }
 
       await loadData();
       setEditingItem(null);
@@ -1519,8 +1794,8 @@ export default function RubricasPage() {
                   </div>
                 ) : (
                   <ResizableTable
-                    columnCount={10}
-                    defaultWidths={[250, 80, 80, 150, 150, 120, 120, 150, 280, 130]}
+                    columnCount={11}
+                    defaultWidths={[220, 80, 80, 140, 140, 120, 120, 140, 230, 280, 130]}
                     minColumnWidth={60}
                     className="text-sm"
                   >
@@ -1534,6 +1809,7 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Vínculo</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Metas</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
                       </tr>
@@ -1579,6 +1855,15 @@ export default function RubricasPage() {
                           <td className="py-2 px-2 text-right">
                             <span className="font-semibold text-blue-600">
                               {formatCurrency(calcularValorFinalItem(item))}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-700">
+                            <span
+                              className={
+                                item.beneficiaryType ? 'text-gray-700' : 'text-gray-400'
+                              }
+                            >
+                              {resolveBeneficiaryLabel(item)}
                             </span>
                           </td>
                           <td className="py-2 px-2 text-gray-700">
@@ -1859,6 +2144,194 @@ export default function RubricasPage() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                <Checkbox
+                  checked={Boolean(newItem.unlinkedItem)}
+                  onCheckedChange={(checked) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      unlinkedItem: Boolean(checked),
+                      beneficiaryType: checked ? undefined : current.beneficiaryType,
+                      beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                />
+                Item de rúbrica sem vínculo
+              </label>
+
+              <div
+                className={`space-y-3 transition-opacity ${
+                  newItem.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
+                }`}
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
+                  <Dropdown
+                    options={[
+                      { value: 'person', label: 'Pessoa do projeto' },
+                      { value: 'company', label: 'Empresa do projeto' },
+                    ]}
+                    value={newItem.beneficiaryType}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setNewItem((current) => ({
+                        ...current,
+                        beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
+                        beneficiaryReferenceId: undefined,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Beneficiário no projeto
+                  </label>
+                  <Dropdown
+                    searchable
+                    options={(newItem.beneficiaryType === 'person'
+                      ? projectPeopleOptions
+                      : newItem.beneficiaryType === 'company'
+                        ? projectCompanyOptions
+                        : []
+                    ).map((option) => ({ value: option.id, label: option.label }))}
+                    value={newItem.beneficiaryReferenceId}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setNewItem((current) => ({
+                        ...current,
+                        beneficiaryReferenceId: value ?? undefined,
+                      }))
+                    }
+                    disabled={isSubmitting || !newItem.beneficiaryType}
+                  />
+                </div>
+
+                {newItem.beneficiaryType === 'person' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLinkPersonModal(true)}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
+                    >
+                      Vincular pessoa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePersonModal(true)}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Cadastrar nova pessoa
+                    </button>
+                  </div>
+                ) : null}
+
+                {newItem.beneficiaryType === 'company' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLinkCompanyModal(true)}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
+                    >
+                      Vincular empresa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateCompanyModal(true)}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Cadastrar nova empresa
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                <Checkbox
+                  checked={Boolean(editForm.unlinkedItem)}
+                  onCheckedChange={(checked) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            unlinkedItem: Boolean(checked),
+                            beneficiaryType: checked ? undefined : current.beneficiaryType,
+                            beneficiaryReferenceId: checked
+                              ? undefined
+                              : current.beneficiaryReferenceId,
+                          }
+                        : current
+                    )
+                  }
+                  disabled={isSubmitting}
+                />
+                Item de rúbrica sem vínculo
+              </label>
+
+              <div
+                className={`space-y-3 transition-opacity ${
+                  editForm.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
+                }`}
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
+                  <Dropdown
+                    options={[
+                      { value: 'person', label: 'Pessoa do projeto' },
+                      { value: 'company', label: 'Empresa do projeto' },
+                    ]}
+                    value={editForm.beneficiaryType}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
+                              beneficiaryReferenceId: undefined,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Beneficiário no projeto
+                  </label>
+                  <Dropdown
+                    searchable
+                    options={(editForm.beneficiaryType === 'person'
+                      ? projectPeopleOptions
+                      : editForm.beneficiaryType === 'company'
+                        ? projectCompanyOptions
+                        : []
+                    ).map((option) => ({ value: option.id, label: option.label }))}
+                    value={editForm.beneficiaryReferenceId}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryReferenceId: value ?? undefined,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting || !editForm.beneficiaryType}
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Valor total calculado
@@ -1902,7 +2375,13 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !newItem.descricao?.trim()}
+                disabled={
+                  isSubmitting ||
+                  !newItem.descricao?.trim() ||
+                  (!newItem.unlinkedItem &&
+                    Boolean(newItem.beneficiaryType) &&
+                    !newItem.beneficiaryReferenceId)
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
@@ -2086,7 +2565,13 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !editForm.descricao?.trim()}
+                disabled={
+                  isSubmitting ||
+                  !editForm.descricao?.trim() ||
+                  (!editForm.unlinkedItem &&
+                    Boolean(editForm.beneficiaryType) &&
+                    !editForm.beneficiaryReferenceId)
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
@@ -2211,6 +2696,154 @@ export default function RubricasPage() {
             </div>
           </div>
         )}
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={showLinkPersonModal}
+        title="Vincular pessoa existente"
+        onClose={() => setShowLinkPersonModal(false)}
+      >
+        <div className="space-y-4">
+          <Dropdown
+            searchable
+            options={availablePeople.map((person) => ({
+              value: String(person.id),
+              label: person.fullName,
+            }))}
+            value={selectedPersonToLink}
+            placeholder="Selecione uma pessoa"
+            onChange={(value) => setSelectedPersonToLink(value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLinkPersonModal(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLinkExistingPerson()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Vincular
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={showLinkCompanyModal}
+        title="Vincular empresa existente"
+        onClose={() => setShowLinkCompanyModal(false)}
+      >
+        <div className="space-y-4">
+          <Dropdown
+            searchable
+            options={availableCompanies.map((company) => ({
+              value: String(company.id),
+              label: company.tradeName || company.name,
+            }))}
+            value={selectedCompanyToLink}
+            placeholder="Selecione uma empresa"
+            onChange={(value) => setSelectedCompanyToLink(value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLinkCompanyModal(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLinkExistingCompany()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Vincular
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={showCreatePersonModal}
+        title="Nova pessoa"
+        onClose={() => setShowCreatePersonModal(false)}
+      >
+        <div className="space-y-4">
+          <input
+            type="text"
+            value={newPersonName}
+            onChange={(event) => setNewPersonName(event.target.value)}
+            placeholder="Nome completo"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCreatePersonModal(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCreateAndLinkPerson()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Salvar e vincular
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={showCreateCompanyModal}
+        title="Nova empresa"
+        onClose={() => setShowCreateCompanyModal(false)}
+      >
+        <div className="space-y-3">
+          <input
+            type="text"
+            value={newCompanyName}
+            onChange={(event) => setNewCompanyName(event.target.value)}
+            placeholder="Razão social"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            value={newCompanyTradeName}
+            onChange={(event) => setNewCompanyTradeName(event.target.value)}
+            placeholder="Nome fantasia"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            value={newCompanyCnpj}
+            onChange={(event) => setNewCompanyCnpj(event.target.value)}
+            placeholder="CNPJ"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCreateCompanyModal(false)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCreateAndLinkCompany()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Salvar e vincular
+            </button>
+          </div>
+        </div>
       </AppModalShell>
 
       {canManageChildren && itemParaRemanejamento && (
