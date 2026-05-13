@@ -102,6 +102,9 @@ type ItemRubrica = {
   valorBaseOrcado: number;
   remanejamentoDebito: number;
   remanejamentoCredito: number;
+  beneficiaryType?: 'person' | 'company' | null;
+  projectPeopleId?: ID;
+  projectCompanyId?: ID;
 };
 
 type Rubrica = {
@@ -449,6 +452,18 @@ export default function PagamentosPlanilhaPage() {
   } | null>(null);
   const pageErrorRef = useRef<HTMLDivElement | null>(null);
 
+  const selectedSubitemItem = useMemo(() => {
+    if (!subitemModalItemId) return null;
+
+    for (const rubrica of rubricas) {
+      const item = rubrica.itens.find((entry) => entry.id === subitemModalItemId);
+      if (item) return item;
+    }
+
+    return null;
+  }, [subitemModalItemId, rubricas]);
+  const isBeneficiaryLockedByRubrica = Boolean(selectedSubitemItem?.beneficiaryType);
+
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
     setTimeout(() => setSavedMessage(null), 2500);
@@ -510,10 +525,54 @@ export default function PagamentosPlanilhaPage() {
     () => new Map(projectPeople.map((person) => [person.personId, person])),
     [projectPeople]
   );
+  const projectPeopleByLinkId = useMemo(
+    () => new Map(projectPeople.map((person) => [person.projectLinkId, person])),
+    [projectPeople]
+  );
   const projectCompaniesById = useMemo(
     () => new Map(projectCompanies.map((company) => [company.companyId, company])),
     [projectCompanies]
   );
+  const projectCompaniesByLinkId = useMemo(
+    () => new Map(projectCompanies.map((company) => [company.projectLinkId, company])),
+    [projectCompanies]
+  );
+  const lockedBeneficiaryConfig = useMemo(() => {
+    if (!selectedSubitemItem?.beneficiaryType) return null;
+
+    if (selectedSubitemItem.beneficiaryType === 'person' && selectedSubitemItem.projectPeopleId) {
+      const linkedPerson = projectPeopleByLinkId.get(selectedSubitemItem.projectPeopleId);
+      if (!linkedPerson) return null;
+      return {
+        vinculoTipo: 'person' as SubitemLinkType,
+        personId: linkedPerson.personId,
+        organizationId: '',
+      };
+    }
+
+    if (selectedSubitemItem.beneficiaryType === 'company' && selectedSubitemItem.projectCompanyId) {
+      const linkedCompany = projectCompaniesByLinkId.get(selectedSubitemItem.projectCompanyId);
+      if (!linkedCompany) return null;
+      return {
+        vinculoTipo: 'company' as SubitemLinkType,
+        personId: '',
+        organizationId: linkedCompany.companyId,
+      };
+    }
+
+    return null;
+  }, [projectCompaniesByLinkId, projectPeopleByLinkId, selectedSubitemItem]);
+
+  useEffect(() => {
+    if (!isSubitemModalOpen || subitemModalEditingContext || !lockedBeneficiaryConfig) return;
+
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: lockedBeneficiaryConfig.vinculoTipo,
+      personId: lockedBeneficiaryConfig.personId,
+      organizationId: lockedBeneficiaryConfig.organizationId,
+    }));
+  }, [isSubitemModalOpen, lockedBeneficiaryConfig, subitemModalEditingContext]);
   const linkableBasePeople = useMemo(
     () =>
       basePeople
@@ -531,6 +590,37 @@ export default function PagamentosPlanilhaPage() {
           return nameA.localeCompare(nameB, 'pt-BR');
         }),
     [baseCompanies, projectCompaniesById]
+  );
+
+  const getDefaultSubitemFormForItem = useCallback(
+    (item: ItemRubrica): NewSubitemFormState => {
+      if (item.beneficiaryType === 'person' && item.projectPeopleId) {
+        const linkedPerson = projectPeopleByLinkId.get(item.projectPeopleId);
+        if (linkedPerson) {
+          return {
+            nome: linkedPerson.fullName,
+            vinculoTipo: 'person',
+            personId: linkedPerson.personId,
+            organizationId: '',
+          };
+        }
+      }
+
+      if (item.beneficiaryType === 'company' && item.projectCompanyId) {
+        const linkedCompany = projectCompaniesByLinkId.get(item.projectCompanyId);
+        if (linkedCompany) {
+          return {
+            nome: linkedCompany.name,
+            vinculoTipo: 'company',
+            personId: '',
+            organizationId: linkedCompany.companyId,
+          };
+        }
+      }
+
+      return DEFAULT_NEW_SUBITEM_FORM;
+    },
+    [projectCompaniesByLinkId, projectPeopleByLinkId]
   );
 
   const closeSubitemModal = ({
@@ -760,6 +850,10 @@ export default function PagamentosPlanilhaPage() {
           valorBaseOrcado,
           remanejamentoDebito: transferBalance.debito,
           remanejamentoCredito: transferBalance.credito,
+          beneficiaryType: item.beneficiaryType ?? null,
+          projectPeopleId: item.projectPeopleId != null ? String(item.projectPeopleId) : undefined,
+          projectCompanyId:
+            item.projectCompanyId != null ? String(item.projectCompanyId) : undefined,
         };
 
         if (!itemsByCategory.has(item.categoryId)) {
@@ -1130,6 +1224,15 @@ export default function PagamentosPlanilhaPage() {
     return null;
   };
 
+  const findItemById = (itemId: ID) => {
+    for (const rubrica of rubricas) {
+      const item = rubrica.itens.find((entry) => entry.id === itemId);
+      if (item) return item;
+    }
+
+    return null;
+  };
+
   const isTransientSubitem = (subitem: Subitem) =>
     !(subitem.lancamentos ?? []).some(
       (lancamento) => parsePersistedId(lancamento.expenseId) != null
@@ -1434,12 +1537,25 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'person' && !subitemModalForm.personId) {
+    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
+      setSubitemModalError(
+        projectLinksError ??
+          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
+      );
+      return;
+    }
+
+    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
+    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
+    const effectiveOrganizationId =
+      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+
+    if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'company' && !subitemModalForm.organizationId) {
+    if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
       return;
     }
@@ -1448,13 +1564,9 @@ export default function PagamentosPlanilhaPage() {
       id: createDraftId('sub'),
       empresaRh: nome,
       lancamentos: [],
-      vinculoTipo: subitemModalForm.vinculoTipo,
-      personId:
-        subitemModalForm.vinculoTipo === 'person' ? subitemModalForm.personId : undefined,
-      organizationId:
-        subitemModalForm.vinculoTipo === 'company'
-          ? subitemModalForm.organizationId
-          : undefined,
+      vinculoTipo: effectiveVinculoTipo,
+      personId: effectiveVinculoTipo === 'person' ? effectivePersonId : undefined,
+      organizationId: effectiveVinculoTipo === 'company' ? effectiveOrganizationId : undefined,
     };
 
     setRubricas((previous) =>
@@ -1484,9 +1596,15 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    const selectedItem = findItemById(itemId);
+    if (!selectedItem) {
+      setActionError('Item inválido para criar pagamento.');
+      return;
+    }
+
     setActionError(null);
     setSubitemModalEditingContext(null);
-    setSubitemModalForm(DEFAULT_NEW_SUBITEM_FORM);
+    setSubitemModalForm(getDefaultSubitemFormForItem(selectedItem));
     setSubitemModalError(null);
     setSubitemModalItemId(itemId);
     setIsSubitemModalOpen(true);
@@ -1681,12 +1799,25 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'person' && !subitemModalForm.personId) {
+    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
+      setSubitemModalError(
+        projectLinksError ??
+          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
+      );
+      return;
+    }
+
+    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
+    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
+    const effectiveOrganizationId =
+      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+
+    if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'company' && !subitemModalForm.organizationId) {
+    if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
       return;
     }
@@ -1703,16 +1834,13 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    const nextPersonId =
-      subitemModalForm.vinculoTipo === 'person' ? subitemModalForm.personId || undefined : undefined;
+    const nextPersonId = effectiveVinculoTipo === 'person' ? effectivePersonId || undefined : undefined;
     const nextOrganizationId =
-      subitemModalForm.vinculoTipo === 'company'
-        ? subitemModalForm.organizationId || undefined
-        : undefined;
+      effectiveVinculoTipo === 'company' ? effectiveOrganizationId || undefined : undefined;
 
     updateSubitemDraftState(itemId, subitemId, {
       empresaRh: nome,
-      vinculoTipo: subitemModalForm.vinculoTipo,
+      vinculoTipo: effectiveVinculoTipo,
       personId: nextPersonId,
       organizationId: nextOrganizationId,
     });
@@ -2944,6 +3072,7 @@ export default function PagamentosPlanilhaPage() {
         isLoadingLinks={isLoadingProjectLinks}
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
+        lockBeneficiary={isBeneficiaryLockedByRubrica}
         isPersisting={isPersisting}
         onChange={(patch) => {
           setSubitemModalError(null);
@@ -3991,6 +4120,7 @@ function SubitemModal({
   isLoadingLinks,
   projectPeople,
   projectCompanies,
+  lockBeneficiary,
   isPersisting,
   onChange,
   onClose,
@@ -4010,6 +4140,7 @@ function SubitemModal({
   isLoadingLinks: boolean;
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
+  lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
   onClose: () => void;
@@ -4035,6 +4166,7 @@ function SubitemModal({
 
   const showPersonSelector = form.vinculoTipo === 'person';
   const showCompanySelector = form.vinculoTipo === 'company';
+  const showLinksError = Boolean(linksError) && (lockBeneficiary || showPersonSelector || showCompanySelector);
   return (
     <>
       <ModalShell
@@ -4060,6 +4192,11 @@ function SubitemModal({
         </div>
 
         <Field label="Vínculo do pagamento">
+          {lockBeneficiary ? (
+            <p className="mb-2 text-xs text-amber-700">
+              Vínculo bloqueado: altere o beneficiário apenas na aba de rubricas.
+            </p>
+          ) : null}
           <Dropdown
             options={[
               {
@@ -4077,6 +4214,7 @@ function SubitemModal({
             ]}
             value={form.vinculoTipo}
             onChange={(value) => {
+              if (lockBeneficiary) return;
               const nextType = (value || 'none') as SubitemLinkType;
 
               onChange({
@@ -4086,12 +4224,12 @@ function SubitemModal({
               });
             }}
             placeholder="Selecione..."
-            disabled={isPersisting}
+            disabled={isPersisting || lockBeneficiary}
             className="w-full"
           />
         </Field>
 
-        {linksError ? (
+        {showLinksError ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {linksError}
           </div>
@@ -4110,7 +4248,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenLinkExistingPerson}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Check className="h-4 w-4" />
@@ -4119,7 +4257,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenCreatePerson}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="h-4 w-4" />
@@ -4144,6 +4282,7 @@ function SubitemModal({
               }))}
               value={form.personId}
               onChange={(value) => {
+                if (lockBeneficiary) return;
                 const nextPersonId = value || '';
 
                 const selectedPerson = projectPeople.find(
@@ -4159,7 +4298,7 @@ function SubitemModal({
                 });
               }}
               placeholder="Selecione uma pessoa"
-              disabled={isPersisting}
+              disabled={isPersisting || lockBeneficiary}
               className="w-full"
             />
             )}
@@ -4179,7 +4318,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenLinkExistingCompany}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Check className="h-4 w-4" />
@@ -4188,7 +4327,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenCreateCompany}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="h-4 w-4" />
@@ -4209,6 +4348,7 @@ function SubitemModal({
               <select
                 value={form.organizationId}
                 onChange={(event) => {
+                  if (lockBeneficiary) return;
                   const nextOrganizationId = event.target.value;
                   const selectedCompany = projectCompanies.find(
                     (company) => company.companyId === nextOrganizationId
@@ -4220,7 +4360,7 @@ function SubitemModal({
                     nome: form.nome.trim() ? form.nome : selectedCompany?.name ?? form.nome,
                   });
                 }}
-                disabled={isPersisting}
+                disabled={isPersisting || lockBeneficiary}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
               >
                 <option value="">Selecione uma empresa</option>
