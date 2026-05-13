@@ -1073,7 +1073,7 @@ export default function EquipeTecnicaPage() {
                 )}
 
                 <div className="flex items-center justify-between text-gray-600">
-                  <span>VÃ­nculo: {membro.vinculo || "Não informado"}</span>
+                  <span>Vínculo: {membro.vinculo || "Não informado"}</span>
                   <span>{membro.cargaHoraria ? `${membro.cargaHoraria}h` : "0h"}</span>
                 </div>
 
