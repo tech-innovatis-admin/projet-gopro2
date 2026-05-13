@@ -16,6 +16,9 @@ import {
   X,
 } from "lucide-react";
 import {
+  listBudgetItems,
+  listBudgetTransfers,
+  listExpenses,
   createPeople,
   createProjectPeople,
   deleteProjectPeople,
@@ -36,6 +39,10 @@ import {
 import {
   type ContractTypeEnum,
   HttpError,
+  type BudgetItemResponseDTO,
+  type BudgetTransferResponseDTO,
+  type ExpenseResponseDTO,
+  type PageResponseDTO,
   type PeopleResponseDTO,
   type RoleProjectPeopleEnum,
   type StatusProjectPeopleEnum,
@@ -102,6 +109,12 @@ type MembroProjeto = {
   startDate?: string;
   endDate?: string;
   baseAmount?: number;
+};
+
+type BeneficiaryFinancialSummary = {
+  finalBudgetAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
 };
 
 type MembroFormData = {
@@ -185,6 +198,29 @@ function formatCurrency(value?: number) {
   }).format(value);
 }
 
+function toSafeNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>,
+): Promise<T[]> {
+  const pageSize = 100;
+  const allItems: T[] = [];
+  let page = 0;
+  let hasNext = true;
+
+  while (hasNext) {
+    const response = await fetchPage({ page, size: pageSize });
+    allItems.push(...response.content);
+    hasNext = !response.last;
+    page += 1;
+  }
+
+  return allItems;
+}
+
 function getStatusLabel(value?: StatusProjectPeopleEnum | null) {
   if (value === "ATIVO") return "Ativo";
   if (value === "ENCERRADO") return "Encerrado";
@@ -258,6 +294,9 @@ export default function EquipeTecnicaPage() {
   const [linkVinculo, setLinkVinculo] = useState("");
   const [linkCargaHoraria, setLinkCargaHoraria] = useState<number | "">("");
   const [isLinking, setIsLinking] = useState(false);
+  const [financialSummaryByProjectPeopleId, setFinancialSummaryByProjectPeopleId] = useState<
+    Map<number, BeneficiaryFinancialSummary>
+  >(new Map());
 
   const linkedPersonIds = useMemo(
     () =>
@@ -364,11 +403,31 @@ export default function EquipeTecnicaPage() {
       setLoadError(null);
       setActionError(null);
 
-      const projectPeoplePage = await listProjectPeopleDetailed({
-        page: 0,
-        size: DEFAULT_PAGE_SIZE,
-        projectId,
-      });
+      const [projectPeoplePage, budgetItems, budgetTransfers, expenses] = await Promise.all([
+        listProjectPeopleDetailed({
+          page: 0,
+          size: DEFAULT_PAGE_SIZE,
+          projectId,
+        }),
+        fetchAllPages<BudgetItemResponseDTO>((query) =>
+          listBudgetItems({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<BudgetTransferResponseDTO>((query) =>
+          listBudgetTransfers({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<ExpenseResponseDTO>((query) =>
+          listExpenses({
+            ...query,
+            projectId,
+          }),
+        ),
+      ]);
 
       const links = projectPeoplePage.content.filter((item) => item.projectId === projectId);
 
@@ -468,10 +527,58 @@ export default function EquipeTecnicaPage() {
         };
       });
 
+      const activeTransfers = budgetTransfers.filter((transfer) => transfer.isActive);
+      const transferBalanceByItemId = new Map<number, number>();
+      for (const transfer of activeTransfers) {
+        transferBalanceByItemId.set(
+          transfer.toItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.toItemId)) + toSafeNumber(transfer.amount),
+        );
+        transferBalanceByItemId.set(
+          transfer.fromItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.fromItemId)) - toSafeNumber(transfer.amount),
+        );
+      }
+
+      const paidByBudgetItemId = new Map<number, number>();
+      for (const expense of expenses) {
+        if (!expense.isActive || expense.paymentStatus !== "PAGO") continue;
+        paidByBudgetItemId.set(
+          expense.budgetItemId,
+          toSafeNumber(paidByBudgetItemId.get(expense.budgetItemId)) + toSafeNumber(expense.amount),
+        );
+      }
+
+      const summaryByProjectPeopleId = new Map<number, BeneficiaryFinancialSummary>();
+      for (const item of budgetItems) {
+        if (!item.isActive) continue;
+        if (item.beneficiaryType !== "person" || !item.projectPeopleId) continue;
+
+        const finalBudgetAmount =
+          toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
+        const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
+
+        const current = summaryByProjectPeopleId.get(item.projectPeopleId) ?? {
+          finalBudgetAmount: 0,
+          paidAmount: 0,
+          pendingAmount: 0,
+        };
+
+        const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
+        const nextPaidAmount = current.paidAmount + paidAmount;
+        summaryByProjectPeopleId.set(item.projectPeopleId, {
+          finalBudgetAmount: nextFinalBudgetAmount,
+          paidAmount: nextPaidAmount,
+          pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
+        });
+      }
+
+      setFinancialSummaryByProjectPeopleId(summaryByProjectPeopleId);
       setMembros(nextMembers);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar membros do projeto."));
       setMembros([]);
+      setFinancialSummaryByProjectPeopleId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -866,11 +973,13 @@ export default function EquipeTecnicaPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {membros.map((membro) => (
-            <div
-              key={membro.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-            >
+          {membros.map((membro) => {
+            const financialSummary = financialSummaryByProjectPeopleId.get(membro.projectPeopleId);
+            return (
+              <div
+                key={membro.id}
+                className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-emerald-50 rounded-lg">
@@ -974,6 +1083,32 @@ export default function EquipeTecnicaPage() {
                   </div>
                 )}
 
+                {financialSummary && (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 space-y-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
+                      Financeiro na rubrica
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Valor final:{" "}
+                      <strong className="text-gray-900">
+                        {formatCurrency(financialSummary.finalBudgetAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Pago:{" "}
+                      <strong className="text-emerald-700">
+                        {formatCurrency(financialSummary.paidAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Falta pagar:{" "}
+                      <strong className="text-amber-700">
+                        {formatCurrency(financialSummary.pendingAmount)}
+                      </strong>
+                    </p>
+                  </div>
+                )}
+
                 {membro.notes && (
                   <p className="text-gray-600 line-clamp-2">{membro.notes}</p>
                 )}
@@ -996,7 +1131,8 @@ export default function EquipeTecnicaPage() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

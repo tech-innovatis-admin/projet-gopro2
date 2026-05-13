@@ -10,6 +10,9 @@ import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { CompanyResponsiblePersonSection } from "@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection";
 import {
+  listBudgetItems,
+  listBudgetTransfers,
+  listExpenses,
   createCompany,
   createProjectCompany,
   deleteProjectCompany,
@@ -23,7 +26,13 @@ import {
   fetchCurrentUser,
   requireCurrentUserId,
 } from "@/src/lib/auth/session";
-import { type CompanyResponseDTO } from "@/src/lib/api/types";
+import {
+  type BudgetItemResponseDTO,
+  type BudgetTransferResponseDTO,
+  type CompanyResponseDTO,
+  type ExpenseResponseDTO,
+  type PageResponseDTO,
+} from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const BriefcaseBusinessIcon = () => (
@@ -66,6 +75,12 @@ type EmpresaProjeto = {
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
+};
+
+type BeneficiaryFinancialSummary = {
+  finalBudgetAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
 };
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -163,6 +178,29 @@ function formatCurrency(value?: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+function toSafeNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>,
+): Promise<T[]> {
+  const pageSize = 100;
+  const allItems: T[] = [];
+  let page = 0;
+  let hasNext = true;
+
+  while (hasNext) {
+    const response = await fetchPage({ page, size: pageSize });
+    allItems.push(...response.content);
+    hasNext = !response.last;
+    page += 1;
+  }
+
+  return allItems;
+}
+
 function formatCurrencyInput(value?: number) {
   if (typeof value !== "number" || Number.isNaN(value)) return "";
   return new Intl.NumberFormat("pt-BR", {
@@ -233,6 +271,9 @@ export default function EmpresasPage() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | "">("");
   const [isLinking, setIsLinking] = useState(false);
+  const [financialSummaryByProjectCompanyId, setFinancialSummaryByProjectCompanyId] = useState<
+    Map<number, BeneficiaryFinancialSummary>
+  >(new Map());
 
   const linkedCompanyIds = useMemo(
     () => new Set(empresas.map((e) => e.companyId).filter((id): id is number => typeof id === "number")),
@@ -302,11 +343,31 @@ export default function EmpresasPage() {
       setLoadError(null);
       setActionError(null);
 
-      const linksPage = await listProjectCompaniesDetailed({
-        page: 0,
-        size: DEFAULT_PAGE_SIZE,
-        projectId,
-      });
+      const [linksPage, budgetItems, budgetTransfers, expenses] = await Promise.all([
+        listProjectCompaniesDetailed({
+          page: 0,
+          size: DEFAULT_PAGE_SIZE,
+          projectId,
+        }),
+        fetchAllPages<BudgetItemResponseDTO>((query) =>
+          listBudgetItems({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<BudgetTransferResponseDTO>((query) =>
+          listBudgetTransfers({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<ExpenseResponseDTO>((query) =>
+          listExpenses({
+            ...query,
+            projectId,
+          }),
+        ),
+      ]);
 
       const links = linksPage.content.filter((item) => item.projectId === projectId);
 
@@ -344,10 +405,58 @@ export default function EmpresasPage() {
         };
       });
 
+      const activeTransfers = budgetTransfers.filter((transfer) => transfer.isActive);
+      const transferBalanceByItemId = new Map<number, number>();
+      for (const transfer of activeTransfers) {
+        transferBalanceByItemId.set(
+          transfer.toItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.toItemId)) + toSafeNumber(transfer.amount),
+        );
+        transferBalanceByItemId.set(
+          transfer.fromItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.fromItemId)) - toSafeNumber(transfer.amount),
+        );
+      }
+
+      const paidByBudgetItemId = new Map<number, number>();
+      for (const expense of expenses) {
+        if (!expense.isActive || expense.paymentStatus !== "PAGO") continue;
+        paidByBudgetItemId.set(
+          expense.budgetItemId,
+          toSafeNumber(paidByBudgetItemId.get(expense.budgetItemId)) + toSafeNumber(expense.amount),
+        );
+      }
+
+      const summaryByProjectCompanyId = new Map<number, BeneficiaryFinancialSummary>();
+      for (const item of budgetItems) {
+        if (!item.isActive) continue;
+        if (item.beneficiaryType !== "company" || !item.projectCompanyId) continue;
+
+        const finalBudgetAmount =
+          toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
+        const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
+
+        const current = summaryByProjectCompanyId.get(item.projectCompanyId) ?? {
+          finalBudgetAmount: 0,
+          paidAmount: 0,
+          pendingAmount: 0,
+        };
+
+        const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
+        const nextPaidAmount = current.paidAmount + paidAmount;
+        summaryByProjectCompanyId.set(item.projectCompanyId, {
+          finalBudgetAmount: nextFinalBudgetAmount,
+          paidAmount: nextPaidAmount,
+          pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
+        });
+      }
+
+      setFinancialSummaryByProjectCompanyId(summaryByProjectCompanyId);
       setEmpresas(mapped);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar empresas do projeto."));
       setEmpresas([]);
+      setFinancialSummaryByProjectCompanyId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -586,8 +695,12 @@ export default function EmpresasPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {empresas.map((empresa) => (
-            <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+          {empresas.map((empresa) => {
+            const financialSummary = empresa.projectCompanyId
+              ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
+              : undefined;
+            return (
+              <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-green-50 rounded-lg"><div className="h-5 w-5 text-green-600"><BriefcaseBusinessIcon /></div></div>
@@ -639,6 +752,31 @@ export default function EmpresasPage() {
                     </div>
                   </div>
                 </div>
+                {financialSummary && (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 space-y-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
+                      Financeiro na rubrica
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Valor final:{" "}
+                      <strong className="text-gray-900">
+                        {formatCurrency(financialSummary.finalBudgetAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Pago:{" "}
+                      <strong className="text-emerald-700">
+                        {formatCurrency(financialSummary.paidAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Falta pagar:{" "}
+                      <strong className="text-amber-700">
+                        {formatCurrency(financialSummary.pendingAmount)}
+                      </strong>
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-end justify-between mt-4 pt-3 border-t border-gray-100 gap-3">
@@ -662,7 +800,8 @@ export default function EmpresasPage() {
                 <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
