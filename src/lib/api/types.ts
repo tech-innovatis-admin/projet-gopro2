@@ -869,6 +869,14 @@ export interface ProjectPeopleUpdateDTO extends Partial<ProjectPeopleRequestDTO>
   updatedBy?: number;
 }
 
+export type ContractingStatusEnum =
+  | 'EM_CADASTRO'
+  | 'EM_CONTRATACAO'
+  | 'CONTRATADA'
+  | 'EM_EXECUCAO'
+  | 'CONCLUIDA'
+  | 'CANCELADA';
+
 export interface ProjectCompanyResponseDTO {
   id: number;
   projectId: number;
@@ -877,8 +885,9 @@ export interface ProjectCompanyResponseDTO {
   description: string | null;
   startDate: string | null;
   endDate: string | null;
-  status: number | null;
+  status: ContractingStatusEnum | null;
   totalValue: number | null;
+  availableBalance?: number | null;
   notes: string | null;
   isIncubated: boolean | null;
   serviceType: string | null;
@@ -911,7 +920,7 @@ export interface ProjectCompanyRequestDTO {
   description?: string;
   startDate?: string;
   endDate?: string;
-  status?: number;
+  status?: ContractingStatusEnum;
   totalValue?: number;
   notes?: string;
   isIncubated?: boolean;
