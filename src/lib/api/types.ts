@@ -888,6 +888,7 @@ export interface ProjectCompanyResponseDTO {
   status: ContractingStatusEnum | null;
   totalValue: number | null;
   availableBalance?: number | null;
+  executionPercentage?: number | null;
   notes: string | null;
   isIncubated: boolean | null;
   serviceType: string | null;

@@ -20,6 +20,23 @@ import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
 import {
+  CompanyFormModal,
+  type CompanyFormData,
+  hasRequiredCompanyFields,
+  onlyDigits,
+} from '../_components/CompanyFormModal';
+import {
+  MemberFormModal,
+  defaultMemberFormData,
+  hasRequiredMemberFields,
+  type MembroFormData,
+} from '../_components/MemberFormModal';
+import { unformatCPF, validateCPFComplete } from '../equipe-tecnica/_components/CPFValidator';
+import {
+  unformatPhone,
+  validatePhoneComplete,
+} from '../equipe-tecnica/_components/PhoneValidator';
+import {
   createBudgetCategory,
   createBudgetItem,
   assignBudgetItemBeneficiary,
@@ -39,8 +56,10 @@ import {
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
+  updatePeople,
   updateBudgetCategory,
   updateBudgetItem,
+  uploadDocument,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
 import {
@@ -56,9 +75,13 @@ import {
 import {
   type BudgetTransferRequestDTO,
   type CompanyResponseDTO,
+  type ContractingStatusEnum,
   type GoalResponseDTO,
+  HttpError,
   type PageResponseDTO,
   type PeopleResponseDTO,
+  type ProjectCompanyDetailedResponseDTO,
+  type RoleProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -83,6 +106,16 @@ type Lancamento = {
 };
 type BeneficiaryType = 'person' | 'company';
 
+function toOptional(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function papelToRole(papel: MembroFormData['papel']): RoleProjectPeopleEnum {
+  if (papel === 'BOLSISTA') return 'BOLSISTA';
+  return 'DIRETOR';
+}
+
 type Subitem = {
   id: ID;
   empresaRh: string;
@@ -105,6 +138,8 @@ interface ItemRubrica {
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
   valorFinal?: number;
+  projectPeopleId?: string;
+  projectCompanyId?: string;
   beneficiaryType?: BeneficiaryType;
   beneficiaryReferenceId?: string;
   unlinkedItem?: boolean;
@@ -116,6 +151,10 @@ interface ProjectPersonOption {
 interface ProjectCompanyOption {
   id: string;
   label: string;
+  name: string;
+  cnpj?: string | null;
+  status?: ContractingStatusEnum | null;
+  availableBalance?: number | null;
 }
 
 interface Rubrica {
@@ -154,6 +193,49 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
+const CONTRACTING_STATUS_LABELS: Record<ContractingStatusEnum, string> = {
+  EM_CADASTRO: 'Em cadastro',
+  EM_CONTRATACAO: 'Em contratação',
+  CONTRATADA: 'Contratada',
+  EM_EXECUCAO: 'Em execução',
+  CONCLUIDA: 'Concluída',
+  CANCELADA: 'Cancelada',
+};
+
+const formatContractingStatus = (status?: ContractingStatusEnum | null) =>
+  status ? CONTRACTING_STATUS_LABELS[status] ?? status : 'Status não informado';
+
+const buildProjectCompanyOption = (
+  company: ProjectCompanyDetailedResponseDTO
+): ProjectCompanyOption => {
+  const name =
+    company.companyTradeName?.trim() ||
+    company.companyName?.trim() ||
+    `Empresa #${company.companyId}`;
+  const cnpj = company.companyCnpj?.trim() || null;
+  const status = company.status ?? null;
+  const balance =
+    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
+      ? company.availableBalance
+      : null;
+
+  return {
+    id: String(company.id),
+    name,
+    cnpj,
+    status,
+    availableBalance: balance,
+    label: [
+      name,
+      cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado',
+      formatContractingStatus(status),
+      balance != null ? `Saldo ${formatCurrency(balance)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' - '),
+  };
+};
+
 const toSafeNumber = (value: number | null | undefined): number => {
   if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
     return 0;
@@ -187,6 +269,12 @@ const toInputDateValue = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatCnpjCompact = (value?: string | null) => {
+  const digits = (value ?? '').replace(/\D/g, '').slice(0, 14);
+  if (digits.length !== 14) return null;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
 
@@ -201,10 +289,24 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   meses: 1,
   valorUnitario: 0,
   metaIds: [],
+  projectPeopleId: undefined,
+  projectCompanyId: undefined,
   beneficiaryType: undefined,
   beneficiaryReferenceId: undefined,
   unlinkedItem: false,
 });
+
+const createEmptyCompanyForm = (): CompanyFormData => ({
+  razaoSocial: '',
+  nomeFantasia: '',
+  cnpj: '',
+  email: '',
+  telefone: '',
+  endereco: '',
+  cidade: '',
+  uf: '',
+});
+
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
   if (!draft) return false;
@@ -216,6 +318,8 @@ const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
     toPositiveInt(draft.meses, 1) !== 1 ||
     toMoneyValue(draft.valorUnitario) > 0 ||
     selectedMetaIds.length > 0 ||
+    Boolean(draft.projectPeopleId) ||
+    Boolean(draft.projectCompanyId) ||
     Boolean(draft.beneficiaryType) ||
     Boolean(draft.beneficiaryReferenceId) ||
     Boolean(draft.unlinkedItem)
@@ -469,10 +573,11 @@ export default function RubricasPage() {
   const [showLinkCompanyModal, setShowLinkCompanyModal] = useState(false);
   const [selectedPersonToLink, setSelectedPersonToLink] = useState<string | undefined>(undefined);
   const [selectedCompanyToLink, setSelectedCompanyToLink] = useState<string | undefined>(undefined);
-  const [newPersonName, setNewPersonName] = useState('');
-  const [newCompanyTradeName, setNewCompanyTradeName] = useState('');
-  const [newCompanyName, setNewCompanyName] = useState('');
-  const [newCompanyCnpj, setNewCompanyCnpj] = useState('');
+  const [newPersonForm, setNewPersonForm] = useState<MembroFormData>(defaultMemberFormData);
+  const [newPersonAvatarFile, setNewPersonAvatarFile] = useState<File | null>(null);
+  const [newPersonCpfError, setNewPersonCpfError] = useState('');
+  const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
+  const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -499,11 +604,20 @@ export default function RubricasPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
     setTimeout(() => setSavedMessage(null), 2500);
+  };
+
+  const captureItemFieldErrors = (error: unknown) => {
+    if (error instanceof HttpError && error.fieldErrors) {
+      setItemFieldErrors(error.fieldErrors);
+      return;
+    }
+    setItemFieldErrors({});
   };
 
   useEffect(() => {
@@ -579,6 +693,7 @@ export default function RubricasPage() {
       toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
       toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
       toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
+      (editForm.projectCompanyId ?? '') !== (originalEditingItem.projectCompanyId ?? '') ||
       JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
     );
   }, [editForm, metas, originalEditingItem]);
@@ -646,13 +761,7 @@ export default function RubricasPage() {
 
       const projectCompanies = allProjectCompanies
         .filter((item) => item.projectId === projectId && item.isActive)
-        .map((item) => ({
-          id: String(item.id),
-          label:
-            item.companyTradeName?.trim() ||
-            item.companyName?.trim() ||
-            `Empresa #${item.companyId}`,
-        }))
+        .map(buildProjectCompanyOption)
         .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
       setProjectCompanyOptions(projectCompanies);
 
@@ -711,6 +820,8 @@ export default function RubricasPage() {
           metaId: selectedMetaIds[0],
           metaIds: selectedMetaIds,
           notes: parsedNotes.cleanedNotes,
+          projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
+          projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
           beneficiaryType: item.beneficiaryType ?? undefined,
           beneficiaryReferenceId: item.projectPeopleId
             ? String(item.projectPeopleId)
@@ -855,18 +966,40 @@ export default function RubricasPage() {
       }
 
       if (item.beneficiaryType === 'person') {
-        return (
+        const personLabel =
           projectPeopleOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
-          `Pessoa #${item.beneficiaryReferenceId}`
-        );
+          `Pessoa #${item.beneficiaryReferenceId}`;
+        return `Pessoa: ${personLabel}`;
       }
 
-      return (
-        projectCompanyOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
-        `Empresa #${item.beneficiaryReferenceId}`
+      const company = projectCompanyOptions.find(
+        (option) => option.id === item.beneficiaryReferenceId
       );
+      if (!company) {
+        return `Empresa: #${item.beneficiaryReferenceId}`;
+      }
+
+      const cnpj = formatCnpjCompact(company.cnpj);
+      return `Empresa: ${company.name}${cnpj ? ` (${cnpj})` : ''}`;
     },
     [projectCompanyOptions, projectPeopleOptions]
+  );
+
+  const resolveProjectCompanyLabel = useCallback(
+    (item: ItemRubrica) => {
+      if (!item.projectCompanyId) {
+        return 'Não definida';
+      }
+
+      const company = projectCompanyOptions.find((option) => option.id === item.projectCompanyId);
+      if (!company) {
+        return `Empresa #${item.projectCompanyId}`;
+      }
+
+      const cnpj = formatCnpjCompact(company.cnpj);
+      return `${company.name}${cnpj ? ` (${cnpj})` : ''}`;
+    },
+    [projectCompanyOptions]
   );
 
   const toggleExpand = (rubricaId: string) => {
@@ -881,6 +1014,7 @@ export default function RubricasPage() {
     if (!ensureCanManageChildren()) return;
 
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
     setEditingItem(null);
     setEditForm(null);
@@ -897,6 +1031,7 @@ export default function RubricasPage() {
   const closeAddItemModal = () => {
     setAddingToRubrica(null);
     setNewItem(createEmptyItemDraft());
+    setItemFieldErrors({});
   };
 
   const applyBeneficiarySelection = (
@@ -914,7 +1049,7 @@ export default function RubricasPage() {
     } else {
       setProjectCompanyOptions((current) => {
         if (current.some((item) => item.id === referenceId)) return current;
-        return [...current, { id: referenceId, label }].sort((a, b) =>
+        return [...current, { id: referenceId, label, name: label }].sort((a, b) =>
           a.label.localeCompare(b.label, 'pt-BR')
         );
       });
@@ -922,6 +1057,8 @@ export default function RubricasPage() {
 
     setNewItem((current) => ({
       ...current,
+      projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
+      projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
       beneficiaryType: type,
       beneficiaryReferenceId: referenceId,
       unlinkedItem: false,
@@ -965,44 +1102,124 @@ export default function RubricasPage() {
   };
 
   const handleCreateAndLinkPerson = async () => {
-    if (!newPersonName.trim()) return;
-    const actorUserId = await requireCurrentUserId();
-    const personName = newPersonName.trim();
-    const person = await createPeople({ fullName: personName });
-    const linked = await createProjectPeople({
-      projectId,
-      personId: person.id,
-      createdBy: actorUserId,
-    });
-    applyBeneficiarySelection('person', String(linked.id), personName);
-    setShowCreatePersonModal(false);
-    setNewPersonName('');
-    await loadData();
+    if (!hasRequiredMemberFields(newPersonForm)) {
+      setActionError('Preencha os campos obrigatórios da pessoa antes de salvar.');
+      return;
+    }
+
+    if (newPersonForm.cpf.trim()) {
+      const validation = validateCPFComplete(newPersonForm.cpf);
+      if (!validation.isValid) {
+        setNewPersonCpfError(validation.errorMessage);
+        return;
+      }
+    }
+
+    if (newPersonForm.telefone.trim()) {
+      const validation = validatePhoneComplete(newPersonForm.telefone);
+      if (!validation.isValid) {
+        setNewPersonPhoneError(validation.errorMessage);
+        return;
+      }
+    }
+
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+      const actorUserId = await requireCurrentUserId();
+      const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
+      const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
+      const peoplePayload = {
+        fullName: newPersonForm.nome.trim(),
+        cpf: cpf || undefined,
+        email: toOptional(newPersonForm.email),
+        phone: toOptional(phone),
+        birthDate: toOptional(newPersonForm.birthDate),
+        address: toOptional(newPersonForm.endereco),
+        city: newPersonForm.city.trim(),
+        state: newPersonForm.state.trim().toUpperCase(),
+        notes: toOptional(newPersonForm.notes),
+      };
+
+      const person = await createPeople(peoplePayload);
+      const linked = await createProjectPeople({
+        projectId,
+        personId: person.id,
+        role: papelToRole(newPersonForm.papel),
+        workloadHours: newPersonForm.cargaHoraria,
+        institutionalLink: toOptional(newPersonForm.vinculo),
+        contractType: newPersonForm.contractType || undefined,
+        startDate: toOptional(newPersonForm.startDate),
+        endDate: toOptional(newPersonForm.endDate),
+        status: newPersonForm.status || undefined,
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number' ? newPersonForm.baseAmount : undefined,
+        notes: toOptional(newPersonForm.notes),
+        createdBy: actorUserId,
+      });
+
+      if (newPersonAvatarFile) {
+        const uploaded = await uploadDocument({
+          file: newPersonAvatarFile,
+          ownerType: 'PEOPLE',
+          ownerId: person.id,
+          category: 'FOTO_PERFIL',
+        });
+
+        await updatePeople(person.id, {
+          ...peoplePayload,
+          avatarUrl: uploaded.id,
+        });
+      }
+
+      applyBeneficiarySelection('person', String(linked.id), newPersonForm.nome.trim());
+      setShowCreatePersonModal(false);
+      setNewPersonForm(defaultMemberFormData());
+      setNewPersonAvatarFile(null);
+      setNewPersonCpfError('');
+      setNewPersonPhoneError('');
+      await loadData();
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCreateAndLinkCompany = async () => {
-    if (!newCompanyName.trim() || !newCompanyTradeName.trim() || !newCompanyCnpj.trim()) return;
+    if (!hasRequiredCompanyFields(newCompanyForm)) {
+      setActionError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
+      return;
+    }
+    const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
+    if (cnpjDigits.length !== 14) {
+      setActionError('Informe um CNPJ válido com 14 dígitos.');
+      return;
+    }
     const actorUserId = await requireCurrentUserId();
     const company = await createCompany({
-      name: newCompanyName.trim(),
-      tradeName: newCompanyTradeName.trim(),
-      cnpj: newCompanyCnpj.replace(/\D/g, ''),
-      email: 'na@na.com',
-      phone: '0000000000',
-      address: 'A definir',
-      city: 'A definir',
-      state: 'SP',
+      name: newCompanyForm.razaoSocial!.trim(),
+      tradeName: newCompanyForm.nomeFantasia!.trim(),
+      cnpj: cnpjDigits,
+      email: newCompanyForm.email!.trim(),
+      phone: onlyDigits(newCompanyForm.telefone),
+      address: newCompanyForm.endereco!.trim(),
+      city: newCompanyForm.cidade!.trim(),
+      state: newCompanyForm.uf!.trim().toUpperCase(),
+      createdBy: actorUserId,
     });
     const linked = await createProjectCompany({
       projectId,
       companyId: company.id,
       createdBy: actorUserId,
     });
-    applyBeneficiarySelection('company', String(linked.id), newCompanyTradeName.trim());
+    applyBeneficiarySelection(
+      'company',
+      String(linked.id),
+      newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim()
+    );
     setShowCreateCompanyModal(false);
-    setNewCompanyName('');
-    setNewCompanyTradeName('');
-    setNewCompanyCnpj('');
+    setNewCompanyForm(createEmptyCompanyForm());
     await loadData();
   };
 
@@ -1031,6 +1248,7 @@ export default function RubricasPage() {
 
     setIsSubmitting(true);
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
 
     try {
@@ -1044,6 +1262,14 @@ export default function RubricasPage() {
         plannedAmount: valorTotal,
         executedAmount: 0,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
+        projectPeopleId:
+          !newItem.unlinkedItem && newItem.projectPeopleId
+            ? toPersistedId(newItem.projectPeopleId)
+            : null,
+        projectCompanyId:
+          !newItem.unlinkedItem && newItem.projectCompanyId
+            ? toPersistedId(newItem.projectCompanyId)
+            : null,
         notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
         createdBy: actorUserId,
       };
@@ -1073,6 +1299,7 @@ export default function RubricasPage() {
         showSavedMessage('Item adicionado com sucesso.');
       }
     } catch (error) {
+      captureItemFieldErrors(error);
       setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
     } finally {
       setIsSubmitting(false);
@@ -1082,6 +1309,7 @@ export default function RubricasPage() {
   const handleStartEdit = (item: ItemRubrica) => {
     if (!ensureCanManageChildren()) return;
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
     setEditingItem(item.id);
     setAddingToRubrica(null);
@@ -1129,6 +1357,7 @@ export default function RubricasPage() {
 
     setIsSubmitting(true);
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
 
     try {
@@ -1141,6 +1370,14 @@ export default function RubricasPage() {
         unitCost: valorUnitario,
         plannedAmount: valorTotal,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
+        projectPeopleId:
+          !editForm.unlinkedItem && editForm.projectPeopleId
+            ? toPersistedId(editForm.projectPeopleId)
+            : null,
+        projectCompanyId:
+          !editForm.unlinkedItem && editForm.projectCompanyId
+            ? toPersistedId(editForm.projectCompanyId)
+            : null,
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
         updatedBy: actorUserId,
       });
@@ -1170,6 +1407,7 @@ export default function RubricasPage() {
         showSavedMessage('Item atualizado com sucesso.');
       }
     } catch (error) {
+      captureItemFieldErrors(error);
       setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
     } finally {
       setIsSubmitting(false);
@@ -1179,6 +1417,7 @@ export default function RubricasPage() {
   const handleCancelEdit = () => {
     setEditingItem(null);
     setEditForm(null);
+    setItemFieldErrors({});
   };
 
   const openDeleteItemModal = (rubricaId: string, item: ItemRubrica) => {
@@ -1809,7 +2048,8 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Vínculo</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Empresa da rubrica</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Responsável do item</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Metas</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
                       </tr>
@@ -1855,6 +2095,15 @@ export default function RubricasPage() {
                           <td className="py-2 px-2 text-right">
                             <span className="font-semibold text-blue-600">
                               {formatCurrency(calcularValorFinalItem(item))}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-700">
+                            <span
+                              className={
+                                item.projectCompanyId ? 'text-gray-700' : 'text-gray-400'
+                              }
+                            >
+                              {resolveProjectCompanyLabel(item)}
                             </span>
                           </td>
                           <td className="py-2 px-2 text-gray-700">
@@ -2152,6 +2401,8 @@ export default function RubricasPage() {
                     setNewItem((current) => ({
                       ...current,
                       unlinkedItem: Boolean(checked),
+                      projectPeopleId: checked ? undefined : current.projectPeopleId,
+                      projectCompanyId: checked ? undefined : current.projectCompanyId,
                       beneficiaryType: checked ? undefined : current.beneficiaryType,
                       beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
                     }))
@@ -2180,6 +2431,8 @@ export default function RubricasPage() {
                         ...current,
                         beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
                         beneficiaryReferenceId: undefined,
+                        projectPeopleId: undefined,
+                        projectCompanyId: undefined,
                       }))
                     }
                     disabled={isSubmitting}
@@ -2199,15 +2452,40 @@ export default function RubricasPage() {
                         : []
                     ).map((option) => ({ value: option.id, label: option.label }))}
                     value={newItem.beneficiaryReferenceId}
-                    placeholder="Selecione"
+                    placeholder={
+                      !newItem.beneficiaryType
+                        ? 'Selecione primeiro o tipo de vínculo'
+                        : newItem.beneficiaryType === 'company'
+                          ? 'Selecione a empresa do projeto'
+                          : 'Selecione a pessoa do projeto'
+                    }
                     onChange={(value) =>
                       setNewItem((current) => ({
                         ...current,
                         beneficiaryReferenceId: value ?? undefined,
+                        projectPeopleId:
+                          current.beneficiaryType === 'person' ? value ?? undefined : current.projectPeopleId,
+                        projectCompanyId:
+                          current.beneficiaryType === 'company' ? value ?? undefined : current.projectCompanyId,
                       }))
                     }
-                    disabled={isSubmitting || !newItem.beneficiaryType}
-                  />
+                  disabled={isSubmitting || !newItem.beneficiaryType}
+                />
+                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-red-600">
+                      {itemFieldErrors.projectPeopleId}
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectCompanyId ? (
+                    <p className="mt-1 text-xs text-red-600">
+                      {itemFieldErrors.projectCompanyId}
+                    </p>
+                  ) : null}
                 </div>
 
                 {newItem.beneficiaryType === 'person' ? (
@@ -2221,7 +2499,13 @@ export default function RubricasPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowCreatePersonModal(true)}
+                      onClick={() => {
+                        setNewPersonForm(defaultMemberFormData());
+                        setNewPersonAvatarFile(null);
+                        setNewPersonCpfError('');
+                        setNewPersonPhoneError('');
+                        setShowCreatePersonModal(true);
+                      }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
                     >
                       Cadastrar nova pessoa
@@ -2438,6 +2722,45 @@ export default function RubricasPage() {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Empresa contratada
+              </label>
+              <Dropdown
+                searchable
+                options={projectCompanyOptions.map((option) => ({
+                  value: option.id,
+                  label: option.label,
+                }))}
+                value={editForm.projectCompanyId}
+                placeholder={
+                  projectCompanyOptions.length > 0
+                    ? 'Selecione a empresa contratada'
+                    : 'Nenhuma empresa contratada vinculada'
+                }
+                onChange={(value) =>
+                  setEditForm((current) =>
+                    current
+                      ? {
+                          ...current,
+                          projectCompanyId: value ?? undefined,
+                          beneficiaryType: value ? 'company' : current.beneficiaryType,
+                          beneficiaryReferenceId: value ?? current.beneficiaryReferenceId,
+                        }
+                      : current
+                  )
+                }
+                disabled={isSubmitting || projectCompanyOptions.length === 0}
+              />
+              {itemFieldErrors.projectCompanyId ? (
+                <p className="text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  A empresa precisa estar vinculada ao mesmo contrato da rubrica.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -2686,83 +3009,42 @@ export default function RubricasPage() {
         </div>
       </AppModalShell>
 
-      <AppModalShell
-        isOpen={showCreatePersonModal}
-        title="Nova pessoa"
-        onClose={() => setShowCreatePersonModal(false)}
-      >
-        <div className="space-y-4">
-          <input
-            type="text"
-            value={newPersonName}
-            onChange={(event) => setNewPersonName(event.target.value)}
-            placeholder="Nome completo"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setShowCreatePersonModal(false)}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCreateAndLinkPerson()}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-            >
-              Salvar e vincular
-            </button>
-          </div>
-        </div>
-      </AppModalShell>
+      {showCreatePersonModal ? (
+        <MemberFormModal
+          formData={newPersonForm}
+          setFormData={setNewPersonForm}
+          avatarFile={newPersonAvatarFile}
+          setAvatarFile={setNewPersonAvatarFile}
+          currentAvatarUrl=""
+          isSaving={isSubmitting}
+          isEditingItem={false}
+          onClose={() => {
+            setShowCreatePersonModal(false);
+            setNewPersonForm(defaultMemberFormData());
+            setNewPersonAvatarFile(null);
+            setNewPersonCpfError('');
+            setNewPersonPhoneError('');
+          }}
+          onSave={() => void handleCreateAndLinkPerson()}
+          cpfError={newPersonCpfError}
+          setCpfError={setNewPersonCpfError}
+          phoneError={newPersonPhoneError}
+          setPhoneError={setNewPersonPhoneError}
+        />
+      ) : null}
 
-      <AppModalShell
+      <CompanyFormModal
         isOpen={showCreateCompanyModal}
-        title="Nova empresa"
-        onClose={() => setShowCreateCompanyModal(false)}
-      >
-        <div className="space-y-3">
-          <input
-            type="text"
-            value={newCompanyName}
-            onChange={(event) => setNewCompanyName(event.target.value)}
-            placeholder="Razão social"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
-            value={newCompanyTradeName}
-            onChange={(event) => setNewCompanyTradeName(event.target.value)}
-            placeholder="Nome fantasia"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
-            value={newCompanyCnpj}
-            onChange={(event) => setNewCompanyCnpj(event.target.value)}
-            placeholder="CNPJ"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setShowCreateCompanyModal(false)}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCreateAndLinkCompany()}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-            >
-              Salvar e vincular
-            </button>
-          </div>
-        </div>
-      </AppModalShell>
+        formData={newCompanyForm}
+        setFormData={setNewCompanyForm}
+        isSaving={isSubmitting}
+        isEditingItem={false}
+        onClose={() => {
+          setShowCreateCompanyModal(false);
+          setNewCompanyForm(createEmptyCompanyForm());
+        }}
+        onSave={() => void handleCreateAndLinkCompany()}
+      />
 
       {canManageChildren && itemParaRemanejamento && (
         <RemanejamentoModal

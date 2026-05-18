@@ -132,9 +132,14 @@ O módulo `[contratoId]` está localizado em `src/app/(dashboard)/contratos/[con
 - Remoção de rubricas e itens
 - Cálculo automático de totais por rubrica e total geral
 - Resumo por rubrica no final da página
+- Vínculo opcional do item de rubrica com pessoa ou empresa já vinculada ao projeto
+- Cadastro de nova pessoa e nova empresa diretamente no fluxo de criação do item de rubrica
+- Reaproveitamento dos modais oficiais de cadastro usados em `/contratos/[contratoId]/equipe-tecnica` e `/contratos/[contratoId]/empresas`
+- Preenchimento automático do beneficiário do item após cadastrar ou vincular pessoa/empresa ao projeto
 
 **Componentes:**
-- `_components/`: (pasta vazia no momento, preparada para componentes futuros)
+- `_components/CompanyFormModal.tsx`: modal compartilhado de cadastro/edição de empresa do projeto
+- `_components/MemberFormModal.tsx`: modal compartilhado de cadastro/edição de pessoa do projeto
 
 **Ordem de Exibição para o Usuário:** 4ª aba
 
@@ -171,6 +176,7 @@ O módulo `[contratoId]` está localizado em `src/app/(dashboard)/contratos/[con
   - Outras informações relevantes
 - Edição e remoção de membros
 - Visualização de papéis e responsabilidades
+- O formulário de cadastro/edição de pessoa fica centralizado em `_components/MemberFormModal.tsx` e também é usado pelo fluxo de rubricas
 
 **Ordem de Exibição para o Usuário:** 6ª aba
 

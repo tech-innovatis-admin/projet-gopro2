@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, UserCircle2, X } from "lucide-react";
-import { DatePicker } from "@/components/ui/DatePicker";
-import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, UserCircle2, X } from "lucide-react";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
-import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
-import { CompanyResponsiblePersonSection } from "@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection";
+import {
+  CompanyFormModal as SharedCompanyFormModal,
+  type CompanyFormData,
+  hasRequiredCompanyFields as hasRequiredSharedCompanyFields,
+  onlyDigits as onlyDigitsShared,
+} from "../_components/CompanyFormModal";
 import {
   listBudgetItems,
   listBudgetTransfers,
@@ -75,6 +77,8 @@ type EmpresaProjeto = {
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
+  availableBalance?: number;
+  executionPercentage?: number;
 };
 
 type BeneficiaryFinancialSummary = {
@@ -94,23 +98,6 @@ function digits(value?: string) {
   return (value || "").replace(/\D/g, "");
 }
 
-function formatZipCode(value?: string) {
-  const onlyNumbers = digits(value).slice(0, 8);
-  if (onlyNumbers.length <= 5) return onlyNumbers;
-  return `${onlyNumbers.slice(0, 5)}-${onlyNumbers.slice(5)}`;
-}
-
-function formatPhone(value?: string) {
-  const onlyNumbers = digits(value).slice(0, 11);
-  if (!onlyNumbers) return "";
-  if (onlyNumbers.length <= 2) return `(${onlyNumbers}`;
-  if (onlyNumbers.length <= 6) return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2)}`;
-  if (onlyNumbers.length <= 10) {
-    return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 6)}-${onlyNumbers.slice(6)}`;
-  }
-  return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 7)}-${onlyNumbers.slice(7)}`;
-}
-
 function formatCnpj(value?: string) {
   const onlyNumbers = digits(value).slice(0, 14);
   if (onlyNumbers.length <= 2) return onlyNumbers;
@@ -122,48 +109,14 @@ function formatCnpj(value?: string) {
   return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2, 5)}.${onlyNumbers.slice(5, 8)}/${onlyNumbers.slice(8, 12)}-${onlyNumbers.slice(12)}`;
 }
 
-type ViaCepResponse = {
-  cep?: string;
-  logradouro?: string;
-  localidade?: string;
-  uf?: string;
-  erro?: boolean;
-};
-
-async function fetchViaCep(zipCode: string) {
-  const normalizedZipCode = digits(zipCode);
-  if (normalizedZipCode.length !== 8) return null;
-
-  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
-  if (!response.ok) {
-    throw new Error("Não foi possível consultar o CEP.");
-  }
-
-  const data = (await response.json()) as ViaCepResponse;
-  if (data.erro) return null;
-  return data;
-}
-
-function isBlank(value?: string) {
-  return !value || value.trim().length === 0;
-}
-
-function hasRequiredCompanyFields(formData: Partial<EmpresaProjeto>) {
-  return (
-    !isBlank(formData.razaoSocial) &&
-    !isBlank(formData.nomeFantasia) &&
-    !isBlank(formData.cnpj) &&
-    !isBlank(formData.email) &&
-    !isBlank(formData.telefone) &&
-    !isBlank(formData.endereco) &&
-    !isBlank(formData.cidade) &&
-    !isBlank(formData.uf)
-  );
-}
-
 function toOptional(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function formatCurrency(value?: number) {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
 function formatDateBr(value?: string) {
@@ -171,11 +124,6 @@ function formatDateBr(value?: string) {
   const parts = value.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return value;
-}
-
-function formatCurrency(value?: number) {
-  if (typeof value !== "number") return "—";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
 function toSafeNumber(value: unknown) {
@@ -199,24 +147,6 @@ async function fetchAllPages<T>(
   }
 
   return allItems;
-}
-
-function formatCurrencyInput(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function parseCurrencyInput(input: string) {
-  const onlyDigits = input.replace(/\D/g, "");
-  if (!onlyDigits) return undefined;
-  const cents = Number(onlyDigits);
-  if (!Number.isFinite(cents)) return undefined;
-  return cents / 100;
 }
 
 function getCompanyLabel(company: CompanyResponseDTO) {
@@ -265,7 +195,7 @@ export default function EmpresasPage() {
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingEmpresa, setEditingEmpresa] = useState<EmpresaProjeto | null>(null);
-  const [formData, setFormData] = useState<Partial<EmpresaProjeto>>({});
+  const [formData, setFormData] = useState<Partial<CompanyFormData>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
@@ -402,6 +332,9 @@ export default function EmpresasPage() {
           dataInicio: link.startDate || undefined,
           dataFim: link.endDate || undefined,
           observacao: link.notes || undefined,
+          availableBalance: typeof link.availableBalance === "number" ? link.availableBalance : undefined,
+          executionPercentage:
+            typeof link.executionPercentage === "number" ? link.executionPercentage : undefined,
         };
       });
 
@@ -526,12 +459,12 @@ export default function EmpresasPage() {
       setActionError("ID do contrato inválido.");
       return;
     }
-    if (!hasRequiredCompanyFields(formData)) {
+    if (!hasRequiredSharedCompanyFields(formData)) {
       setActionError("Preencha os campos obrigatórios: razão social, nome fantasia, CNPJ, e-mail, telefone, endereço, cidade e UF.");
       return;
     }
 
-    const cnpjDigits = digits(formData.cnpj);
+    const cnpjDigits = onlyDigitsShared(formData.cnpj);
     if (cnpjDigits.length !== 14) {
       setActionError("Informe um CNPJ válido com 14 dígitos.");
       return;
@@ -699,6 +632,12 @@ export default function EmpresasPage() {
             const financialSummary = empresa.projectCompanyId
               ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
               : undefined;
+            const executionPercentage =
+              typeof empresa.executionPercentage === "number"
+                ? empresa.executionPercentage
+                : financialSummary && financialSummary.finalBudgetAmount > 0
+                  ? (financialSummary.paidAmount / financialSummary.finalBudgetAmount) * 100
+                  : 0;
             return (
               <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
@@ -775,6 +714,14 @@ export default function EmpresasPage() {
                         {formatCurrency(financialSummary.pendingAmount)}
                       </strong>
                     </p>
+                    <p className="text-sm text-gray-700">
+                      Percentual executado:{" "}
+                      <strong className="text-blue-700">
+                        {Number.isFinite(executionPercentage)
+                          ? `${executionPercentage.toFixed(2).replace(".", ",")}%`
+                          : "0,00%"}
+                      </strong>
+                    </p>
                   </div>
                 )}
               </div>
@@ -813,7 +760,8 @@ export default function EmpresasPage() {
       )}
 
       {canManageChildren && isFormModalOpen && (
-        <CompanyFormModal
+        <SharedCompanyFormModal
+          isOpen={isFormModalOpen}
           formData={formData}
           setFormData={setFormData}
           isSaving={isSaving}
@@ -834,252 +782,6 @@ export default function EmpresasPage() {
           onConfirm={() => { void linkExistingCompany(); }}
         />
       )}
-    </div>
-  );
-}
-
-function CompanyFormModal({
-  formData,
-  setFormData,
-  isSaving,
-  isEditingItem,
-  onSave,
-  onClose,
-  onDelete,
-}: {
-  formData: Partial<EmpresaProjeto>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<EmpresaProjeto>>>;
-  isSaving: boolean;
-  isEditingItem: boolean;
-  onSave: () => void;
-  onClose: () => void;
-  onDelete?: () => void;
-}) {
-  const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
-  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
-  const hasFilledData = Object.values(formData).some((value) => {
-    if (typeof value === "string") return value.trim().length > 0;
-    if (typeof value === "number") return value > 0;
-    return value !== undefined && value !== null;
-  });
-  const { requestClose, discardConfirmProps } = useModalCloseGuard({
-    isOpen: true,
-    shouldConfirm: hasFilledData,
-    closeDisabled: isSaving,
-    onClose,
-  });
-
-  const handleLookupZipCode = async (rawZipCode?: string) => {
-    const normalizedZipCode = digits(rawZipCode ?? formData.cep);
-    if (normalizedZipCode.length !== 8) {
-      setZipCodeLookupError("CEP deve conter 8 dígitos.");
-      return;
-    }
-
-    try {
-      setZipCodeLookupError(null);
-      setIsResolvingZipCode(true);
-      const viaCepData = await fetchViaCep(normalizedZipCode);
-
-      if (!viaCepData) {
-        setZipCodeLookupError("CEP não encontrado.");
-        return;
-      }
-
-      setFormData((prev) => {
-        if (digits(prev.cep) !== normalizedZipCode) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          cep: formatZipCode(normalizedZipCode),
-          endereco: viaCepData.logradouro || prev.endereco,
-          cidade: viaCepData.localidade || prev.cidade,
-          uf: (viaCepData.uf || prev.uf || "").toUpperCase(),
-        };
-      });
-    } catch {
-      setZipCodeLookupError("Não foi possível consultar o CEP.");
-    } finally {
-      setIsResolvingZipCode(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
-          <div className="flex items-center gap-3">
-            <div className="h-6 w-6"><BriefcaseBusinessIcon /></div>
-            <h2 className="text-lg font-bold">{isEditingItem ? "Editar Empresa" : "Nova Empresa"}</h2>
-          </div>
-          <button onClick={requestClose} disabled={isSaving} className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-60"><X className="h-5 w-5" /></button>
-        </div>
-
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Razão Social" required>
-              <input type="text" value={formData.razaoSocial || ""} onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razão social da empresa" />
-            </Field>
-            <Field label="Nome Fantasia" required>
-              <input type="text" value={formData.nomeFantasia || ""} onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia" />
-            </Field>
-            <Field label="CNPJ" required>
-              <input
-                type="text"
-                value={formData.cnpj || ""}
-                onChange={(e) => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
-                maxLength={18}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="00.000.000/0000-00"
-              />
-            </Field>
-            <Field label="E-mail" required>
-              <input type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="email@empresa.com.br" />
-            </Field>
-            <Field label="Telefone" required>
-              <input
-                type="text"
-                value={formData.telefone || ""}
-                onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
-                maxLength={15}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="(00) 00000-0000"
-              />
-            </Field>
-            <Field label="CEP">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={formData.cep || ""}
-                    onChange={(e) => {
-                      const formattedZipCode = formatZipCode(e.target.value);
-                      setFormData({ ...formData, cep: formattedZipCode });
-                      if (digits(formattedZipCode).length === 8) {
-                        void handleLookupZipCode(formattedZipCode);
-                      } else {
-                        setZipCodeLookupError(null);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (digits(formData.cep).length === 8) {
-                        void handleLookupZipCode();
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                    placeholder="00000-000"
-                    maxLength={9}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleLookupZipCode();
-                    }}
-                    className="px-3 py-2 text-xs font-medium text-[#004225] border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={isResolvingZipCode}
-                  >
-                    {isResolvingZipCode ? "Buscando..." : "Buscar CEP"}
-                  </button>
-                </div>
-                {zipCodeLookupError ? (
-                  <p className="text-xs text-red-600">{zipCodeLookupError}</p>
-                ) : null}
-              </div>
-            </Field>
-            <Field label="Endereço" required className="md:col-span-2">
-              <input type="text" value={formData.endereco || ""} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Rua, número e bairro" />
-            </Field>
-            <Field label="Cidade" required>
-              <input type="text" value={formData.cidade || ""} onChange={(e) => setFormData({ ...formData, cidade: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
-            </Field>
-            <Field label="UF" required>
-              <input
-                type="text"
-                value={formData.uf || ""}
-                onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase().slice(0, 2) })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="UF"
-                maxLength={2}
-              />
-            </Field>
-            <div className="md:col-span-2">
-              <CompanyResponsiblePersonSection
-                value={formData.responsavelPersonId || undefined}
-                responsavel={formData.responsavel}
-                onChange={(responsavelPersonId, responsavel) =>
-                  setFormData((current) => ({
-                    ...current,
-                    responsavelPersonId: responsavelPersonId ?? "",
-                    responsavel,
-                  }))
-                }
-                disabled={isSaving}
-                enabled
-                labels={{
-                  description:
-                    "Opcional. Vincule uma pessoa ja cadastrada ou cadastre uma nova para usar como responsavel desta empresa.",
-                  helperText:
-                    "Esse vinculo prepara as validacoes futuras entre a empresa do contrato e pessoas ja alocadas no projeto.",
-                  createModalDescription:
-                    "Cadastre a pessoa e vincule-a imediatamente como responsavel desta empresa.",
-                }}
-              />
-            </div>
-            <Field label="Tipo de Serviço" className="md:col-span-2">
-              <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
-            </Field>
-            <Field label="Tipo de Empresa">
-              <Dropdown
-                options={[
-                  { value: "INDEPENDENTE", label: "Independente" },
-                  { value: "INCUBADA", label: "Incubada" },
-                ]}
-                value={formData.tipoEmpresa || "INDEPENDENTE"}
-                onChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    tipoEmpresa: (value || "INDEPENDENTE") as TipoEmpresa,
-                  })
-                }
-                placeholder="Selecione..."
-                disabled={isSaving}
-                className="w-full"
-              />
-            </Field>
-            <Field label="Valor do Contrato (R$)">
-              <input type="text" inputMode="numeric" value={formatCurrencyInput(formData.valorContrato)} onChange={(e) => setFormData({ ...formData, valorContrato: parseCurrencyInput(e.target.value) })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="R$ 0,00" />
-            </Field>
-            <Field label="Data de Início">
-              <DatePicker value={formData.dataInicio || ""} onChange={(value) => setFormData({ ...formData, dataInicio: value })} />
-            </Field>
-            <Field label="Data de Término">
-              <DatePicker value={formData.dataFim || ""} onChange={(value) => setFormData({ ...formData, dataFim: value })} />
-            </Field>
-            <Field label="Observações" className="md:col-span-2">
-              <textarea value={formData.observacao || ""} onChange={(e) => setFormData({ ...formData, observacao: e.target.value })} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none" placeholder="Observações adicionais" />
-            </Field>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <div>
-            {isEditingItem && onDelete && (
-              <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); requestClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
-                <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vínculo
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={requestClose} disabled={isSaving} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60">Cancelar</button>
-            <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || digits(formData.cnpj).length !== 14} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
-            </button>
-          </div>
-        </div>
-      </div>
-      <ConfirmDiscardModal {...discardConfirmProps} isLoading={isSaving} />
     </div>
   );
 }
@@ -1139,23 +841,5 @@ function LinkExistingCompanyModal({
   );
 }
 
-function Field({
-  label,
-  required,
-  className,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className || ""}`}>
-      <label className="block text-sm font-medium text-gray-700">
-        {label} {required ? <span className="text-red-500">*</span> : null}
-      </label>
-      {children}
-    </div>
-  );
-}
+
+
