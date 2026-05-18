@@ -2,7 +2,22 @@
 
 import { AlertCircle } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
-import type { Contrato } from "../page";
+
+type Contrato = {
+  codigo: string;
+  titulo: string;
+  tipo: "PROJETO" | "PRODUTO";
+  status: string;
+  coordenador: string;
+  parceiro: string;
+  orgaoFinanciador: string;
+  segmentos: string[];
+  localidade: string;
+  valorTotal: number;
+  dataInicio: string;
+  dataFim: string;
+  descricao?: string;
+};
 
 interface InformacoesContratoTabProps {
   contrato: Contrato;

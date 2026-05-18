@@ -1001,6 +1001,7 @@ export interface ExpenseResponseDTO {
   paidBy: ExpensePaidByEnum;
   personId: number | null;
   organizationId: number | null;
+  projectCompanyId: number | null;
   description: string | null;
   invoiceNumber: string | null;
   invoiceDate: string | null;
@@ -1024,6 +1025,7 @@ export interface ExpenseRequestDTO {
   paidBy?: ExpensePaidByEnum;
   personId?: number;
   organizationId?: number;
+  projectCompanyId?: number;
   description?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
@@ -1077,6 +1079,9 @@ export interface BudgetItemResponseDTO {
   beneficiaryType: 'person' | 'company' | null;
   contractedAmount: number | null;
   notes: string | null;
+  webs: string | null;
+  serviceOrder: string | null;
+  protocol: string | null;
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -1098,6 +1103,9 @@ export interface BudgetItemRequestDTO {
   beneficiaryType?: 'person' | 'company' | null;
   contractedAmount?: number | null;
   notes?: string;
+  webs?: string;
+  serviceOrder?: string;
+  protocol?: string;
   createdBy?: number;
 }
 

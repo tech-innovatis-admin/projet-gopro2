@@ -1482,7 +1482,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange(partnerTargetField, String(createdPartner.id));
-      closePartnerModal();
+      forceClosePartnerModal();
     } catch (error) {
       setPartnerFormError(getUserErrorMessage(error, "Não foi possível cadastrar o parceiro."));
     } finally {
@@ -1573,7 +1573,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("clientePrimarioId", String(createdClient.id));
-      closeClientModal();
+      forceCloseClientModal();
     } catch (error) {
       setClientFormError(getUserErrorMessage(error, "Não foi possível cadastrar o cliente."));
     } finally {
@@ -1669,7 +1669,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("clienteSecundarioId", String(createdSecretary.id));
-      closeSecretaryModal();
+      forceCloseSecretaryModal();
     } catch (error) {
       setSecretaryFormError(getUserErrorMessage(error, "Não foi possível cadastrar a secretaria."));
     } finally {
@@ -1820,7 +1820,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("coordenador", String(createdPerson.id));
-      closeCoordinatorModal();
+      forceCloseCoordinatorModal();
     } catch (error) {
       setCoordinatorFormError(getUserErrorMessage(error, "Não foi possível cadastrar o coordenador."));
     } finally {

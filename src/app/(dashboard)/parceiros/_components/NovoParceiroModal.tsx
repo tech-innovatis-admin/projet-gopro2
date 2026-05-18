@@ -331,6 +331,7 @@ export function NovoParceiroModal({
         observacoes: form.observacoes.trim() || undefined,
       });
 
+      resetFormState();
       onClose();
     } catch (submitFailure) {
       const fallback = getUserErrorMessage(submitFailure, "Não foi possível cadastrar o parceiro.");

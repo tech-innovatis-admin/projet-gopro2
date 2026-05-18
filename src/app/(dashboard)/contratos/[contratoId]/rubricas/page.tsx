@@ -19,6 +19,7 @@ import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
+import { ContractRubricasLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
 import {
   CompanyFormModal,
   type CompanyFormData,
@@ -57,6 +58,8 @@ import {
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
   updatePeople,
+  updateProjectPeople,
+  updateProjectCompany,
   updateBudgetCategory,
   updateBudgetItem,
   uploadDocument,
@@ -134,6 +137,9 @@ interface ItemRubrica {
   metaId?: string;
   metaIds?: string[];
   notes?: string;
+  webs?: string;
+  serviceOrder?: string;
+  protocol?: string;
   subitens?: Subitem[];
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
@@ -147,6 +153,7 @@ interface ItemRubrica {
 interface ProjectPersonOption {
   id: string;
   label: string;
+  baseAmount?: number | null;
 }
 interface ProjectCompanyOption {
   id: string;
@@ -155,6 +162,7 @@ interface ProjectCompanyOption {
   cnpj?: string | null;
   status?: ContractingStatusEnum | null;
   availableBalance?: number | null;
+  totalValue?: number | null;
 }
 
 interface Rubrica {
@@ -218,6 +226,10 @@ const buildProjectCompanyOption = (
     typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
       ? company.availableBalance
       : null;
+  const totalValue =
+    typeof company.totalValue === 'number' && Number.isFinite(company.totalValue)
+      ? company.totalValue
+      : null;
 
   return {
     id: String(company.id),
@@ -225,6 +237,7 @@ const buildProjectCompanyOption = (
     cnpj,
     status,
     availableBalance: balance,
+    totalValue,
     label: [
       name,
       cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado',
@@ -278,6 +291,8 @@ const formatCnpjCompact = (value?: string | null) => {
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
 
+const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
+
 const isPersistedId = (id: string) => /^\d+$/.test(id);
 const toPersistedId = (id: string) => Number.parseInt(id, 10);
 const META_IDS_NOTES_PREFIX = '[[GOPRO_META_IDS:';
@@ -289,6 +304,9 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   meses: 1,
   valorUnitario: 0,
   metaIds: [],
+  webs: '',
+  serviceOrder: '',
+  protocol: '',
   projectPeopleId: undefined,
   projectCompanyId: undefined,
   beneficiaryType: undefined,
@@ -305,6 +323,7 @@ const createEmptyCompanyForm = (): CompanyFormData => ({
   endereco: '',
   cidade: '',
   uf: '',
+  status: RUBRICA_DEFAULT_COMPANY_STATUS,
 });
 
 
@@ -314,6 +333,9 @@ const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
   const selectedMetaIds = (draft.metaIds ?? []).filter(Boolean);
   return (
     (draft.descricao ?? '').trim().length > 0 ||
+    (draft.webs ?? '').trim().length > 0 ||
+    (draft.serviceOrder ?? '').trim().length > 0 ||
+    (draft.protocol ?? '').trim().length > 0 ||
     toPositiveInt(draft.quantidade, 1) !== 1 ||
     toPositiveInt(draft.meses, 1) !== 1 ||
     toMoneyValue(draft.valorUnitario) > 0 ||
@@ -690,9 +712,18 @@ export default function RubricasPage() {
 
     return (
       (editForm.descricao ?? '').trim() !== (originalEditingItem.descricao ?? '').trim() ||
+      (editForm.webs ?? '').trim() !== (originalEditingItem.webs ?? '').trim() ||
+      (editForm.serviceOrder ?? '').trim() !== (originalEditingItem.serviceOrder ?? '').trim() ||
+      (editForm.protocol ?? '').trim() !== (originalEditingItem.protocol ?? '').trim() ||
       toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
       toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
       toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
+      Boolean(editForm.unlinkedItem) !==
+        Boolean(!originalEditingItem.beneficiaryType || !originalEditingItem.beneficiaryReferenceId) ||
+      (editForm.beneficiaryType ?? '') !== (originalEditingItem.beneficiaryType ?? '') ||
+      (editForm.beneficiaryReferenceId ?? '') !==
+        (originalEditingItem.beneficiaryReferenceId ?? '') ||
+      (editForm.projectPeopleId ?? '') !== (originalEditingItem.projectPeopleId ?? '') ||
       (editForm.projectCompanyId ?? '') !== (originalEditingItem.projectCompanyId ?? '') ||
       JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
     );
@@ -755,6 +786,10 @@ export default function RubricasPage() {
         .map((item) => ({
           id: String(item.id),
           label: item.personFullName?.trim() || `Pessoa #${item.personId}`,
+          baseAmount:
+            typeof item.baseAmount === 'number' && Number.isFinite(item.baseAmount)
+              ? item.baseAmount
+              : null,
         }))
         .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
       setProjectPeopleOptions(projectPeople);
@@ -820,6 +855,9 @@ export default function RubricasPage() {
           metaId: selectedMetaIds[0],
           metaIds: selectedMetaIds,
           notes: parsedNotes.cleanedNotes,
+          webs: item.webs ?? undefined,
+          serviceOrder: item.serviceOrder ?? undefined,
+          protocol: item.protocol ?? undefined,
           projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
           projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
           beneficiaryType: item.beneficiaryType ?? undefined,
@@ -1068,12 +1106,17 @@ export default function RubricasPage() {
   const handleLinkExistingPerson = async () => {
     if (!selectedPersonToLink) return;
     const actorUserId = await requireCurrentUserId();
+    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
+    const draftMeses = toPositiveInt(newItem.meses, 1);
+    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
+    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
     const personLabel =
       availablePeople.find((person) => String(person.id) === selectedPersonToLink)?.fullName ??
       `Pessoa #${selectedPersonToLink}`;
     const linked = await createProjectPeople({
       projectId,
       personId: Number(selectedPersonToLink),
+      baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
       createdBy: actorUserId,
     });
     applyBeneficiarySelection('person', String(linked.id), personLabel);
@@ -1084,21 +1127,35 @@ export default function RubricasPage() {
 
   const handleLinkExistingCompany = async () => {
     if (!selectedCompanyToLink) return;
-    const actorUserId = await requireCurrentUserId();
-    const companyLabel =
-      availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)
-        ?.tradeName ||
-      availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)?.name ||
-      `Empresa #${selectedCompanyToLink}`;
-    const linked = await createProjectCompany({
-      projectId,
-      companyId: Number(selectedCompanyToLink),
-      createdBy: actorUserId,
-    });
-    applyBeneficiarySelection('company', String(linked.id), companyLabel);
-    setShowLinkCompanyModal(false);
-    setSelectedCompanyToLink(undefined);
-    await loadData();
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
+      const draftMeses = toPositiveInt(newItem.meses, 1);
+      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
+      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+      const actorUserId = await requireCurrentUserId();
+      const companyLabel =
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)
+          ?.tradeName ||
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)?.name ||
+        `Empresa #${selectedCompanyToLink}`;
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: Number(selectedCompanyToLink),
+        totalValue: draftItemTotal > 0 ? draftItemTotal : undefined,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        createdBy: actorUserId,
+      });
+      applyBeneficiarySelection('company', String(linked.id), companyLabel);
+      setShowLinkCompanyModal(false);
+      setSelectedCompanyToLink(undefined);
+      await loadData();
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCreateAndLinkPerson = async () => {
@@ -1126,6 +1183,10 @@ export default function RubricasPage() {
     try {
       setIsSubmitting(true);
       setActionError(null);
+      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
+      const draftMeses = toPositiveInt(newItem.meses, 1);
+      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
+      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
       const actorUserId = await requireCurrentUserId();
       const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
       const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
@@ -1153,7 +1214,11 @@ export default function RubricasPage() {
         endDate: toOptional(newPersonForm.endDate),
         status: newPersonForm.status || undefined,
         baseAmount:
-          typeof newPersonForm.baseAmount === 'number' ? newPersonForm.baseAmount : undefined,
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
         notes: toOptional(newPersonForm.notes),
         createdBy: actorUserId,
       });
@@ -1196,31 +1261,59 @@ export default function RubricasPage() {
       setActionError('Informe um CNPJ válido com 14 dígitos.');
       return;
     }
-    const actorUserId = await requireCurrentUserId();
-    const company = await createCompany({
-      name: newCompanyForm.razaoSocial!.trim(),
-      tradeName: newCompanyForm.nomeFantasia!.trim(),
-      cnpj: cnpjDigits,
-      email: newCompanyForm.email!.trim(),
-      phone: onlyDigits(newCompanyForm.telefone),
-      address: newCompanyForm.endereco!.trim(),
-      city: newCompanyForm.cidade!.trim(),
-      state: newCompanyForm.uf!.trim().toUpperCase(),
-      createdBy: actorUserId,
-    });
-    const linked = await createProjectCompany({
-      projectId,
-      companyId: company.id,
-      createdBy: actorUserId,
-    });
-    applyBeneficiarySelection(
-      'company',
-      String(linked.id),
-      newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim()
-    );
-    setShowCreateCompanyModal(false);
-    setNewCompanyForm(createEmptyCompanyForm());
-    await loadData();
+    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
+    const draftMeses = toPositiveInt(newItem.meses, 1);
+    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
+    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+    const totalValueForProjectCompany =
+      typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
+        ? newCompanyForm.valorContrato
+        : draftItemTotal > 0
+          ? draftItemTotal
+          : undefined;
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+      const actorUserId = await requireCurrentUserId();
+      const company = await createCompany({
+        name: newCompanyForm.razaoSocial!.trim(),
+        tradeName: newCompanyForm.nomeFantasia!.trim(),
+        cnpj: cnpjDigits,
+        email: newCompanyForm.email!.trim(),
+        phone: onlyDigits(newCompanyForm.telefone),
+        address: newCompanyForm.endereco!.trim(),
+        city: newCompanyForm.cidade!.trim(),
+        state: newCompanyForm.uf!.trim().toUpperCase(),
+        responsiblePersonId: newCompanyForm.responsavelPersonId
+          ? Number(newCompanyForm.responsavelPersonId)
+          : undefined,
+        createdBy: actorUserId,
+      });
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: company.id,
+        serviceType: toOptional(newCompanyForm.tipoServico),
+        totalValue: totalValueForProjectCompany,
+        startDate: toOptional(newCompanyForm.dataInicio),
+        endDate: toOptional(newCompanyForm.dataFim),
+        notes: toOptional(newCompanyForm.observacao),
+        isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
+        status: newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS,
+        createdBy: actorUserId,
+      });
+      applyBeneficiarySelection(
+        'company',
+        String(linked.id),
+        newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim()
+      );
+      setShowCreateCompanyModal(false);
+      setNewCompanyForm(createEmptyCompanyForm());
+      await loadData();
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddItem = async (rubricaId: string) => {
@@ -1245,6 +1338,14 @@ export default function RubricasPage() {
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(newItem);
+    const selectedProjectCompanyId =
+      !newItem.unlinkedItem && newItem.beneficiaryType === 'company'
+        ? (newItem.projectCompanyId ?? newItem.beneficiaryReferenceId)
+        : undefined;
+    const selectedCompany =
+      selectedProjectCompanyId
+        ? projectCompanyOptions.find((option) => option.id === selectedProjectCompanyId)
+        : null;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -1271,8 +1372,42 @@ export default function RubricasPage() {
             ? toPersistedId(newItem.projectCompanyId)
             : null,
         notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
+        webs: toOptional(newItem.webs),
+        serviceOrder: toOptional(newItem.serviceOrder),
+        protocol: toOptional(newItem.protocol),
         createdBy: actorUserId,
       };
+
+      const selectedProjectPeopleId =
+        !newItem.unlinkedItem && newItem.beneficiaryType === 'person'
+          ? (newItem.projectPeopleId ?? newItem.beneficiaryReferenceId)
+          : undefined;
+      const selectedPerson =
+        selectedProjectPeopleId
+          ? projectPeopleOptions.find((option) => option.id === selectedProjectPeopleId)
+          : null;
+
+      if (selectedPerson && selectedProjectPeopleId && isPersistedId(selectedProjectPeopleId)) {
+        const currentBaseAmount =
+          typeof selectedPerson.baseAmount === 'number' ? selectedPerson.baseAmount : 0;
+        const nextBaseAmount = Number((Math.max(0, currentBaseAmount) + valorTotal).toFixed(2));
+        await updateProjectPeople(toPersistedId(selectedProjectPeopleId), {
+          baseAmount: nextBaseAmount,
+          updatedBy: actorUserId,
+        });
+      }
+
+      if (selectedProjectCompanyId && isPersistedId(selectedProjectCompanyId)) {
+        const currentTotalValue =
+          selectedCompany && typeof selectedCompany.totalValue === 'number'
+            ? selectedCompany.totalValue
+            : 0;
+        const nextTotalValue = Number((Math.max(0, currentTotalValue) + valorTotal).toFixed(2));
+        await updateProjectCompany(toPersistedId(selectedProjectCompanyId), {
+          totalValue: nextTotalValue,
+          updatedBy: actorUserId,
+        });
+      }
 
       const createdItem = await createBudgetItem(basePayload);
       if (
@@ -1379,6 +1514,9 @@ export default function RubricasPage() {
             ? toPersistedId(editForm.projectCompanyId)
             : null,
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
+        webs: toOptional(editForm.webs),
+        serviceOrder: toOptional(editForm.serviceOrder),
+        protocol: toOptional(editForm.protocol),
         updatedBy: actorUserId,
       });
 
@@ -1796,6 +1934,14 @@ export default function RubricasPage() {
     });
   }, [remanejamentos, rubricas]);
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <ContractRubricasLoadingSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -2033,10 +2179,25 @@ export default function RubricasPage() {
                   </div>
                 ) : (
                   <ResizableTable
-                    columnCount={11}
-                    defaultWidths={[220, 80, 80, 140, 140, 120, 120, 140, 230, 280, 130]}
-                    minColumnWidth={60}
-                    className="text-sm"
+                    columnCount={14}
+                    defaultWidths={[
+                      { minWidth: 180, defaultWidth: 220, maxWidth: 420 }, // Descrição
+                      { minWidth: 70, defaultWidth: 80, maxWidth: 110 }, // Qtd
+                      { minWidth: 70, defaultWidth: 80, maxWidth: 110 }, // Meses
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 220 }, // Valor Unit.
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 220 }, // Valor Total
+                      { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Deb.)
+                      { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Cred.)
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 230 }, // Valor Final
+                      { minWidth: 200, defaultWidth: 230, maxWidth: 320 }, // Responsável
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 240 }, // WEBS
+                      { minWidth: 140, defaultWidth: 160, maxWidth: 280 }, // Ordem de Serviço
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 260 }, // Protocolo
+                      { minWidth: 220, defaultWidth: 280, maxWidth: 380 }, // Metas
+                      { minWidth: 120, defaultWidth: 130, maxWidth: 170 }, // Ações
+                    ]}
+                    minColumnWidth={70}
+                    className="text-sm min-w-max"
                   >
                     <thead>
                       <tr className="border-b border-gray-200">
@@ -2048,10 +2209,12 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Empresa da rubrica</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Responsável do item</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">WEBS</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Ordem de Serviço</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Protocolo</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Metas</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2100,20 +2263,28 @@ export default function RubricasPage() {
                           <td className="py-2 px-2 text-gray-700">
                             <span
                               className={
-                                item.projectCompanyId ? 'text-gray-700' : 'text-gray-400'
-                              }
-                            >
-                              {resolveProjectCompanyLabel(item)}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-gray-700">
-                            <span
-                              className={
                                 item.beneficiaryType ? 'text-gray-700' : 'text-gray-400'
                               }
                             >
                               {resolveBeneficiaryLabel(item)}
                             </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.webs?.trim() ? item.webs : <span className="text-gray-400">-</span>}
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.serviceOrder?.trim() ? (
+                              item.serviceOrder
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.protocol?.trim() ? (
+                              item.protocol
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="py-2 px-2 text-gray-700">
                             {(() => {
@@ -2332,6 +2503,57 @@ export default function RubricasPage() {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   disabled={isSubmitting}
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">WEBS</label>
+                <input
+                  type="text"
+                  value={newItem.webs ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      webs: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Ordem de Serviço</label>
+                <input
+                  type="text"
+                  value={newItem.serviceOrder ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      serviceOrder: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Protocolo</label>
+                <input
+                  type="text"
+                  value={newItem.protocol ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      protocol: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -2655,6 +2877,69 @@ export default function RubricasPage() {
               </div>
 
               <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">WEBS</label>
+                <input
+                  type="text"
+                  value={editForm.webs ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            webs: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Ordem de Serviço</label>
+                <input
+                  type="text"
+                  value={editForm.serviceOrder ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            serviceOrder: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Protocolo</label>
+                <input
+                  type="text"
+                  value={editForm.protocol ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            protocol: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
                 <label className="mb-1 block text-xs font-medium text-gray-700">
                   Quantidade <span className="text-red-500">*</span>
                 </label>
@@ -2724,43 +3009,113 @@ export default function RubricasPage() {
               </div>
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <label className="mb-1 block text-xs font-medium text-gray-700">
-                Empresa contratada
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                <Checkbox
+                  checked={Boolean(editForm.unlinkedItem)}
+                  onCheckedChange={(checked) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            unlinkedItem: Boolean(checked),
+                            projectPeopleId: checked ? undefined : current.projectPeopleId,
+                            projectCompanyId: checked ? undefined : current.projectCompanyId,
+                            beneficiaryType: checked ? undefined : current.beneficiaryType,
+                            beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
+                          }
+                        : current
+                    )
+                  }
+                  disabled={isSubmitting}
+                />
+                Item de rúbrica sem vínculo
               </label>
-              <Dropdown
-                searchable
-                options={projectCompanyOptions.map((option) => ({
-                  value: option.id,
-                  label: option.label,
-                }))}
-                value={editForm.projectCompanyId}
-                placeholder={
-                  projectCompanyOptions.length > 0
-                    ? 'Selecione a empresa contratada'
-                    : 'Nenhuma empresa contratada vinculada'
-                }
-                onChange={(value) =>
-                  setEditForm((current) =>
-                    current
-                      ? {
-                          ...current,
-                          projectCompanyId: value ?? undefined,
-                          beneficiaryType: value ? 'company' : current.beneficiaryType,
-                          beneficiaryReferenceId: value ?? current.beneficiaryReferenceId,
-                        }
-                      : current
-                  )
-                }
-                disabled={isSubmitting || projectCompanyOptions.length === 0}
-              />
-              {itemFieldErrors.projectCompanyId ? (
-                <p className="text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
-              ) : (
-                <p className="text-xs text-gray-500">
-                  A empresa precisa estar vinculada ao mesmo contrato da rubrica.
-                </p>
-              )}
+
+              <div
+                className={`space-y-3 transition-opacity ${
+                  editForm.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
+                }`}
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
+                  <Dropdown
+                    options={[
+                      { value: 'person', label: 'Pessoa do projeto' },
+                      { value: 'company', label: 'Empresa do projeto' },
+                    ]}
+                    value={editForm.beneficiaryType}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
+                              beneficiaryReferenceId: undefined,
+                              projectPeopleId: undefined,
+                              projectCompanyId: undefined,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Beneficiário no projeto
+                  </label>
+                  <Dropdown
+                    searchable
+                    options={(editForm.beneficiaryType === 'person'
+                      ? projectPeopleOptions
+                      : editForm.beneficiaryType === 'company'
+                        ? projectCompanyOptions
+                        : []
+                    ).map((option) => ({ value: option.id, label: option.label }))}
+                    value={editForm.beneficiaryReferenceId}
+                    placeholder={
+                      !editForm.beneficiaryType
+                        ? 'Selecione primeiro o tipo de vínculo'
+                        : editForm.beneficiaryType === 'company'
+                          ? 'Selecione a empresa do projeto'
+                          : 'Selecione a pessoa do projeto'
+                    }
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryReferenceId: value ?? undefined,
+                              projectPeopleId:
+                                current.beneficiaryType === 'person'
+                                  ? value ?? undefined
+                                  : current.projectPeopleId,
+                              projectCompanyId:
+                                current.beneficiaryType === 'company'
+                                  ? value ?? undefined
+                                  : current.projectCompanyId,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting || !editForm.beneficiaryType}
+                  />
+                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectPeopleId}</p>
+                  ) : null}
+                  {itemFieldErrors.projectCompanyId ? (
+                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

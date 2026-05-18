@@ -319,6 +319,7 @@ export function ContratoOverviewCard() {
           valueClassName="text-violet-800"
         />
       </div>
+
     </section>
   );
 }

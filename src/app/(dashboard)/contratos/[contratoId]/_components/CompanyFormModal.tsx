@@ -7,6 +7,7 @@ import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
 import { Dropdown } from '@/components/ui/dropdown';
 import { useModalCloseGuard } from '@/src/hooks/useModalCloseGuard';
 import { CompanyResponsiblePersonSection } from '@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection';
+import type { ContractingStatusEnum } from '@/src/lib/api/types';
 
 export type CompanyFormData = {
   razaoSocial?: string;
@@ -26,6 +27,7 @@ export type CompanyFormData = {
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
+  status?: ContractingStatusEnum;
 };
 
 function isBlank(value?: string) {
@@ -256,6 +258,26 @@ export function CompanyFormModal({
             </Field>
             <Field label="Observacoes" className="md:col-span-2">
               <textarea value={formData.observacao || ''} onChange={(event) => setFormData({ ...formData, observacao: event.target.value })} rows={3} className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Observacoes adicionais" />
+            </Field>
+            <Field label="Status do Contrato">
+              <Dropdown
+                options={[
+                  { value: 'EM_CADASTRO', label: 'Em cadastro' },
+                  { value: 'EM_CONTRATACAO', label: 'Em contratação' },
+                  { value: 'CONTRATADA', label: 'Contratada' },
+                  { value: 'EM_EXECUCAO', label: 'Em execução' },
+                  { value: 'CONCLUIDA', label: 'Concluída' },
+                  { value: 'CANCELADA', label: 'Cancelada' },
+                ]}
+                value={formData.status || 'EM_CADASTRO'}
+                onChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    status: (value || 'EM_CADASTRO') as ContractingStatusEnum,
+                  })
+                }
+                className="w-full"
+              />
             </Field>
           </div>
         </div>
