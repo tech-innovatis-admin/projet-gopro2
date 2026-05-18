@@ -36,6 +36,7 @@ import {
   fetchCurrentUser,
   requireCurrentUserId,
 } from "@/src/lib/auth/session";
+import { ContractLinkedItemsLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   type ContractTypeEnum,
   HttpError,
@@ -290,6 +291,9 @@ export default function EquipeTecnicaPage() {
   const [financialSummaryByProjectPeopleId, setFinancialSummaryByProjectPeopleId] = useState<
     Map<number, BeneficiaryFinancialSummary>
   >(new Map());
+  const [rubricaUsageCountByProjectPeopleId, setRubricaUsageCountByProjectPeopleId] = useState<
+    Map<number, number>
+  >(new Map());
 
   const linkedPersonIds = useMemo(
     () =>
@@ -543,15 +547,20 @@ export default function EquipeTecnicaPage() {
       }
 
       const summaryByProjectPeopleId = new Map<number, BeneficiaryFinancialSummary>();
+      const usageCountByProjectPeopleId = new Map<number, number>();
       for (const item of budgetItems) {
         if (!item.isActive) continue;
-        if (item.beneficiaryType !== "person" || !item.projectPeopleId) continue;
+        const isPersonLinkedItem =
+          item.projectPeopleId != null &&
+          (item.beneficiaryType === "person" || item.beneficiaryType == null);
+        if (!isPersonLinkedItem) continue;
 
         const finalBudgetAmount =
           toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
         const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
 
-        const current = summaryByProjectPeopleId.get(item.projectPeopleId) ?? {
+        const projectPeopleId = item.projectPeopleId as number;
+        const current = summaryByProjectPeopleId.get(projectPeopleId) ?? {
           finalBudgetAmount: 0,
           paidAmount: 0,
           pendingAmount: 0,
@@ -559,19 +568,25 @@ export default function EquipeTecnicaPage() {
 
         const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
         const nextPaidAmount = current.paidAmount + paidAmount;
-        summaryByProjectPeopleId.set(item.projectPeopleId, {
+        summaryByProjectPeopleId.set(projectPeopleId, {
           finalBudgetAmount: nextFinalBudgetAmount,
           paidAmount: nextPaidAmount,
           pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
         });
+        usageCountByProjectPeopleId.set(
+          projectPeopleId,
+          toSafeNumber(usageCountByProjectPeopleId.get(projectPeopleId)) + 1,
+        );
       }
 
       setFinancialSummaryByProjectPeopleId(summaryByProjectPeopleId);
+      setRubricaUsageCountByProjectPeopleId(usageCountByProjectPeopleId);
       setMembros(nextMembers);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar membros do projeto."));
       setMembros([]);
       setFinancialSummaryByProjectPeopleId(new Map());
+      setRubricaUsageCountByProjectPeopleId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -865,6 +880,15 @@ export default function EquipeTecnicaPage() {
 
     try {
       setActionError(null);
+      const linkedItemsCount = toSafeNumber(
+        rubricaUsageCountByProjectPeopleId.get(membro.projectPeopleId),
+      );
+      if (linkedItemsCount > 0) {
+        setActionError(
+          `Não é possível desvincular a pessoa. Existem ${linkedItemsCount} item(ns) de rubrica ativo(s) vinculados a ela neste contrato.`,
+        );
+        return;
+      }
       await deleteProjectPeople(membro.projectPeopleId);
       await loadMembros();
     } catch (error) {
@@ -929,9 +953,7 @@ export default function EquipeTecnicaPage() {
       )}
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <p className="text-sm text-gray-500">Carregando pessoas do projeto...</p>
-        </div>
+        <ContractLinkedItemsLoadingSkeleton titleWidthClassName="w-48" />
       ) : membros.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4">

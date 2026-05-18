@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ContractAuditLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
 import { BudgetTransferSummary } from "@/src/components/audit/BudgetTransferSummary";
 import { getProjectById } from "@/src/lib/api/endpoints";
@@ -526,6 +527,18 @@ export default function ContractAuditPage() {
     }
     return `Contrato ${contractId}`;
   }, [contractId, contractName, loadingContractName]);
+
+  if (loadingAccess || loading) {
+    return (
+      <div className="space-y-6">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold text-zinc-900">Auditoria</h2>
+          <p className="text-sm text-zinc-600">Ações realizadas no contrato.</p>
+        </header>
+        <ContractAuditLoadingSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

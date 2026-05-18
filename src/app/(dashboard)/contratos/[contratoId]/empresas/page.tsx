@@ -11,6 +11,7 @@ import {
   hasRequiredCompanyFields as hasRequiredSharedCompanyFields,
   onlyDigits as onlyDigitsShared,
 } from "../_components/CompanyFormModal";
+import { ContractLinkedItemsLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   listBudgetItems,
   listBudgetTransfers,
@@ -204,6 +205,9 @@ export default function EmpresasPage() {
   const [financialSummaryByProjectCompanyId, setFinancialSummaryByProjectCompanyId] = useState<
     Map<number, BeneficiaryFinancialSummary>
   >(new Map());
+  const [rubricaUsageCountByProjectCompanyId, setRubricaUsageCountByProjectCompanyId] = useState<
+    Map<number, number>
+  >(new Map());
 
   const linkedCompanyIds = useMemo(
     () => new Set(empresas.map((e) => e.companyId).filter((id): id is number => typeof id === "number")),
@@ -361,15 +365,20 @@ export default function EmpresasPage() {
       }
 
       const summaryByProjectCompanyId = new Map<number, BeneficiaryFinancialSummary>();
+      const usageCountByProjectCompanyId = new Map<number, number>();
       for (const item of budgetItems) {
         if (!item.isActive) continue;
-        if (item.beneficiaryType !== "company" || !item.projectCompanyId) continue;
+        const isCompanyLinkedItem =
+          item.projectCompanyId != null &&
+          (item.beneficiaryType === "company" || item.beneficiaryType == null);
+        if (!isCompanyLinkedItem) continue;
 
         const finalBudgetAmount =
           toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
         const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
 
-        const current = summaryByProjectCompanyId.get(item.projectCompanyId) ?? {
+        const projectCompanyId = item.projectCompanyId as number;
+        const current = summaryByProjectCompanyId.get(projectCompanyId) ?? {
           finalBudgetAmount: 0,
           paidAmount: 0,
           pendingAmount: 0,
@@ -377,19 +386,25 @@ export default function EmpresasPage() {
 
         const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
         const nextPaidAmount = current.paidAmount + paidAmount;
-        summaryByProjectCompanyId.set(item.projectCompanyId, {
+        summaryByProjectCompanyId.set(projectCompanyId, {
           finalBudgetAmount: nextFinalBudgetAmount,
           paidAmount: nextPaidAmount,
           pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
         });
+        usageCountByProjectCompanyId.set(
+          projectCompanyId,
+          toSafeNumber(usageCountByProjectCompanyId.get(projectCompanyId)) + 1,
+        );
       }
 
       setFinancialSummaryByProjectCompanyId(summaryByProjectCompanyId);
+      setRubricaUsageCountByProjectCompanyId(usageCountByProjectCompanyId);
       setEmpresas(mapped);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar empresas do projeto."));
       setEmpresas([]);
       setFinancialSummaryByProjectCompanyId(new Map());
+      setRubricaUsageCountByProjectCompanyId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -498,6 +513,7 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
+          status: formData.status,
           updatedBy: actorUserId,
         });
       } else {
@@ -511,6 +527,7 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
+          status: formData.status,
           createdBy: actorUserId,
         });
       }
@@ -535,6 +552,15 @@ export default function EmpresasPage() {
       setActionError(null);
       const empresa = empresas.find((item) => item.id === empresaId);
       if (!empresa?.projectCompanyId) throw new Error("Vínculo da empresa não encontrado.");
+      const linkedItemsCount = toSafeNumber(
+        rubricaUsageCountByProjectCompanyId.get(empresa.projectCompanyId),
+      );
+      if (linkedItemsCount > 0) {
+        setActionError(
+          `Não é possível desvincular a empresa. Existem ${linkedItemsCount} item(ns) de rubrica ativo(s) vinculados a ela neste contrato.`,
+        );
+        return;
+      }
       await deleteProjectCompany(empresa.projectCompanyId);
       await loadProjectCompanies();
     } catch (error) {
@@ -613,7 +639,7 @@ export default function EmpresasPage() {
       )}
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center"><p className="text-sm text-gray-500">Carregando empresas do projeto...</p></div>
+        <ContractLinkedItemsLoadingSkeleton titleWidthClassName="w-52" />
       ) : empresas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4"><div className="h-8 w-8 text-gray-400"><BriefcaseBusinessIcon /></div></div>

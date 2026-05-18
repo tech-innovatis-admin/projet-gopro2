@@ -20,6 +20,7 @@ import {
 import { AppModalShell } from "@/components/ui/app-modal-shell";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { MoneyInput } from "../desembolso/_components/MoneyImput";
+import { ContractMetaLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   createGoal,
   createPhase,
@@ -1829,6 +1830,10 @@ export default function MetaEtapaFasePage() {
   const isFaseModalDirty =
     Boolean(faseCreateModalState) && !areStructureDraftsEqual(faseCreateDraft, faseModalInitialDraft);
 
+  if (isLoadingData) {
+    return <ContractMetaLoadingSkeleton />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -1885,12 +1890,6 @@ export default function MetaEtapaFasePage() {
         </div>
       )}
 
-      {isLoadingData && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          Carregando metas, etapas e fases...
-        </div>
-      )}
-
       {loadError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {loadError}
@@ -1913,7 +1912,7 @@ export default function MetaEtapaFasePage() {
       </div>
 
       {/* Lista de Metas */}
-      {!isLoadingData && currentMetas.length === 0 ? (
+      {currentMetas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4">
             <Crosshair className="h-8 w-8 text-gray-400" />
@@ -1999,7 +1998,7 @@ export default function MetaEtapaFasePage() {
                   <span className="hidden text-[11px] text-slate-600 md:inline">
                     {metaFasesCount} fases
                   </span>
-                </div>
+        </div>
                 {false ? (
                   <div className="flex items-center gap-2">
                     {editingDate?.id === meta.id && editingDate?.field === "dataInicio" ? (

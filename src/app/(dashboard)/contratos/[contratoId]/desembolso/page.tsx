@@ -15,6 +15,7 @@ import { ResizableTable } from "@/components/ui/resizable-table";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { MoneyInput } from "./_components/MoneyImput";
+import { ContractDisbursementLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   createDisbursementSchedule,
   deleteDisbursementSchedule,
@@ -531,13 +532,11 @@ export default function DesembolsoPage() {
         </div>
       )}
 
-      {isLoading && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Carregando desembolsos...
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {isLoading ? (
+        <ContractDisbursementLoadingSkeleton />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
           <p className="text-sm text-gray-500">Valor Total do Projeto</p>
           <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
@@ -596,9 +595,9 @@ export default function DesembolsoPage() {
             />
           </div>
         </div>
-      </div>
+          </div>
 
-      {parcelas.length === 0 ? (
+          {parcelas.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-gray-50 py-12 text-center">
           <Calendar className="mx-auto mb-4 h-12 w-12 text-gray-400" />
           <p className="font-medium text-gray-700">Nenhuma parcela cadastrada</p>
@@ -617,8 +616,8 @@ export default function DesembolsoPage() {
             </button>
           )}
         </div>
-      ) : (
-        <ResizableTable
+          ) : (
+            <ResizableTable
           columnCount={canManageChildren ? 7 : 6}
           defaultWidths={[110, 160, 180, 140, 140, 320, ...(canManageChildren ? [120] : [])]}
           minColumnWidth={90}
@@ -719,7 +718,9 @@ export default function DesembolsoPage() {
               {canManageChildren && <td />}
             </tr>
           </tfoot>
-        </ResizableTable>
+            </ResizableTable>
+          )}
+        </>
       )}
 
       <AppModalShell
