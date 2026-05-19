@@ -326,6 +326,13 @@ const createEmptyCompanyForm = (): CompanyFormData => ({
   status: RUBRICA_DEFAULT_COMPANY_STATUS,
 });
 
+const buildDraftItemTotal = (draft: Partial<ItemRubrica>) => {
+  const quantidade = toPositiveInt(draft.quantidade, 1);
+  const meses = toPositiveInt(draft.meses, 1);
+  const valorUnitario = toMoneyValue(draft.valorUnitario);
+  return Number((quantidade * meses * valorUnitario).toFixed(2));
+};
+
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
   if (!draft) return false;
@@ -600,6 +607,10 @@ export default function RubricasPage() {
   const [newPersonCpfError, setNewPersonCpfError] = useState('');
   const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
   const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
+  const [createPersonModalError, setCreatePersonModalError] = useState<string | null>(null);
+  const [createCompanyModalError, setCreateCompanyModalError] = useState<string | null>(null);
+  const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
+  const [linkCompanyModalError, setLinkCompanyModalError] = useState<string | null>(null);
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -1072,27 +1083,21 @@ export default function RubricasPage() {
     setItemFieldErrors({});
   };
 
-  const applyBeneficiarySelection = (
-    type: BeneficiaryType,
-    referenceId: string,
-    label: string
-  ) => {
-    if (type === 'person') {
-      setProjectPeopleOptions((current) => {
-        if (current.some((item) => item.id === referenceId)) return current;
-        return [...current, { id: referenceId, label }].sort((a, b) =>
-          a.label.localeCompare(b.label, 'pt-BR')
-        );
-      });
-    } else {
-      setProjectCompanyOptions((current) => {
-        if (current.some((item) => item.id === referenceId)) return current;
-        return [...current, { id: referenceId, label, name: label }].sort((a, b) =>
-          a.label.localeCompare(b.label, 'pt-BR')
-        );
-      });
-    }
+  const appendProjectPersonOption = (option: ProjectPersonOption) => {
+    setProjectPeopleOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
 
+  const appendProjectCompanyOption = (option: ProjectCompanyOption) => {
+    setProjectCompanyOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
+
+  const applyBeneficiarySelection = (type: BeneficiaryType, referenceId: string) => {
     setNewItem((current) => ({
       ...current,
       projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
@@ -1105,41 +1110,51 @@ export default function RubricasPage() {
 
   const handleLinkExistingPerson = async () => {
     if (!selectedPersonToLink) return;
-    const actorUserId = await requireCurrentUserId();
-    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-    const draftMeses = toPositiveInt(newItem.meses, 1);
-    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
-    const personLabel =
-      availablePeople.find((person) => String(person.id) === selectedPersonToLink)?.fullName ??
-      `Pessoa #${selectedPersonToLink}`;
-    const linked = await createProjectPeople({
-      projectId,
-      personId: Number(selectedPersonToLink),
-      baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      createdBy: actorUserId,
-    });
-    applyBeneficiarySelection('person', String(linked.id), personLabel);
-    setShowLinkPersonModal(false);
-    setSelectedPersonToLink(undefined);
-    await loadData();
+    try {
+      setIsSubmitting(true);
+      setLinkPersonModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const draftItemTotal = buildDraftItemTotal(newItem);
+      const selectedPerson =
+        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
+      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
+      const linked = await createProjectPeople({
+        projectId,
+        personId: Number(selectedPersonToLink),
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+        createdBy: actorUserId,
+      });
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: personLabel,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
+      setAvailablePeople((current) =>
+        current.filter((person) => String(person.id) !== selectedPersonToLink)
+      );
+      setShowLinkPersonModal(false);
+      setSelectedPersonToLink(undefined);
+      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLinkExistingCompany = async () => {
     if (!selectedCompanyToLink) return;
     try {
       setIsSubmitting(true);
-      setActionError(null);
-      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-      const draftMeses = toPositiveInt(newItem.meses, 1);
-      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+      setLinkCompanyModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
-      const companyLabel =
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)
-          ?.tradeName ||
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)?.name ||
-        `Empresa #${selectedCompanyToLink}`;
+      const selectedCompany =
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
+      const companyName =
+        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
       const linked = await createProjectCompany({
         projectId,
         companyId: Number(selectedCompanyToLink),
@@ -1147,12 +1162,32 @@ export default function RubricasPage() {
         status: RUBRICA_DEFAULT_COMPANY_STATUS,
         createdBy: actorUserId,
       });
-      applyBeneficiarySelection('company', String(linked.id), companyLabel);
+
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
+          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
+          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: selectedCompany?.cnpj ?? null,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
+        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
+      setAvailableCompanies((current) =>
+        current.filter((company) => String(company.id) !== selectedCompanyToLink)
+      );
       setShowLinkCompanyModal(false);
       setSelectedCompanyToLink(undefined);
-      await loadData();
+      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
+      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1160,7 +1195,7 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkPerson = async () => {
     if (!hasRequiredMemberFields(newPersonForm)) {
-      setActionError('Preencha os campos obrigatórios da pessoa antes de salvar.');
+      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa antes de salvar.');
       return;
     }
 
@@ -1182,11 +1217,8 @@ export default function RubricasPage() {
 
     try {
       setIsSubmitting(true);
-      setActionError(null);
-      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-      const draftMeses = toPositiveInt(newItem.meses, 1);
-      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+      setCreatePersonModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
       const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
       const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
@@ -1237,15 +1269,27 @@ export default function RubricasPage() {
         });
       }
 
-      applyBeneficiarySelection('person', String(linked.id), newPersonForm.nome.trim());
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: newPersonForm.nome.trim(),
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
       setShowCreatePersonModal(false);
       setNewPersonForm(defaultMemberFormData());
       setNewPersonAvatarFile(null);
       setNewPersonCpfError('');
       setNewPersonPhoneError('');
-      await loadData();
+      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.'));
+      setCreatePersonModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1253,18 +1297,15 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkCompany = async () => {
     if (!hasRequiredCompanyFields(newCompanyForm)) {
-      setActionError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
+      setCreateCompanyModalError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
       return;
     }
     const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
     if (cnpjDigits.length !== 14) {
-      setActionError('Informe um CNPJ válido com 14 dígitos.');
+      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
       return;
     }
-    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-    const draftMeses = toPositiveInt(newItem.meses, 1);
-    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+    const draftItemTotal = buildDraftItemTotal(newItem);
     const totalValueForProjectCompany =
       typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
         ? newCompanyForm.valorContrato
@@ -1273,7 +1314,7 @@ export default function RubricasPage() {
           : undefined;
     try {
       setIsSubmitting(true);
-      setActionError(null);
+      setCreateCompanyModalError(null);
       const actorUserId = await requireCurrentUserId();
       const company = await createCompany({
         name: newCompanyForm.razaoSocial!.trim(),
@@ -1301,16 +1342,33 @@ export default function RubricasPage() {
         status: newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS,
         createdBy: actorUserId,
       });
-      applyBeneficiarySelection(
-        'company',
-        String(linked.id),
-        newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim()
-      );
+      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
+      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
+      const formattedCnpj = formatCnpjCompact(cnpjDigits);
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
+          formatContractingStatus(companyStatus),
+          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: formattedCnpj,
+        status: companyStatus,
+        availableBalance: totalValueForProjectCompany ?? null,
+        totalValue: totalValueForProjectCompany ?? null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
       setShowCreateCompanyModal(false);
       setNewCompanyForm(createEmptyCompanyForm());
-      await loadData();
+      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.'));
+      setCreateCompanyModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1707,7 +1765,7 @@ export default function RubricasPage() {
     if (!ensureCanManageChildren()) return;
     if (rubricaPendingDeletion?.id === rubricaId) {
       if (!isPersistedId(rubricaId)) {
-        setActionError('Rubrica invÃ¡lida para remoÃ§Ã£o.');
+        setActionError('Rubrica inválida para remoção.');
         return;
       }
 
@@ -1721,7 +1779,7 @@ export default function RubricasPage() {
         closeDeleteRubricaModal();
         showSavedMessage('Rubrica removida com sucesso.');
       } catch (error) {
-        setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel remover a rubrica.'));
+        setActionError(toErrorMessage(error, 'Não foi possível remover a rubrica.'));
       } finally {
         setIsSubmitting(false);
       }
@@ -2714,7 +2772,10 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowLinkPersonModal(true)}
+                      onClick={() => {
+                        setLinkPersonModalError(null);
+                        setShowLinkPersonModal(true);
+                      }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular pessoa existente
@@ -2726,6 +2787,7 @@ export default function RubricasPage() {
                         setNewPersonAvatarFile(null);
                         setNewPersonCpfError('');
                         setNewPersonPhoneError('');
+                        setCreatePersonModalError(null);
                         setShowCreatePersonModal(true);
                       }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
@@ -2739,14 +2801,20 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowLinkCompanyModal(true)}
+                      onClick={() => {
+                        setLinkCompanyModalError(null);
+                        setShowLinkCompanyModal(true);
+                      }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular empresa existente
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowCreateCompanyModal(true)}
+                      onClick={() => {
+                        setCreateCompanyModalError(null);
+                        setShowCreateCompanyModal(true);
+                      }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
                     >
                       Cadastrar nova empresa
@@ -3181,7 +3249,7 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={Boolean(rubricaPendingDeletion)}
         title="Excluir rubrica"
-        description="Confirme a exclusÃ£o da rubrica antes de continuar."
+        description="Confirme a exclusão da rubrica antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={() => {
@@ -3199,7 +3267,7 @@ export default function RubricasPage() {
                 Tem certeza de que deseja excluir esta rubrica?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a rubrica e todos os itens vinculados.
+                Esta ação remove a rubrica e todos os itens vinculados.
               </p>
             </div>
 
@@ -3297,9 +3365,17 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={showLinkPersonModal}
         title="Vincular pessoa existente"
-        onClose={() => setShowLinkPersonModal(false)}
+        onClose={() => {
+          setShowLinkPersonModal(false);
+          setLinkPersonModalError(null);
+        }}
       >
         <div className="space-y-4">
+          {linkPersonModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkPersonModalError}
+            </div>
+          ) : null}
           <Dropdown
             searchable
             options={availablePeople.map((person) => ({
@@ -3313,7 +3389,10 @@ export default function RubricasPage() {
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setShowLinkPersonModal(false)}
+              onClick={() => {
+                setShowLinkPersonModal(false);
+                setLinkPersonModalError(null);
+              }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               Cancelar
@@ -3332,9 +3411,17 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={showLinkCompanyModal}
         title="Vincular empresa existente"
-        onClose={() => setShowLinkCompanyModal(false)}
+        onClose={() => {
+          setShowLinkCompanyModal(false);
+          setLinkCompanyModalError(null);
+        }}
       >
         <div className="space-y-4">
+          {linkCompanyModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkCompanyModalError}
+            </div>
+          ) : null}
           <Dropdown
             searchable
             options={availableCompanies.map((company) => ({
@@ -3348,7 +3435,10 @@ export default function RubricasPage() {
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setShowLinkCompanyModal(false)}
+              onClick={() => {
+                setShowLinkCompanyModal(false);
+                setLinkCompanyModalError(null);
+              }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               Cancelar
@@ -3379,12 +3469,14 @@ export default function RubricasPage() {
             setNewPersonAvatarFile(null);
             setNewPersonCpfError('');
             setNewPersonPhoneError('');
+            setCreatePersonModalError(null);
           }}
           onSave={() => void handleCreateAndLinkPerson()}
           cpfError={newPersonCpfError}
           setCpfError={setNewPersonCpfError}
           phoneError={newPersonPhoneError}
           setPhoneError={setNewPersonPhoneError}
+          errorMessage={createPersonModalError}
         />
       ) : null}
 
@@ -3397,8 +3489,10 @@ export default function RubricasPage() {
         onClose={() => {
           setShowCreateCompanyModal(false);
           setNewCompanyForm(createEmptyCompanyForm());
+          setCreateCompanyModalError(null);
         }}
         onSave={() => void handleCreateAndLinkCompany()}
+        errorMessage={createCompanyModalError}
       />
 
       {canManageChildren && itemParaRemanejamento && (

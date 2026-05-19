@@ -248,6 +248,14 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 }
 
+function formatSignedCurrency(value: number) {
+  if (value < 0) {
+    return `- ${formatCurrency(Math.abs(value))}`;
+  }
+
+  return formatCurrency(value);
+}
+
 function formatDate(dateString: string): string {
   if (!dateString) return '-';
   try {
@@ -263,7 +271,7 @@ function formatDate(dateString: string): string {
 }
 
 function ordinal(n: number) {
-  return `${n}Â°`;
+  return `${n}°`;
 }
 
 function MetaBullet() {
@@ -425,7 +433,7 @@ function normalizePaidBy(
 }
 
 function getPaidByLabel(value: ExpensePaidByEnum | 'EMPRESA' | 'PARCEIRO') {
-  return normalizePaidBy(value) === 'EXECUCAO' ? 'ExecuÃ§Ã£o' : 'Innovatis';
+  return normalizePaidBy(value) === 'EXECUCAO' ? 'Execução' : 'Innovatis';
 }
 
 function getPaidByBadgeClassName(value: ExpensePaidByEnum | 'EMPRESA' | 'PARCEIRO') {
@@ -590,7 +598,7 @@ export default function PagamentosPlanilhaPage() {
       return true;
     }
 
-    setActionError('Seu perfil pode apenas visualizar esta Ã¡rea do contrato.');
+    setActionError('Seu perfil pode apenas visualizar esta área do contrato.');
     return false;
   };
 
@@ -756,7 +764,7 @@ export default function PagamentosPlanilhaPage() {
         }`;
       }
 
-      return 'Sem vÃ­nculo';
+      return 'Sem vínculo';
     },
     [projectCompaniesById, projectPeopleById]
   );
@@ -765,7 +773,7 @@ export default function PagamentosPlanilhaPage() {
     if (!Number.isFinite(projectId)) {
       setProjectPeople([]);
       setProjectCompanies([]);
-      setProjectLinksError('ID do contrato invÃ¡lido para carregar vÃ­nculos do projeto.');
+      setProjectLinksError('ID do contrato inválido para carregar vínculos do projeto.');
       return;
     }
 
@@ -792,7 +800,7 @@ export default function PagamentosPlanilhaPage() {
             projectLinkId: String(link.id),
             personId: String(link.personId),
             fullName,
-            label: cpf ? `${fullName} â€¢ CPF ${cpf}` : fullName,
+            label: cpf ? `${fullName} • CPF ${cpf}` : fullName,
           };
         })
         .sort((a, b) => a.fullName.localeCompare(b.fullName, 'pt-BR'));
@@ -830,7 +838,7 @@ export default function PagamentosPlanilhaPage() {
       setProjectPeople([]);
       setProjectCompanies([]);
       setProjectLinksError(
-        toErrorMessage(error, 'NÃ£o foi possÃ­vel carregar as pessoas e empresas vinculadas ao projeto.')
+        toErrorMessage(error, 'Não foi possível carregar as pessoas e empresas vinculadas ao projeto.')
       );
     } finally {
       setIsLoadingProjectLinks(false);
@@ -868,7 +876,7 @@ export default function PagamentosPlanilhaPage() {
       setParcelas([]);
       setRubricas([]);
       setBackendExpenses([]);
-      setLoadError('ID do contrato invÃ¡lido para carregar pagamentos.');
+      setLoadError('ID do contrato inválido para carregar pagamentos.');
       setIsLoading(false);
       return;
     }
@@ -977,7 +985,7 @@ export default function PagamentosPlanilhaPage() {
         const organizationIdForUi =
           mappedCompanyId ?? (expense.organizationId != null ? String(expense.organizationId) : undefined);
 
-        const description = expense.description?.trim() || `LanÃ§amento ${expense.id}`;
+        const description = expense.description?.trim() || `Lançamento ${expense.id}`;
         const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${description.toLowerCase()}`;
 
         if (!subitemsByItem.has(expense.budgetItemId)) {
@@ -1056,7 +1064,7 @@ export default function PagamentosPlanilhaPage() {
       setParcelas([]);
       setRubricas([]);
       setBackendExpenses([]);
-      setLoadError(toErrorMessage(error, 'NÃ£o foi possÃ­vel carregar a aba de pagamentos.'));
+      setLoadError(toErrorMessage(error, 'Não foi possível carregar a aba de pagamentos.'));
     } finally {
       setIsLoading(false);
     }
@@ -1282,7 +1290,7 @@ export default function PagamentosPlanilhaPage() {
 
     const rubrica = rubricas.find((entry) => entry.id === rubricaId);
     if (!rubrica) {
-      setActionError('Rubrica invÃ¡lida para adicionar pagamento.');
+      setActionError('Rubrica inválida para adicionar pagamento.');
       return;
     }
 
@@ -1428,12 +1436,12 @@ export default function PagamentosPlanilhaPage() {
 
   const toggleExpandedSubitem = (subitemKey: ID) => {
     if (editingSubitemSession?.subitemKey && editingSubitemSession.subitemKey !== subitemKey) {
-      setActionError('Salve ou cancele o subitem em ediÃ§Ã£o antes de abrir outro.');
+      setActionError('Salve ou cancele o subitem em edição antes de abrir outro.');
       return;
     }
 
     if (editingSubitemSession?.subitemKey === subitemKey && expandedSubitemKey === subitemKey) {
-      setActionError('Salve ou cancele o subitem em ediÃ§Ã£o antes de ocultar os lançamentos.');
+      setActionError('Salve ou cancele o subitem em edição antes de ocultar os lançamentos.');
       return;
     }
 
@@ -1453,13 +1461,13 @@ export default function PagamentosPlanilhaPage() {
 
     const subitemKey = createSubitemKey(itemId, subitemId);
     if (editingSubitemSession?.subitemKey && editingSubitemSession.subitemKey !== subitemKey) {
-      setActionError('Salve ou cancele o subitem em ediÃ§Ã£o antes de abrir outro.');
+      setActionError('Salve ou cancele o subitem em edição antes de abrir outro.');
       return false;
     }
 
     const selected = findItemAndSubitem(itemId, subitemId);
     if (!selected) {
-      setActionError('Subitem invÃ¡lido para ediÃ§Ã£o.');
+      setActionError('Subitem inválido para edição.');
       return false;
     }
 
@@ -1505,7 +1513,7 @@ export default function PagamentosPlanilhaPage() {
     try {
       await loadData();
     } catch (error) {
-      setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel cancelar a ediÃ§Ã£o do subitem.'));
+      setActionError(toErrorMessage(error, 'Não foi possível cancelar a edição do subitem.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1514,7 +1522,7 @@ export default function PagamentosPlanilhaPage() {
   const handleAddParcela = async () => {
     if (!ensureCanManageChildren()) return;
     if (!Number.isFinite(projectId)) {
-      setActionError('ID do contrato invÃ¡lido para criar parcela.');
+      setActionError('ID do contrato inválido para criar parcela.');
       return;
     }
     if (!newParcela.dataRecebimento) return;
@@ -1536,7 +1544,7 @@ export default function PagamentosPlanilhaPage() {
       await loadData();
       showSavedMessage('Parcela criada com sucesso.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel criar a parcela.'));
+      setActionError(toErrorMessage(error, 'Não foi possível criar a parcela.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1559,7 +1567,7 @@ export default function PagamentosPlanilhaPage() {
     if (!editParcelaForm.dataRecebimento) return;
     if (!editParcelaForm.valorRecebido || editParcelaForm.valorRecebido <= 0) return;
     if (!isPersistedId(editParcelaForm.id)) {
-      setActionError('Parcela invÃ¡lida para atualizaÃ§Ã£o.');
+      setActionError('Parcela inválida para atualização.');
       return;
     }
 
@@ -1576,7 +1584,7 @@ export default function PagamentosPlanilhaPage() {
       await loadData();
       showSavedMessage('Parcela atualizada com sucesso.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel atualizar a parcela.'));
+      setActionError(toErrorMessage(error, 'Não foi possível atualizar a parcela.'));
     } finally {
       setIsPersisting(false);
     }
@@ -1592,7 +1600,7 @@ export default function PagamentosPlanilhaPage() {
     }
     if (parcelaPendingDeletion?.id === parcelaId) {
       if (!isPersistedId(parcelaId)) {
-        setActionError('Parcela invÃ¡lida para remoÃ§Ã£o.');
+        setActionError('Parcela inválida para remoção.');
         closeDeleteParcelaModal();
         return;
       }
@@ -2092,7 +2100,7 @@ export default function PagamentosPlanilhaPage() {
 
     const subitemKey = createSubitemKey(itemId, subitemId);
     if (editingSubitemSession?.subitemKey && editingSubitemSession.subitemKey !== subitemKey) {
-      setActionError('Salve ou cancele o subitem em ediÃ§Ã£o antes de editar outro.');
+      setActionError('Salve ou cancele o subitem em edição antes de editar outro.');
       return;
     }
 
@@ -2547,13 +2555,13 @@ export default function PagamentosPlanilhaPage() {
       for (const item of rubrica.itens) {
         const budgetItemId = parsePersistedId(item.id);
         if (!budgetItemId) {
-          validationErrors.push(`Item "${item.descricao}" invÃ¡lido para persistÃªncia.`);
+          validationErrors.push(`Item "${item.descricao}" inválido para persistência.`);
           continue;
         }
 
         const categoryId = item.categoryId;
         if (!Number.isFinite(categoryId)) {
-          validationErrors.push(`Categoria invÃ¡lida para o item "${item.descricao}".`);
+          validationErrors.push(`Categoria inválida para o item "${item.descricao}".`);
           continue;
         }
 
@@ -2698,7 +2706,7 @@ export default function PagamentosPlanilhaPage() {
         keepExpandedSubitemKey: keepExpandedSubitemKeyAfterSave,
         keepEditingLancamentosSubitemKey: keepEditingLancamentosSubitemKeyAfterSave,
       });
-      showSavedMessage('Nenhuma alteraÃ§Ã£o pendente para salvar.');
+      showSavedMessage('Nenhuma alteração pendente para salvar.');
       return;
     }
 
@@ -2726,7 +2734,7 @@ export default function PagamentosPlanilhaPage() {
       });
       showSavedMessage('Pagamentos salvos com sucesso.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel salvar os pagamentos.'));
+      setActionError(toErrorMessage(error, 'Não foi possível salvar os pagamentos.'));
     } finally {
       setIsPersisting(false);
     }
@@ -2865,7 +2873,7 @@ export default function PagamentosPlanilhaPage() {
                 <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Parcela</th>
                 <th className="w-48 px-3 py-2 text-center font-medium text-gray-600">Valor Recebido</th>
                 <th className="w-44 px-3 py-2 text-center font-medium text-gray-600">Data Receb.</th>
-                <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">AÃ§Ãµes</th>
+                <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -3016,7 +3024,7 @@ export default function PagamentosPlanilhaPage() {
       <AppModalShell
         isOpen={Boolean(parcelaPendingDeletion)}
         title="Excluir parcela"
-        description="Confirme a exclusÃ£o da parcela antes de continuar."
+        description="Confirme a exclusão da parcela antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteParcelaModal}
@@ -3220,8 +3228,8 @@ export default function PagamentosPlanilhaPage() {
         title={subitemModalEditingContext ? 'Editar pagamento' : 'Novo pagamento'}
         subtitle={
           subitemModalEditingContext
-            ? 'Atualize o nome do pagamento e o vÃ­nculo dele dentro do projeto.'
-            : 'Cadastre o nome do pagamento e escolha como ele serÃ¡ vinculado dentro do projeto.'
+            ? 'Atualize o nome do pagamento e o vínculo dele dentro do projeto.'
+            : 'Cadastre o nome do pagamento e escolha como ele será vinculado dentro do projeto.'
         }
         submitLabel={subitemModalEditingContext ? 'Salvar pagamento' : 'Adicionar pagamento'}
         form={subitemModalForm}
@@ -3268,7 +3276,7 @@ export default function PagamentosPlanilhaPage() {
         onSubmit={() => {
           setSubitemModalFieldErrors({});
           if (!subitemModalItemId) {
-            setSubitemModalError('Item invÃ¡lido para criar pagamento.');
+            setSubitemModalError('Item inválido para criar pagamento.');
             return;
           }
 
@@ -3378,7 +3386,7 @@ function SummaryMetricCard({
   value: string;
   description: string;
   tooltip: string;
-  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
 }) {
   const toneStyles = {
     emerald: {
@@ -3425,6 +3433,15 @@ function SummaryMetricCard({
       dot: 'bg-blue-500',
       tooltipButton:
         'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+    danger: {
+      surface: 'border-red-200/90 bg-gradient-to-br from-red-50 via-white to-rose-50/80',
+      accent: 'from-red-500 to-rose-500',
+      eyebrow: 'text-red-900/85',
+      value: 'text-red-700',
+      dot: 'bg-red-500',
+      tooltipButton:
+        'border-red-200 bg-white/85 text-red-700 hover:border-red-300 hover:text-red-800',
     },
   }[tone];
 
@@ -3530,13 +3547,13 @@ function PaymentsFinancialSummarySection({
     value: string;
     description: string;
     tooltip: string;
-    tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+    tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
   }> = [
     {
       label: 'Receitas recebidas',
       value: formatCurrency(totalRecebido),
       description: 'Entradas financeiras confirmadas',
-      tooltip: 'Soma de todas as entradas jÃ¡ recebidas no projeto.',
+      tooltip: 'Soma de todas as entradas já recebidas no projeto.',
       tone: 'emerald' as const,
     },
     {
@@ -3550,22 +3567,22 @@ function PaymentsFinancialSummarySection({
       label: 'Reservas pendentes',
       value: formatCurrency(totalReservado),
       description: 'Valores separados para pagamentos futuros',
-      tooltip: 'Valores reservados para pagamentos futuros, ainda nÃ£o efetivados.',
+      tooltip: 'Valores reservados para pagamentos futuros, ainda não efetivados.',
       tone: 'amber' as const,
     },
     {
-      label: 'Caixa disponí­vel',
-      value: formatCurrency(saldoRealContrato),
-      description: 'Disponí­vel antes das reservas',
+      label: 'Caixa disponível',
+      value: formatSignedCurrency(saldoRealContrato),
+      description: saldoRealContrato < 0 ? 'Déficit antes das reservas' : 'Disponível antes das reservas',
       tooltip: 'Receitas recebidas menos pagamentos efetivados.',
-      tone: saldoRealContrato < 0 ? 'amber' : 'green',
+      tone: saldoRealContrato < 0 ? 'danger' : 'green',
     },
     {
-      label: 'Disponí­vel apóis reservas',
-      value: formatCurrency(saldoProjetoContrato),
-      description: 'Saldo realmente livre do projeto',
-      tooltip: 'Caixa disponí­vel menos os valores reservados para pagamentos futuros.',
-      tone: saldoProjetoContrato < 0 ? 'amber' : 'blue',
+      label: 'Disponível após reservas',
+      value: formatSignedCurrency(saldoProjetoContrato),
+      description: saldoProjetoContrato < 0 ? 'Déficit após reservas' : 'Saldo realmente livre do projeto',
+      tooltip: 'Caixa disponível menos os valores reservados para pagamentos futuros.',
+      tone: saldoProjetoContrato < 0 ? 'danger' : 'blue',
     },
   ];
 
@@ -3574,7 +3591,7 @@ function PaymentsFinancialSummarySection({
       <div className="flex flex-col gap-1.5">
         <h4 className="text-lg font-semibold text-slate-900">Posição financeira do projeto</h4>
         <p className="text-sm text-slate-500">
-          Acompanhe o que já entrou, o que já saiu, o que está reservado e o saldo realmente disponí­vel.
+          Acompanhe o que já entrou, o que já saiu, o que está reservado e o saldo realmente disponível.
         </p>
       </div>
 
@@ -3676,7 +3693,7 @@ function RubricaCard({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <CompactMetricCard label="OrÃ§ado" value={formatCurrency(view.orcadoRubrica)} />
+          <CompactMetricCard label="Orçado" value={formatCurrency(view.orcadoRubrica)} />
           <CompactMetricCard label="Comprometido" value={formatCurrency(view.comprometidoRubrica)} />
           <CompactMetricCard label="Pago" value={formatCurrency(view.pagoRubrica)} />
           <CompactMetricCard
@@ -4901,7 +4918,7 @@ function CreateLinkedCompanyModal({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-1.5 md:col-span-2">
             <label className="block text-sm font-medium text-gray-700">
-              RazÃ£o social <span className="text-red-500">*</span>
+              Razão social <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -5108,7 +5125,7 @@ function LinkExistingPersonModal({
           </div>
         ) : people.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
-            Todas as pessoas cadastradas já estãO vinculadas a este projeto.
+            Todas as pessoas cadastradas já estão vinculadas a este projeto.
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -5124,7 +5141,7 @@ function LinkExistingPersonModal({
               <option value="">Selecione uma pessoa</option>
               {people.map((person) => {
                 const cpf = onlyDigits(person.cpf ?? '');
-                const label = cpf ? `${person.fullName} â€¢ CPF ${cpf}` : person.fullName;
+                const label = cpf ? `${person.fullName} • CPF ${cpf}` : person.fullName;
 
                 return (
                   <option key={person.id} value={String(person.id)}>
@@ -5226,7 +5243,7 @@ function LinkExistingCompanyModal({
           </div>
         ) : companies.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
-            Todas as empresas cadastradas já estãO vinculadas a este projeto.
+            Todas as empresas cadastradas já estão vinculadas a este projeto.
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -5243,7 +5260,7 @@ function LinkExistingCompanyModal({
               {companies.map((company) => {
                 const cnpj = onlyDigits(company.cnpj ?? '');
                 const label = cnpj
-                  ? `${companyNameLabel(company)} â€¢ CNPJ ${cnpj}`
+                  ? `${companyNameLabel(company)} • CNPJ ${cnpj}`
                   : companyNameLabel(company);
 
                 return (
