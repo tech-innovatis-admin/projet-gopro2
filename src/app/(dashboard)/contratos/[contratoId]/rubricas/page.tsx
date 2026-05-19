@@ -1707,7 +1707,7 @@ export default function RubricasPage() {
     if (!ensureCanManageChildren()) return;
     if (rubricaPendingDeletion?.id === rubricaId) {
       if (!isPersistedId(rubricaId)) {
-        setActionError('Rubrica invÃ¡lida para remoÃ§Ã£o.');
+        setActionError('Rubrica inválida para remoção.');
         return;
       }
 
@@ -1721,7 +1721,7 @@ export default function RubricasPage() {
         closeDeleteRubricaModal();
         showSavedMessage('Rubrica removida com sucesso.');
       } catch (error) {
-        setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel remover a rubrica.'));
+        setActionError(toErrorMessage(error, 'Não foi possível remover a rubrica.'));
       } finally {
         setIsSubmitting(false);
       }
@@ -3181,7 +3181,7 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={Boolean(rubricaPendingDeletion)}
         title="Excluir rubrica"
-        description="Confirme a exclusÃ£o da rubrica antes de continuar."
+        description="Confirme a exclusão da rubrica antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={() => {
@@ -3199,7 +3199,7 @@ export default function RubricasPage() {
                 Tem certeza de que deseja excluir esta rubrica?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a rubrica e todos os itens vinculados.
+                Esta ação remove a rubrica e todos os itens vinculados.
               </p>
             </div>
 

@@ -233,7 +233,9 @@ export default function AdminAuditoriaPage() {
             )}
 
             <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-              {logs.length === 0 ? (
+              {loading ? (
+                <AdminAuditoriaLogsLoadingSkeleton />
+              ) : logs.length === 0 ? (
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
                   {emptyMessage}
                 </div>
@@ -281,6 +283,39 @@ export default function AdminAuditoriaPage() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function AdminAuditoriaLoadingSkeleton() {
+  return (
+    <section className="animate-pulse rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="space-y-2"><div className="h-4 w-24 rounded bg-zinc-200" /><div className="h-10 w-full rounded bg-zinc-200" /></div>
+        <div className="space-y-2"><div className="h-4 w-24 rounded bg-zinc-200" /><div className="h-10 w-full rounded bg-zinc-200" /></div>
+        <div className="space-y-2 md:col-span-2"><div className="h-4 w-24 rounded bg-zinc-200" /><div className="h-10 w-full rounded bg-zinc-200" /></div>
+      </div>
+      <div className="mt-4 flex items-center gap-3"><div className="h-10 w-28 rounded bg-zinc-200" /><div className="h-4 w-40 rounded bg-zinc-200" /></div>
+      <div className="mt-6 space-y-3">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={`admin-audit-loading-row-${index}`} className="h-24 rounded bg-zinc-200" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdminAuditoriaLogsLoadingSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={`admin-audit-log-loading-${index}`} className="rounded-xl border border-zinc-100 p-4">
+          <div className="h-4 w-40 rounded bg-zinc-200" />
+          <div className="mt-3 h-5 w-3/4 rounded bg-zinc-200" />
+          <div className="mt-2 h-4 w-full rounded bg-zinc-200" />
+          <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3"><div className="h-10 rounded bg-zinc-200" /><div className="h-10 rounded bg-zinc-200" /><div className="h-10 rounded bg-zinc-200" /></div>
+        </div>
+      ))}
     </div>
   );
 }

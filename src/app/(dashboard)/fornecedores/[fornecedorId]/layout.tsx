@@ -49,14 +49,7 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
   }, [fornecedorId]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
-        <NavBar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-gray-500">
-          Carregando fornecedor...
-        </main>
-      </div>
-    );
+    return <FornecedorRouteLoadingSkeleton />;
   }
 
   const contratos = fornecedor ? getContratosByFornecedor(fornecedorId) : [];
@@ -196,6 +189,61 @@ export default function FornecedorLayout({ children }: FornecedorLayoutProps) {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+    </div>
+  );
+}
+
+function FornecedorRouteLoadingSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+      <NavBar />
+      <div className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="py-4">
+            <div className="h-4 w-44 animate-pulse rounded bg-gray-200" />
+          </div>
+          <div className="pb-4">
+            <div className="flex items-start gap-4">
+              <div className="h-16 w-16 animate-pulse rounded-xl bg-gray-200" />
+              <div className="min-w-0 flex-1">
+                <div className="h-7 w-80 animate-pulse rounded bg-gray-200" />
+                <div className="mt-3 h-4 w-64 animate-pulse rounded bg-gray-200" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            <div className="h-9 w-28 animate-pulse rounded bg-gray-200" />
+            <div className="h-9 w-20 animate-pulse rounded bg-gray-200" />
+            <div className="h-9 w-28 animate-pulse rounded bg-gray-200" />
+          </div>
+        </div>
+      </div>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="h-6 w-56 animate-pulse rounded bg-gray-200" />
+              <div className="mt-5 space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={`fornecedor-loading-main-${index}`} className="h-16 w-full animate-pulse rounded-xl bg-gray-200" />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            {Array.from({ length: 2 }).map((_, index) => (
+              <div key={`fornecedor-loading-side-${index}`} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="h-6 w-32 animate-pulse rounded bg-gray-200" />
+                <div className="mt-4 space-y-3">
+                  <div className="h-4 w-full animate-pulse rounded bg-gray-200" />
+                  <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
+                  <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

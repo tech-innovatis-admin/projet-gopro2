@@ -53,6 +53,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { type Contrato } from "./types";
+import { ContractRouteLoadingSkeleton } from "./_components/ContractLoadingSkeleton";
 
 type ContratoView = Contrato & {
   parceiroSecundario?: string;
@@ -755,6 +756,10 @@ export default function ContratoLayout({
     "Outro",
   ];
 
+  if (isLoadingContrato && !projectSnapshot) {
+    return <ContractRouteLoadingSkeleton />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F6F8]">
       <NavBar />
@@ -778,12 +783,6 @@ export default function ContratoLayout({
             {(isEditing ? editContrato : contrato).codigo} – {(isEditing ? editContrato : contrato).titulo}
           </span>
         </nav>
-
-        {isLoadingContrato && (
-          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-            Carregando detalhes do contrato...
-          </div>
-        )}
 
         {loadContratoError && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

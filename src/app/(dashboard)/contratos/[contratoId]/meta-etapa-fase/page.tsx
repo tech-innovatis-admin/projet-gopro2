@@ -3213,7 +3213,7 @@ export default function MetaEtapaFasePage() {
       <AppModalShell
         isOpen={Boolean(etapaPendingDeletion)}
         title="Excluir etapa"
-        description="Confirme a exclusÃ£o da etapa antes de continuar."
+        description="Confirme a exclusão da etapa antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteEtapaModal}
@@ -3247,7 +3247,7 @@ export default function MetaEtapaFasePage() {
                 Tem certeza de que deseja excluir esta etapa?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a etapa e todas as fases vinculadas.
+                Esta ação remove a etapa e todas as fases vinculadas.
               </p>
             </div>
 
@@ -3270,7 +3270,7 @@ export default function MetaEtapaFasePage() {
       <AppModalShell
         isOpen={Boolean(fasePendingDeletion)}
         title="Excluir fase"
-        description="Confirme a exclusÃ£o da fase antes de continuar."
+        description="Confirme a exclusão da fase antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteFaseModal}
@@ -3304,7 +3304,7 @@ export default function MetaEtapaFasePage() {
                 Tem certeza de que deseja excluir esta fase?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a fase da etapa e nÃ£o pode ser desfeita.
+                Esta ação remove a fase da etapa e não pode ser desfeita.
               </p>
             </div>
 

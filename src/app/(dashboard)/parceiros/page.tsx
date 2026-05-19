@@ -167,10 +167,7 @@ export default function ParceirosPage() {
           )}
 
           {isLoading ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-              <p className="mt-4 text-sm text-gray-500">Carregando parceiros...</p>
-            </div>
+            <ParceirosLoadingSkeleton />
           ) : (
             <ParceirosGrid
               parceiros={filteredParceiros}
@@ -186,6 +183,28 @@ export default function ParceirosPage() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddParceiro}
       />
+    </div>
+  );
+}
+
+function ParceirosLoadingSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={`parceiros-loading-card-${index}`}
+          className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+        >
+          <div className="h-5 w-2/3 rounded bg-gray-200" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-gray-200" />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="h-12 rounded bg-gray-200" />
+            <div className="h-12 rounded bg-gray-200" />
+          </div>
+          <div className="mt-4 h-4 w-full rounded bg-gray-200" />
+          <div className="mt-2 h-4 w-5/6 rounded bg-gray-200" />
+        </div>
+      ))}
     </div>
   );
 }

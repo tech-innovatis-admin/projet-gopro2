@@ -49,7 +49,7 @@ export default function ParceiroLayout({ children }: Props) {
   }, [parceiroId]);
 
   if (loading) {
-    return <div className="p-6">Carregando...</div>;
+    return <ParceiroRouteLoadingSkeleton />;
   }
 
   if (!parceiro) {
@@ -99,6 +99,63 @@ export default function ParceiroLayout({ children }: Props) {
       {/* CONTEÚDO */}
       <main className="max-w-7xl mx-auto px-6 py-1">
         {children}
+      </main>
+    </div>
+  );
+}
+
+function ParceiroRouteLoadingSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <NavBar />
+      <main className="mx-auto max-w-7xl px-6 py-6">
+        <div className="space-y-6">
+          <div className="h-4 w-56 animate-pulse rounded bg-gray-200" />
+
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="h-2 w-full animate-pulse bg-gray-200" />
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-16 w-16 animate-pulse rounded-xl bg-gray-200" />
+                  <div>
+                    <div className="h-8 w-80 animate-pulse rounded bg-gray-200" />
+                    <div className="mt-3 h-5 w-44 animate-pulse rounded bg-gray-200" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-9 w-24 animate-pulse rounded bg-gray-200" />
+                  <div className="h-9 w-24 animate-pulse rounded bg-gray-200" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="h-6 w-56 animate-pulse rounded bg-gray-200" />
+                <div className="mt-5 space-y-3">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={`parceiro-loading-list-${index}`} className="h-16 w-full animate-pulse rounded-xl bg-gray-200" />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={`parceiro-loading-side-${index}`} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="h-6 w-32 animate-pulse rounded bg-gray-200" />
+                  <div className="mt-4 space-y-3">
+                    <div className="h-4 w-full animate-pulse rounded bg-gray-200" />
+                    <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
+                    <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );
