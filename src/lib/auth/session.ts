@@ -123,7 +123,7 @@ export function canManageAdminAudit(user: SessionUser | null): boolean {
 }
 
 export function canViewContractAudit(user: SessionUser | null): boolean {
-  return Boolean(user) && !isIntern(user);
+  return isAdmin(user);
 }
 
 export function canEditContractCore(user: SessionUser | null): boolean {
