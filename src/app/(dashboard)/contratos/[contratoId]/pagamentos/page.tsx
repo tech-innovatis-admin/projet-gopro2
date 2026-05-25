@@ -15,6 +15,7 @@ import {
   Info,
 } from 'lucide-react';
 import { ContractPagamentosLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
+import { ExpenseReclassifyModal } from '../_components/ExpenseReclassifyModal';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
@@ -40,6 +41,7 @@ import {
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
+  reclassifyExpense,
   updateExpense,
   updateIncome,
 } from '@/src/lib/api/endpoints';
@@ -57,6 +59,7 @@ import type {
   ExpenseUpdateDTO,
   GoalResponseDTO,
   IncomeResponseDTO,
+  IncomeStatusEnum,
   PageResponseDTO,
   PeopleResponseDTO,
   PeopleRequestDTO,
@@ -164,6 +167,7 @@ type Parcela = {
   numero: number;
   valorRecebido: number;
   dataRecebimento: string;
+  status: IncomeStatusEnum;
 };
 
 type ProjectLinkedPerson = {
@@ -345,7 +349,7 @@ function createDraftLancamento(): Lancamento {
     id: createDraftId('lanc'),
     valor: 0,
     dataPag: '',
-    paymentStatus: 'PAGO',
+    paymentStatus: 'RESERVADO',
     paidBy: 'INNOVATIS',
     expenseId: undefined,
   };
@@ -415,13 +419,31 @@ function calculateProjectBalance(saldoReal: number, totalReservado: number) {
 }
 
 function getPaymentStatusLabel(status: ExpensePaymentStatusEnum) {
-  return status === 'RESERVADO' ? 'Reservado' : 'Pago';
+  if (status === 'RESERVADO') return 'Reservado';
+  if (status === 'PAGAMENTO_RECEBIDO') return 'Pagamento recebido';
+  return 'Pago';
 }
 
 function getPaymentStatusBadgeClassName(status: ExpensePaymentStatusEnum) {
-  return status === 'RESERVADO'
-    ? 'border-amber-200 bg-amber-50 text-amber-700'
-    : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'RESERVADO') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+  if (status === 'PAGAMENTO_RECEBIDO') {
+    return 'border-blue-200 bg-blue-50 text-blue-700';
+  }
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function getIncomeStatusLabel(status: IncomeStatusEnum) {
+  if (status === 'FATURADO') return 'Faturado (NF emitida)';
+  if (status === 'CANCELADO') return 'Cancelado';
+  return 'Recebido';
+}
+
+function getIncomeStatusBadgeClassName(status: IncomeStatusEnum) {
+  if (status === 'FATURADO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'CANCELADO') return 'border-slate-300 bg-slate-100 text-slate-600';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
 function normalizePaidBy(
@@ -483,9 +505,14 @@ export default function PagamentosPlanilhaPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const [isAddingParcela, setIsAddingParcela] = useState(false);
-  const [newParcela, setNewParcela] = useState<{ valorRecebido: number; dataRecebimento: string }>({
+  const [newParcela, setNewParcela] = useState<{
+    valorRecebido: number;
+    dataRecebimento: string;
+    status: IncomeStatusEnum;
+  }>({
     valorRecebido: 0,
     dataRecebimento: '',
+    status: 'RECEBIDO',
   });
   const [editingParcelaId, setEditingParcelaId] = useState<ID | null>(null);
   const [editParcelaForm, setEditParcelaForm] = useState<Parcela | null>(null);
@@ -536,6 +563,17 @@ export default function PagamentosPlanilhaPage() {
     subitemNome: string;
     lancamento: Lancamento;
   } | null>(null);
+  const [reclassifyModalState, setReclassifyModalState] = useState<{
+    expenseId: number;
+    currentItemId: ID;
+    currentItemLabel: string;
+  } | null>(null);
+  const [reclassifyTargetItemId, setReclassifyTargetItemId] = useState<ID | null>(null);
+  const [reclassifyReason, setReclassifyReason] = useState('');
+  const [reclassifyFieldErrors, setReclassifyFieldErrors] = useState<{
+    targetBudgetItemId?: string;
+    reason?: string;
+  }>({});
   const pageErrorRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSubitemItem = useMemo(() => {
@@ -561,6 +599,13 @@ export default function PagamentosPlanilhaPage() {
 
   const closeDeleteSubitemModal = () => {
     setSubitemPendingDeletion(null);
+  };
+
+  const closeReclassifyModal = () => {
+    setReclassifyModalState(null);
+    setReclassifyTargetItemId(null);
+    setReclassifyReason('');
+    setReclassifyFieldErrors({});
   };
 
   const closeRubricaPaymentSelectionModal = () => {
@@ -925,6 +970,7 @@ export default function PagamentosPlanilhaPage() {
           numero: income.numero,
           valorRecebido: toMoneyValue(income.amount),
           dataRecebimento: income.receivedAt || '',
+          status: income.status ?? 'RECEBIDO',
         }));
 
       const itemsByCategory = new Map<number, ItemRubrica[]>();
@@ -1115,6 +1161,13 @@ export default function PagamentosPlanilhaPage() {
       0
     );
 
+  const calcularTotalPagamentoRecebidoSubitem = (subitem: Subitem) =>
+    (subitem.lancamentos ?? []).reduce(
+      (acc, lancamento) =>
+        lancamento.paymentStatus === 'PAGAMENTO_RECEBIDO' ? acc + safeNumber(lancamento.valor) : acc,
+      0
+    );
+
   const calcularTotalComprometidoSubitem = (subitem: Subitem) =>
     Number((calcularTotalPagoSubitem(subitem) + calcularTotalReservadoSubitem(subitem)).toFixed(2));
 
@@ -1137,6 +1190,7 @@ export default function PagamentosPlanilhaPage() {
       quantidade: lancamentosOrdenados.length,
       totalPago: calcularTotalPagoSubitem(subitem),
       totalReservado: calcularTotalReservadoSubitem(subitem),
+      totalPagamentoRecebido: calcularTotalPagamentoRecebidoSubitem(subitem),
       totalComprometido: calcularTotalComprometidoSubitem(subitem),
       ultimaDataLancamento,
       ultimaDataPagamentoPago,
@@ -1168,7 +1222,22 @@ export default function PagamentosPlanilhaPage() {
     Number((calcularTotalPagoRubrica(rubrica) + calcularTotalReservadoRubrica(rubrica)).toFixed(2));
 
   const totalRecebido = useMemo(
-    () => parcelas.reduce((acc, parcela) => acc + safeNumber(parcela.valorRecebido), 0),
+    () =>
+      parcelas.reduce(
+        (acc, parcela) =>
+          parcela.status === 'RECEBIDO' ? acc + safeNumber(parcela.valorRecebido) : acc,
+        0
+      ),
+    [parcelas]
+  );
+
+  const totalRecebimentoAguardo = useMemo(
+    () =>
+      parcelas.reduce(
+        (acc, parcela) =>
+          parcela.status === 'FATURADO' ? acc + safeNumber(parcela.valorRecebido) : acc,
+        0
+      ),
     [parcelas]
   );
 
@@ -1336,6 +1405,18 @@ export default function PagamentosPlanilhaPage() {
 
     return null;
   };
+
+  const reclassifyTargetOptions = useMemo(() => {
+    const currentItemId = reclassifyModalState?.currentItemId;
+    return rubricas.flatMap((rubrica) =>
+      rubrica.itens
+        .filter((item) => item.id !== currentItemId)
+        .map((item) => ({
+          value: item.id,
+          label: `[${rubrica.codigo}] ${item.descricao}`,
+        }))
+    );
+  }, [reclassifyModalState?.currentItemId, rubricas]);
 
   const findItemById = (itemId: ID) => {
     for (const rubrica of rubricas) {
@@ -1538,8 +1619,9 @@ export default function PagamentosPlanilhaPage() {
         numero: nextNumero,
         amount: toMoneyValue(newParcela.valorRecebido),
         receivedAt: newParcela.dataRecebimento,
+        status: newParcela.status,
       });
-      setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
+      setNewParcela({ valorRecebido: 0, dataRecebimento: '', status: 'RECEBIDO' });
       setIsAddingParcela(false);
       await loadData();
       showSavedMessage('Parcela criada com sucesso.');
@@ -1578,6 +1660,7 @@ export default function PagamentosPlanilhaPage() {
         numero: editParcelaForm.numero,
         amount: toMoneyValue(editParcelaForm.valorRecebido),
         receivedAt: editParcelaForm.dataRecebimento,
+        status: editParcelaForm.status,
       });
       setEditingParcelaId(null);
       setEditParcelaForm(null);
@@ -2318,6 +2401,71 @@ export default function PagamentosPlanilhaPage() {
     }
   };
 
+  const handleStartReclassifyLaunch = (itemId: ID, launch: Lancamento) => {
+    if (!ensureCanManageChildren() || isPersisting) return;
+
+    const expenseId = parsePersistedId(launch.expenseId);
+    if (!expenseId) {
+      setActionError('Somente lançamentos já salvos podem ser reclassificados.');
+      return;
+    }
+
+    const currentItem = findItemById(itemId);
+    setReclassifyModalState({
+      expenseId,
+      currentItemId: itemId,
+      currentItemLabel: currentItem?.descricao ?? `Item #${itemId}`,
+    });
+    setReclassifyTargetItemId(null);
+    setReclassifyReason('');
+    setReclassifyFieldErrors({});
+    setActionError(null);
+  };
+
+  const handleConfirmReclassify = async () => {
+    if (!reclassifyModalState) return;
+
+    const targetBudgetItemId = parsePersistedId(reclassifyTargetItemId);
+    const reason = reclassifyReason.trim();
+    const nextErrors: { targetBudgetItemId?: string; reason?: string } = {};
+
+    if (!targetBudgetItemId) {
+      nextErrors.targetBudgetItemId = 'Selecione o item de destino.';
+    }
+    if (!reason) {
+      nextErrors.reason = 'Informe o motivo da reclassificação.';
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setReclassifyFieldErrors(nextErrors);
+      return;
+    }
+    const safeTargetBudgetItemId = targetBudgetItemId as number;
+
+    setIsPersisting(true);
+    setActionError(null);
+    setReclassifyFieldErrors({});
+
+    try {
+      await reclassifyExpense(reclassifyModalState.expenseId, {
+        targetBudgetItemId: safeTargetBudgetItemId,
+        reason,
+      });
+      await loadData();
+      closeReclassifyModal();
+      showSavedMessage('Despesa reclassificada com sucesso.');
+    } catch (error) {
+      if (error instanceof HttpError && error.fieldErrors) {
+        setReclassifyFieldErrors({
+          targetBudgetItemId: error.fieldErrors.targetBudgetItemId,
+          reason: error.fieldErrors.reason,
+        });
+      }
+      setActionError(toErrorMessage(error, 'Não foi possível reclassificar a despesa.'));
+    } finally {
+      setIsPersisting(false);
+    }
+  };
+
   const applySubitemEditingState = ({
     keepEditingSubitens = false,
     keepExpandedSubitemKey = null,
@@ -2786,6 +2934,7 @@ export default function PagamentosPlanilhaPage() {
         totalRecebido={totalRecebido}
         totalPago={totalPago}
         totalReservado={totalReservado}
+        totalRecebimentoAguardo={totalRecebimentoAguardo}
         saldoRealContrato={saldoRealContrato}
         saldoProjetoContrato={saldoProjetoContrato}
       />
@@ -2812,7 +2961,7 @@ export default function PagamentosPlanilhaPage() {
 
         {canManageChildren && isAddingParcela && (
           <div className="border-t border-gray-200 bg-emerald-50 p-4">
-            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-700">
                   Valor recebido <span className="text-red-500">*</span>
@@ -2840,6 +2989,23 @@ export default function PagamentosPlanilhaPage() {
                   className="rounded-lg border-emerald-300 focus-within:border-emerald-500 focus-within:ring-emerald-500/20"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">
+                  Status <span className="text-red-500">*</span>
+                </label>
+                <Dropdown
+                  value={newParcela.status}
+                  onChange={(value) =>
+                    setNewParcela((current) => ({
+                      ...current,
+                      status: (value as IncomeStatusEnum | undefined) ?? 'RECEBIDO',
+                    }))
+                  }
+                  disabled={isPersisting}
+                  options={INCOME_STATUS_OPTIONS}
+                  className="h-11 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -2854,7 +3020,7 @@ export default function PagamentosPlanilhaPage() {
               <button
                 onClick={() => {
                   setIsAddingParcela(false);
-                  setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
+                  setNewParcela({ valorRecebido: 0, dataRecebimento: '', status: 'RECEBIDO' });
                 }}
                 disabled={isPersisting}
                 className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -2873,13 +3039,14 @@ export default function PagamentosPlanilhaPage() {
                 <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Parcela</th>
                 <th className="w-48 px-3 py-2 text-center font-medium text-gray-600">Valor Recebido</th>
                 <th className="w-44 px-3 py-2 text-center font-medium text-gray-600">Data Receb.</th>
+                <th className="w-52 px-3 py-2 text-center font-medium text-gray-600">Status</th>
                 <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Ações</th>
               </tr>
             </thead>
             <tbody>
               {parcelasOrdenadas.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-gray-500">
+                  <td colSpan={5} className="py-6 text-center text-gray-500">
                     <div className="inline-flex items-center gap-2">
                       <AlertCircle className="h-5 w-5" />
                       Nenhuma parcela cadastrada
@@ -2923,6 +3090,26 @@ export default function PagamentosPlanilhaPage() {
                           </div>
                         </td>
                         <td className="px-3 py-2">
+                          <div className="flex justify-center">
+                            <Dropdown
+                              value={editParcelaForm.status}
+                              onChange={(value) =>
+                                setEditParcelaForm((current) =>
+                                  current
+                                    ? {
+                                      ...current,
+                                      status: (value as IncomeStatusEnum | undefined) ?? 'RECEBIDO',
+                                    }
+                                    : current
+                                )
+                              }
+                              disabled={isPersisting}
+                              options={INCOME_STATUS_OPTIONS}
+                              className="h-9 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={handleSaveEditParcela}
@@ -2953,6 +3140,11 @@ export default function PagamentosPlanilhaPage() {
                         </td>
                         <td className="px-3 py-2 text-center text-gray-700">
                           {formatDate(parcela.dataRecebimento)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getIncomeStatusBadgeClassName(parcela.status)}`}>
+                            {getIncomeStatusLabel(parcela.status)}
+                          </span>
                         </td>
                         <td className="px-3 py-2">
                           {canManageChildren ? (
@@ -3012,6 +3204,7 @@ export default function PagamentosPlanilhaPage() {
         onUpdateLaunch={updateLancamentoCampo}
         onRemoveLaunch={handleRemoveLancamento}
         onMarkLaunchPaid={handleMarkLancamentoAsPaid}
+        onStartReclassifyLaunch={handleStartReclassifyLaunch}
       />
 
       <BudgetItemPickerModal
@@ -3021,6 +3214,23 @@ export default function PagamentosPlanilhaPage() {
         onClose={closeRubricaPaymentSelectionModal}
         onSelectItem={handleSelectItemForRubricaPayment}
       />
+
+      <ExpenseReclassifyModal
+        isOpen={Boolean(reclassifyModalState)}
+        isPersisting={isPersisting}
+        currentItemLabel={reclassifyModalState?.currentItemLabel ?? null}
+        targetOptions={reclassifyTargetOptions}
+        targetItemId={reclassifyTargetItemId}
+        reason={reclassifyReason}
+        fieldErrors={reclassifyFieldErrors}
+        onClose={closeReclassifyModal}
+        onChangeTargetItemId={setReclassifyTargetItemId}
+        onChangeReason={setReclassifyReason}
+        onConfirm={() => {
+          void handleConfirmReclassify();
+        }}
+      />
+
       <AppModalShell
         isOpen={Boolean(parcelaPendingDeletion)}
         title="Excluir parcela"
@@ -3333,7 +3543,14 @@ type SharedPaymentPresentationHandlers = {
   onUpdateLaunch: (itemId: ID, paymentId: ID, launchId: ID, patch: LaunchUpdatePatch) => void;
   onRemoveLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
   onMarkLaunchPaid: (itemId: ID, paymentId: ID, launchId: ID) => Promise<void>;
+  onStartReclassifyLaunch: (itemId: ID, launch: Lancamento) => void;
 };
+
+const INCOME_STATUS_OPTIONS: Array<{ value: IncomeStatusEnum; label: string }> = [
+  { value: 'RECEBIDO', label: 'Recebido' },
+  { value: 'FATURADO', label: 'Faturado (NF emitida)' },
+  { value: 'CANCELADO', label: 'Cancelado' },
+];
 
 type RubricasHierarchySectionProps = SharedPaymentPresentationHandlers & {
   rubricaViews: RubricaViewModel[];
@@ -3359,14 +3576,14 @@ type PaymentCardProps = Omit<SharedPaymentPresentationHandlers, 'onStartAddPayme
 
 type PaymentLaunchListProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
 > & {
   view: PaymentViewModel;
 };
 
 type LaunchRowProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+  'canManageChildren' | 'isPersisting' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
 > & {
   itemId: ID;
   paymentId: ID;
@@ -3501,6 +3718,9 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
   const lancamentos = view.payment.lancamentos ?? [];
   const hasPaid = lancamentos.some((lancamento) => lancamento.paymentStatus === 'PAGO');
   const hasReserved = lancamentos.some((lancamento) => lancamento.paymentStatus === 'RESERVADO');
+  const hasPaymentReceived = lancamentos.some(
+    (lancamento) => lancamento.paymentStatus === 'PAGAMENTO_RECEBIDO'
+  );
 
   if (lancamentos.length === 0) {
     return {
@@ -3509,7 +3729,7 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
     };
   }
 
-  if (hasPaid && hasReserved) {
+  if ((hasPaid && hasReserved) || (hasPaid && hasPaymentReceived) || (hasReserved && hasPaymentReceived)) {
     return {
       label: 'Misto',
       className: 'border-blue-200 bg-blue-50 text-blue-700',
@@ -3523,6 +3743,13 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
     };
   }
 
+  if (hasPaymentReceived) {
+    return {
+      label: 'Pagamento recebido',
+      className: 'border-blue-200 bg-blue-50 text-blue-700',
+    };
+  }
+
   return {
     label: 'Pago',
     className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -3533,12 +3760,14 @@ function PaymentsFinancialSummarySection({
   totalRecebido,
   totalPago,
   totalReservado,
+  totalRecebimentoAguardo,
   saldoRealContrato,
   saldoProjetoContrato,
 }: {
   totalRecebido: number;
   totalPago: number;
   totalReservado: number;
+  totalRecebimentoAguardo: number;
   saldoRealContrato: number;
   saldoProjetoContrato: number;
 }) {
@@ -3550,38 +3779,45 @@ function PaymentsFinancialSummarySection({
     tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
   }> = [
     {
-      label: 'Receitas recebidas',
+      label: 'Entradas',
       value: formatCurrency(totalRecebido),
-      description: 'Entradas financeiras confirmadas',
-      tooltip: 'Soma de todas as entradas já recebidas no projeto.',
+      description: 'Recebido em caixa',
+      tooltip: 'Soma das parcelas já recebidas, com entrada efetiva no caixa.',
       tone: 'emerald' as const,
     },
     {
-      label: 'Pagamentos efetivados',
+      label: 'Em aguardo',
+      value: formatCurrency(totalRecebimentoAguardo),
+      description: 'Faturado e ainda não recebido',
+      tooltip: 'Soma das parcelas faturadas (NF emitida) que ainda não entraram no caixa.',
+      tone: 'blue' as const,
+    },
+    {
+      label: 'Pagamentos',
       value: formatCurrency(totalPago),
-      description: 'Saí­das já realizadas',
-      tooltip: 'Considera apenas lançamentos marcados como pagos.',
+      description: 'Pagamentos já realizados',
+      tooltip: 'Soma de todos os pagamentos já realizados.',
       tone: 'slate' as const,
     },
     {
-      label: 'Reservas pendentes',
+      label: 'Reservas',
       value: formatCurrency(totalReservado),
-      description: 'Valores separados para pagamentos futuros',
-      tooltip: 'Valores reservados para pagamentos futuros, ainda não efetivados.',
+      description: 'Valores reservados para pagar',
+      tooltip: 'Soma de valores reservados para pagamentos futuros que ainda não foram realizados.',
       tone: 'amber' as const,
     },
     {
-      label: 'Caixa disponível',
+      label: 'Caixa',
       value: formatSignedCurrency(saldoRealContrato),
       description: saldoRealContrato < 0 ? 'Déficit antes das reservas' : 'Disponível antes das reservas',
-      tooltip: 'Receitas recebidas menos pagamentos efetivados.',
+      tooltip: 'Valor em caixa considerando o que já entrou menos o que já foi pago.',
       tone: saldoRealContrato < 0 ? 'danger' : 'green',
     },
     {
-      label: 'Disponível após reservas',
+      label: 'Livre após reservas',
       value: formatSignedCurrency(saldoProjetoContrato),
       description: saldoProjetoContrato < 0 ? 'Déficit após reservas' : 'Saldo realmente livre do projeto',
-      tooltip: 'Caixa disponível menos os valores reservados para pagamentos futuros.',
+      tooltip: 'Saldo livre após descontar do caixa os valores já reservados para pagamentos futuros.',
       tone: saldoProjetoContrato < 0 ? 'danger' : 'blue',
     },
   ];
@@ -3595,7 +3831,7 @@ function PaymentsFinancialSummarySection({
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {metrics.map((metric) => (
           <SummaryMetricCard
             key={metric.label}
@@ -3942,6 +4178,7 @@ function PaymentCard({
             onUpdateLaunch={handlers.onUpdateLaunch}
             onRemoveLaunch={handlers.onRemoveLaunch}
             onMarkLaunchPaid={handlers.onMarkLaunchPaid}
+            onStartReclassifyLaunch={handlers.onStartReclassifyLaunch}
           />
         ) : null}
       </div>
@@ -3957,6 +4194,7 @@ function PaymentLaunchList({
   onUpdateLaunch,
   onRemoveLaunch,
   onMarkLaunchPaid,
+  onStartReclassifyLaunch,
 }: PaymentLaunchListProps) {
   return (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -4005,6 +4243,7 @@ function PaymentLaunchList({
               onUpdateLaunch={onUpdateLaunch}
               onRemoveLaunch={onRemoveLaunch}
               onMarkLaunchPaid={onMarkLaunchPaid}
+              onStartReclassifyLaunch={onStartReclassifyLaunch}
             />
           ))
         )}
@@ -4024,6 +4263,7 @@ function LaunchRow({
   onUpdateLaunch,
   onRemoveLaunch,
   onMarkLaunchPaid,
+  onStartReclassifyLaunch,
 }: LaunchRowProps) {
   if (canManageChildren && isEditing) {
     return (
@@ -4050,6 +4290,7 @@ function LaunchRow({
             options={[
               { value: 'PAGO', label: 'Pago' },
               { value: 'RESERVADO', label: 'Reservado' },
+              { value: 'PAGAMENTO_RECEBIDO', label: 'Pagamento recebido' },
             ]}
             className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
           />          <Dropdown
@@ -4126,6 +4367,15 @@ function LaunchRow({
                 Tornar pago
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => onStartReclassifyLaunch(itemId, launch)}
+              disabled={isPersisting || !launch.expenseId}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Pencil className="h-4 w-4" />
+              Reclassificar
+            </button>
             <button
               type="button"
               onClick={() => onRemoveLaunch(itemId, paymentId, launch.id)}

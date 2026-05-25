@@ -63,6 +63,7 @@ import {
   updateBudgetCategory,
   updateBudgetItem,
   uploadDocument,
+  getProjectBudgetSummary,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
 import {
@@ -84,6 +85,7 @@ import {
   type PageResponseDTO,
   type PeopleResponseDTO,
   type ProjectCompanyDetailedResponseDTO,
+  type ProjectBudgetSummaryDTO,
   type RoleProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
@@ -594,6 +596,7 @@ export default function RubricasPage() {
   const [metas, setMetas] = useState<MetaOption[]>([]);
   const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
   const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
+  const [budgetSummary, setBudgetSummary] = useState<ProjectBudgetSummaryDTO | null>(null);
   const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
   const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
   const [showCreatePersonModal, setShowCreatePersonModal] = useState(false);
@@ -767,6 +770,7 @@ export default function RubricasPage() {
         allProjectCompanies,
         allPeople,
         allCompanies,
+        summary,
       ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
@@ -778,7 +782,9 @@ export default function RubricasPage() {
         fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })),
         fetchAllPages((query) => listPeople(query)),
         fetchAllPages((query) => listCompanies(query)),
+        getProjectBudgetSummary(projectId),
       ]);
+      setBudgetSummary(summary);
 
       const projectGoals = (allGoals as GoalResponseDTO[])
         .filter((goal) => goal.projectId === projectId)
@@ -935,6 +941,7 @@ export default function RubricasPage() {
       setAvailablePeople([]);
       setAvailableCompanies([]);
       setRemanejamentos([]);
+      setBudgetSummary(null);
     } finally {
       setIsLoading(false);
     }
@@ -2002,6 +2009,35 @@ export default function RubricasPage() {
 
   return (
     <div className="space-y-6">
+      {budgetSummary && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-sm text-gray-500">Valor do Contrato</p>
+            <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(budgetSummary.contractValue)}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-sm text-gray-500">Total Planejado</p>
+            <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(budgetSummary.totalBudgetItems)}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-sm text-gray-500">{budgetSummary.isExceeded ? 'Excedente' : 'Saldo restante'}</p>
+            <p className={`mt-1 text-xl font-bold ${budgetSummary.isExceeded ? 'text-red-600' : 'text-[#004225]'}`}>
+              {formatCurrency(budgetSummary.isExceeded ? budgetSummary.exceededAmount : budgetSummary.remainingAmount)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-sm text-gray-500">% Planejado</p>
+            <p className={`mt-1 text-xl font-bold ${budgetSummary.isExceeded ? 'text-red-600' : 'text-gray-900'}`}>
+              {budgetSummary.plannedPercentage.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      )}
+      {budgetSummary?.isExceeded && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          As rubricas excedem o valor do contrato em {formatCurrency(budgetSummary.exceededAmount)}.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>

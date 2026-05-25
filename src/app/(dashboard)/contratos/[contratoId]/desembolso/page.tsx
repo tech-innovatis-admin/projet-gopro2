@@ -19,12 +19,13 @@ import { ContractDisbursementLoadingSkeleton } from "../_components/ContractLoad
 import {
   createDisbursementSchedule,
   deleteDisbursementSchedule,
+  getProjectDisbursementSummary,
   getProjectById,
   listDisbursementSchedules,
   updateDisbursementSchedule,
 } from "@/src/lib/api/endpoints";
 import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
-import { type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
+import { type ProjectDisbursementSummaryDTO, type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 type ParcelaPrevista = {
@@ -200,6 +201,7 @@ export default function DesembolsoPage() {
   const [projectCode, setProjectCode] = useState("");
   const [valorTotalContrato, setValorTotalContrato] = useState(0);
   const [parcelas, setParcelas] = useState<ParcelaPrevista[]>([]);
+  const [disbursementSummary, setDisbursementSummary] = useState<ProjectDisbursementSummaryDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -260,9 +262,10 @@ export default function DesembolsoPage() {
     }
 
     try {
-      const [project, allSchedules] = await Promise.all([
+      const [project, allSchedules, summary] = await Promise.all([
         getProjectById(projectId).catch(() => null),
         fetchAllDisbursementSchedules(projectId),
+        getProjectDisbursementSummary(projectId).catch(() => null),
       ]);
 
       const projectSchedules = allSchedules.map<ParcelaPrevista>((schedule) => ({
@@ -276,11 +279,13 @@ export default function DesembolsoPage() {
 
       const normalized = sortAndRenumber(projectSchedules);
       setParcelas(normalized);
+      setDisbursementSummary(summary);
       setProjectCode(project?.code || `PROJ-${projectId}`);
       setValorTotalContrato(normalizeCurrencyNumber(project?.contractValue));
     } catch (error) {
       setLoadError(toErrorMessage(error, "Não foi possível carregar os desembolsos."));
       setParcelas([]);
+      setDisbursementSummary(null);
     } finally {
       setIsLoading(false);
     }
@@ -561,6 +566,16 @@ export default function DesembolsoPage() {
             {formatCurrency(totalPrevisto)}
           </p>
           <p className="mt-1 text-xs text-gray-400">Somatório do cronograma</p>
+        </div>
+
+        <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+          <p className="text-sm text-gray-500">Total Recebido</p>
+          <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
+            {formatCurrency(disbursementSummary?.totalReceived ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Não vinculado: {formatCurrency(disbursementSummary?.unlinkedReceivedAmount ?? 0)}
+          </p>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
