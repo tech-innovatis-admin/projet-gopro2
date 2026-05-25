@@ -78,6 +78,24 @@
 **Owner (subagente worker):** Frontend-BudgetSummary Worker
 
 - [ ] Consumir `getProjectBudgetSummary(projectId)` em `rubricas/page.tsx`.
+
+---
+
+## Atualização Operacional (2026-05-25)
+
+- [x] Adicionadas migrações equivalentes de produção no backend Java para evitar drift entre trilhas:
+  - `db/migration/prod/V053__add_income_disbursement_link_and_expense_reclassification_history.sql`
+  - `db/migration/prod/V054__add_income_status.sql`
+- [x] Mantida compatibilidade com profile `prod` (`spring.flyway.locations=classpath:db/migration/prod`), sem depender de scripts `core` em produção.
+- [x] Regra de consistência do valor-base de beneficiário aplicada no backend:
+  - em criação/edição de item de rubrica, `contracted_amount` passa a espelhar `planned_amount`.
+  - migrações de alinhamento adicionadas:
+    - `db/migration/core/V143__align_beneficiary_base_with_budget_item.sql`
+    - `db/migration/prod/V055__align_beneficiary_base_with_budget_item.sql`
+- [x] Regra de exclusividade de recebedor por projeto aplicada no backend:
+  - se uma pessoa já recebe no projeto como `project_people`, ela não pode receber via empresa da qual é responsável no mesmo projeto.
+  - se uma empresa está vinculada ao projeto com responsável, esse responsável não pode receber como pessoa no mesmo projeto.
+  - validação aplicada nos fluxos de item de rubrica/beneficiário e criação/edição de despesas.
 - [ ] Renderizar card com `contractValue`, `totalBudgetItems`, `difference`, `remainingAmount`, `exceededAmount`, `plannedPercentage`.
 - [ ] Exibir alerta visual para `isExceeded = true`.
 - [ ] Revalidar summary após criar/editar/excluir rubrica e após remanejamentos que afetem total.

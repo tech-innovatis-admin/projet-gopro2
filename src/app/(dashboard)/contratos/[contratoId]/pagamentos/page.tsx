@@ -1807,6 +1807,34 @@ export default function PagamentosPlanilhaPage() {
     setIsSubitemModalOpen(true);
   };
 
+  const handleConfirmarRecebimentoParcela = async (parcela: Parcela) => {
+    if (!ensureCanManageChildren()) return;
+    if (!isPersistedId(parcela.id)) {
+      setActionError('Parcela inválida para confirmação de recebimento.');
+      return;
+    }
+    if (parcela.status === 'RECEBIDO') {
+      return;
+    }
+
+    setIsPersisting(true);
+    setActionError(null);
+    try {
+      await updateIncome(Number.parseInt(parcela.id, 10), {
+        numero: parcela.numero,
+        amount: toMoneyValue(parcela.valorRecebido),
+        receivedAt: parcela.dataRecebimento,
+        status: 'RECEBIDO',
+      });
+      await loadData();
+      showSavedMessage('Recebimento confirmado com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível confirmar o recebimento da parcela.'));
+    } finally {
+      setIsPersisting(false);
+    }
+  };
+
   const handleStartEditSubitem = (itemId: ID, subitemId: ID) => {
     if (!ensureCanManageChildren()) return;
     if (isPersisting) return;
@@ -3149,6 +3177,22 @@ export default function PagamentosPlanilhaPage() {
                         <td className="px-3 py-2">
                           {canManageChildren ? (
                             <div className="flex items-center justify-center gap-1">
+                              {parcela.status === 'FATURADO' ? (
+                                <button
+                                  onClick={() => {
+                                    void handleConfirmarRecebimentoParcela(parcela);
+                                  }}
+                                  disabled={isPersisting}
+                                  className="rounded p-1 text-emerald-700 hover:bg-emerald-50"
+                                  title="Confirmar recebimento"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <span className="rounded p-1 opacity-0" aria-hidden>
+                                  <Check className="h-4 w-4" />
+                                </span>
+                              )}
                               <button
                                 onClick={() => handleStartEditParcela(parcela)}
                                 disabled={isPersisting}
@@ -4161,7 +4205,7 @@ function PaymentCard({
             >
               <PrimaryActionIcon className="h-4 w-4" />
               {view.isEditingLancamentos
-                ? 'Salvar lançaamentos'
+                ? 'Salvar lançamentos'
                 : view.hasLancamentos
                   ? 'Editar lançamentos'
                   : 'Adicionar lançamento'}
@@ -4268,7 +4312,7 @@ function LaunchRow({
   if (canManageChildren && isEditing) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lançamento {index + 1}</div>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto]">
           <MoneyInput
             valueCents={Math.round(launch.valor * 100)}
@@ -4290,7 +4334,6 @@ function LaunchRow({
             options={[
               { value: 'PAGO', label: 'Pago' },
               { value: 'RESERVADO', label: 'Reservado' },
-              { value: 'PAGAMENTO_RECEBIDO', label: 'Pagamento recebido' },
             ]}
             className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
           />          <Dropdown
@@ -4337,7 +4380,7 @@ function LaunchRow({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lançamento {index + 1}</div>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-base font-semibold text-slate-900">{formatCurrency(launch.valor)}</span>

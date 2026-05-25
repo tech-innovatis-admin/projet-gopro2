@@ -11,6 +11,7 @@ import {
   Check,
   X,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
@@ -292,6 +293,31 @@ const formatCnpjCompact = (value?: string | null) => {
 
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
+
+const extractCriticalBeneficiaryConflictMessage = (error: unknown): string | null => {
+  if (!(error instanceof HttpError) || !error.fieldErrors) {
+    return null;
+  }
+
+  const candidateMessages = [
+    error.fieldErrors.projectPeopleId,
+    error.fieldErrors.projectCompanyId,
+  ].filter((message): message is string => Boolean(message?.trim()));
+
+  for (const message of candidateMessages) {
+    const normalized = message.toLowerCase();
+    const isConflictMessage =
+      normalized.includes('responsavel') &&
+      normalized.includes('rubrica') &&
+      (normalized.includes('ja recebe') || normalized.includes('nao pode receber'));
+
+    if (isConflictMessage) {
+      return message;
+    }
+  }
+
+  return null;
+};
 
 const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
 
@@ -642,6 +668,7 @@ export default function RubricasPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [criticalConflictMessage, setCriticalConflictMessage] = useState<string | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -1500,7 +1527,13 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1611,7 +1644,13 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -2010,28 +2049,48 @@ export default function RubricasPage() {
   return (
     <div className="space-y-6">
       {budgetSummary && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-sm text-gray-500">Valor do Contrato</p>
-            <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(budgetSummary.contractValue)}</p>
+        <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-5 shadow-sm md:p-6">
+          <div className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryMetricCard
+              label="Contrato"
+              value={formatCurrency(budgetSummary.contractValue)}
+              description="Base de comparação do planejamento"
+              tooltip="Valor total aprovado para este contrato."
+              tone="slate"
+            />
+            <SummaryMetricCard
+              label="Planejado"
+              value={formatCurrency(budgetSummary.totalBudgetItems)}
+              description="Compromisso orçamentário atual"
+              tooltip="Soma de todos os itens planejados nas rubricas deste projeto."
+              tone="emerald"
+            />
+            <SummaryMetricCard
+              label={budgetSummary.isExceeded ? 'Excedente' : 'Saldo'}
+              value={formatCurrency(
+                budgetSummary.isExceeded ? budgetSummary.exceededAmount : budgetSummary.remainingAmount
+              )}
+              description={
+                budgetSummary.isExceeded
+                  ? 'Planejamento acima do limite do contrato'
+                  : 'Ainda pode ser distribuído em rubricas'
+              }
+              tooltip={
+                budgetSummary.isExceeded
+                  ? 'Diferença que excede o valor total do contrato.'
+                  : 'Diferença entre o valor do contrato e o total planejado em rubricas.'
+              }
+              tone={budgetSummary.isExceeded ? 'danger' : 'green'}
+            />
+            <SummaryMetricCard
+              label="Planejamento"
+              value={`${budgetSummary.plannedPercentage.toFixed(2)}%`}
+              description="Percentual do valor do contrato já distribuído nas rubricas"
+              tooltip="Mostra quanto do contrato já foi planejado nas rubricas. Exemplo: 35% significa que 35% do valor total já foi distribuído."
+              tone={budgetSummary.isExceeded ? 'danger' : 'blue'}
+            />
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-sm text-gray-500">Total Planejado</p>
-            <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(budgetSummary.totalBudgetItems)}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-sm text-gray-500">{budgetSummary.isExceeded ? 'Excedente' : 'Saldo restante'}</p>
-            <p className={`mt-1 text-xl font-bold ${budgetSummary.isExceeded ? 'text-red-600' : 'text-[#004225]'}`}>
-              {formatCurrency(budgetSummary.isExceeded ? budgetSummary.exceededAmount : budgetSummary.remainingAmount)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-sm text-gray-500">% Planejado</p>
-            <p className={`mt-1 text-xl font-bold ${budgetSummary.isExceeded ? 'text-red-600' : 'text-gray-900'}`}>
-              {budgetSummary.plannedPercentage.toFixed(2)}%
-            </p>
-          </div>
-        </div>
+        </section>
       )}
       {budgetSummary?.isExceeded && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -2042,7 +2101,7 @@ export default function RubricasPage() {
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
           <p className="text-sm text-gray-500">
-            Gerencie os itens de despesa organizados por categoria orçamentária
+            Cadastre e ajuste os itens de despesa por rubrica, com controle de metas e beneficiários.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -3554,6 +3613,141 @@ export default function RubricasPage() {
           onComeback={handleComebackRemanejamento}
         />
       )}
+
+      <AppModalShell
+        isOpen={Boolean(criticalConflictMessage)}
+        title="Conflito de vínculo financeiro"
+        description="A mesma pessoa não pode receber duas vezes no mesmo projeto."
+        icon={<AlertCircle className="h-5 w-5" />}
+        tone="danger"
+        onClose={() => setCriticalConflictMessage(null)}
+        maxWidthClassName="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800">Bloqueio de regra de negócio</p>
+            <p className="mt-1 text-sm text-red-700">{criticalConflictMessage}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            Ajuste o beneficiário deste item para continuar: selecione outra pessoa ou outra
+            empresa sem responsável já vinculado financeiramente neste projeto.
+          </div>
+          <div className="flex justify-end border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={() => setCriticalConflictMessage(null)}
+              className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#00351d]"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+    </div>
+  );
+}
+
+function SummaryMetricCard({
+  label,
+  value,
+  description,
+  tooltip,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string;
+  description: string;
+  tooltip: string;
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
+}) {
+  const toneStyles = {
+    emerald: {
+      surface: 'border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white',
+      accent: 'from-emerald-500 to-teal-500',
+      eyebrow: 'text-emerald-900/80',
+      value: 'text-emerald-950',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800',
+    },
+    slate: {
+      surface: 'border-slate-200 bg-gradient-to-br from-slate-100 via-white to-white',
+      accent: 'from-slate-500 to-slate-700',
+      eyebrow: 'text-slate-700',
+      value: 'text-slate-950',
+      dot: 'bg-slate-500',
+      tooltipButton:
+        'border-slate-200 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-800',
+    },
+    amber: {
+      surface: 'border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white',
+      accent: 'from-amber-400 to-orange-500',
+      eyebrow: 'text-amber-900/80',
+      value: 'text-amber-700',
+      dot: 'bg-amber-500',
+      tooltipButton:
+        'border-amber-200 bg-white/80 text-amber-700 hover:border-amber-300 hover:text-amber-800',
+    },
+    green: {
+      surface: 'border-lime-200/80 bg-gradient-to-br from-lime-50 via-white to-white',
+      accent: 'from-lime-500 to-emerald-500',
+      eyebrow: 'text-lime-900/80',
+      value: 'text-emerald-700',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-lime-200 bg-white/80 text-emerald-700 hover:border-lime-300 hover:text-emerald-800',
+    },
+    blue: {
+      surface: 'border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-white',
+      accent: 'from-blue-500 to-indigo-500',
+      eyebrow: 'text-blue-900/80',
+      value: 'text-blue-700',
+      dot: 'bg-blue-500',
+      tooltipButton:
+        'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+    danger: {
+      surface: 'border-red-200/90 bg-gradient-to-br from-red-50 via-white to-rose-50/80',
+      accent: 'from-red-500 to-rose-500',
+      eyebrow: 'text-red-900/85',
+      value: 'text-red-700',
+      dot: 'bg-red-500',
+      tooltipButton:
+        'border-red-200 bg-white/85 text-red-700 hover:border-red-300 hover:text-red-800',
+    },
+  }[tone];
+
+  return (
+    <div className={`relative overflow-visible rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${toneStyles.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${toneStyles.dot}`} />
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneStyles.eyebrow}`}>
+              {label}
+            </p>
+          </div>
+          <p className={`mt-3 text-xl font-semibold tracking-tight ${toneStyles.value}`}>{value}</p>
+          <p className="mt-2 text-sm text-slate-500">{description}</p>
+        </div>
+
+        <div className="group/tooltip relative shrink-0">
+          <button
+            type="button"
+            aria-label={`Saiba mais sobre ${label}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${toneStyles.tooltipButton}`}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-3rem)] translate-y-1 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 invisible group-hover/tooltip:visible group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:visible group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+          >
+            {tooltip}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
