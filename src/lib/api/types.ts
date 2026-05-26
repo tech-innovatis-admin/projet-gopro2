@@ -79,7 +79,7 @@ export type ProjectStatusEnum =
   | 'FINALIZADO'
   | 'SUSPENSO'
   | 'PLANEJAMENTO';
-export type ExpensePaymentStatusEnum = 'PAGO' | 'RESERVADO';
+export type ExpensePaymentStatusEnum = 'PAGO' | 'RESERVADO' | 'PAGAMENTO_RECEBIDO';
 export type ExpensePaidByEnum = 'INNOVATIS' | 'EXECUCAO';
 export type StatusProjectPeopleEnum = 'PENDENTE' | 'ATIVO' | 'ENCERRADO';
 export type ContractTypeEnum = 'BOLSA' | 'RPA' | 'CLT';
@@ -869,6 +869,45 @@ export interface ProjectPeopleUpdateDTO extends Partial<ProjectPeopleRequestDTO>
   updatedBy?: number;
 }
 
+export interface ProjectBudgetSummaryDTO {
+  projectId: number;
+  contractValue: number;
+  totalBudgetItems: number;
+  difference: number;
+  remainingAmount: number;
+  exceededAmount: number;
+  isExceeded: boolean;
+  plannedPercentage: number;
+}
+
+export interface ProjectDisbursementInstallmentSummaryDTO {
+  disbursementScheduleId: number;
+  expectedMonth: string;
+  expectedAmount: number;
+  invoicedAmount: number;
+  receivedAmount: number;
+  difference: number;
+  status: 'PENDENTE' | 'PARCIAL' | 'RECEBIDA' | 'EXCEDIDA';
+}
+
+export interface ProjectDisbursementSummaryDTO {
+  projectId: number;
+  totalExpected: number;
+  totalInvoiced: number;
+  totalReceived: number;
+  difference: number;
+  differenceInvoicedVsReceived: number;
+  expectedInstallments: number;
+  receivedInstallments: number;
+  partialInstallments: number;
+  pendingInstallments: number;
+  installments: ProjectDisbursementInstallmentSummaryDTO[];
+  unlinkedInvoicedAmount: number;
+  unlinkedReceivedAmount: number;
+}
+
+export type IncomeStatusEnum = 'FATURADO' | 'RECEBIDO' | 'CANCELADO';
+
 export type ContractingStatusEnum =
   | 'EM_CADASTRO'
   | 'EM_CONTRATACAO'
@@ -960,9 +999,11 @@ export interface DocumentDownloadUrlDTO {
 export interface IncomeResponseDTO {
   id: number;
   projectId: number;
+  disbursementScheduleId?: number | null;
   numero: number;
   amount: number;
   receivedAt: string;
+  status: IncomeStatusEnum;
   source: string | null;
   invoiceNumber: string | null;
   notes: string | null;
@@ -975,9 +1016,11 @@ export interface IncomeResponseDTO {
 
 export interface IncomeRequestDTO {
   projectId: number;
+  disbursementScheduleId?: number | null;
   numero: number;
   amount: number;
   receivedAt: string;
+  status: IncomeStatusEnum;
   source?: string;
   invoiceNumber?: string;
   notes?: string;

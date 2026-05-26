@@ -132,6 +132,17 @@ function toSafeNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getDisplayedCompanyTotal(
+  empresa: EmpresaProjeto,
+  financialSummary?: BeneficiaryFinancialSummary,
+) {
+  if (financialSummary) {
+    return financialSummary.finalBudgetAmount;
+  }
+
+  return typeof empresa.valorContrato === "number" ? empresa.valorContrato : undefined;
+}
+
 async function fetchAllPages<T>(
   fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>,
 ): Promise<T[]> {
@@ -231,7 +242,12 @@ export default function EmpresasPage() {
     [availableCompanies],
   );
 
-  const totalValor = empresas.reduce((acc, empresa) => acc + (empresa.valorContrato || 0), 0);
+  const totalValor = empresas.reduce((acc, empresa) => {
+    const financialSummary = empresa.projectCompanyId
+      ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
+      : undefined;
+    return acc + toSafeNumber(getDisplayedCompanyTotal(empresa, financialSummary));
+  }, 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -658,6 +674,7 @@ export default function EmpresasPage() {
             const financialSummary = empresa.projectCompanyId
               ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
               : undefined;
+            const displayedCompanyTotal = getDisplayedCompanyTotal(empresa, financialSummary);
             const executionPercentage =
               typeof empresa.executionPercentage === "number"
                 ? empresa.executionPercentage
@@ -770,7 +787,7 @@ export default function EmpresasPage() {
                     </span>
                   )}
                 </div>
-                <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
+                <span className="font-semibold text-[#004225]">{formatCurrency(displayedCompanyTotal)}</span>
               </div>
             </div>
             );

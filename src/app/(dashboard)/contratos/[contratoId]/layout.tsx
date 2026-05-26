@@ -533,7 +533,7 @@ export default function ContratoLayout({
   };
 
   const currentContrato = isEditing ? editContrato : contrato;
-  const contractDisplayTitle = `${contrato.codigo} â€“ ${contrato.titulo}`;
+  const contractDisplayTitle = `${contrato.codigo} - ${contrato.titulo}`;
   const editPopupUrl = useMemo(
     () => `/contratos/novo-contrato?popup=1&editContractId=${contratoId}`,
     [contratoId]

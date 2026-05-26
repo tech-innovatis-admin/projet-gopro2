@@ -11,6 +11,7 @@ import {
   Check,
   X,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
@@ -63,6 +64,7 @@ import {
   updateBudgetCategory,
   updateBudgetItem,
   uploadDocument,
+  getProjectBudgetSummary,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
 import {
@@ -84,6 +86,7 @@ import {
   type PageResponseDTO,
   type PeopleResponseDTO,
   type ProjectCompanyDetailedResponseDTO,
+  type ProjectBudgetSummaryDTO,
   type RoleProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
@@ -291,6 +294,31 @@ const formatCnpjCompact = (value?: string | null) => {
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
 
+const extractCriticalBeneficiaryConflictMessage = (error: unknown): string | null => {
+  if (!(error instanceof HttpError) || !error.fieldErrors) {
+    return null;
+  }
+
+  const candidateMessages = [
+    error.fieldErrors.projectPeopleId,
+    error.fieldErrors.projectCompanyId,
+  ].filter((message): message is string => Boolean(message?.trim()));
+
+  for (const message of candidateMessages) {
+    const normalized = message.toLowerCase();
+    const isConflictMessage =
+      normalized.includes('responsavel') &&
+      normalized.includes('rubrica') &&
+      (normalized.includes('ja recebe') || normalized.includes('nao pode receber'));
+
+    if (isConflictMessage) {
+      return message;
+    }
+  }
+
+  return null;
+};
+
 const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
 
 const isPersistedId = (id: string) => /^\d+$/.test(id);
@@ -325,6 +353,13 @@ const createEmptyCompanyForm = (): CompanyFormData => ({
   uf: '',
   status: RUBRICA_DEFAULT_COMPANY_STATUS,
 });
+
+const buildDraftItemTotal = (draft: Partial<ItemRubrica>) => {
+  const quantidade = toPositiveInt(draft.quantidade, 1);
+  const meses = toPositiveInt(draft.meses, 1);
+  const valorUnitario = toMoneyValue(draft.valorUnitario);
+  return Number((quantidade * meses * valorUnitario).toFixed(2));
+};
 
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
@@ -587,6 +622,7 @@ export default function RubricasPage() {
   const [metas, setMetas] = useState<MetaOption[]>([]);
   const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
   const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
+  const [budgetSummary, setBudgetSummary] = useState<ProjectBudgetSummaryDTO | null>(null);
   const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
   const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
   const [showCreatePersonModal, setShowCreatePersonModal] = useState(false);
@@ -600,6 +636,10 @@ export default function RubricasPage() {
   const [newPersonCpfError, setNewPersonCpfError] = useState('');
   const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
   const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
+  const [createPersonModalError, setCreatePersonModalError] = useState<string | null>(null);
+  const [createCompanyModalError, setCreateCompanyModalError] = useState<string | null>(null);
+  const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
+  const [linkCompanyModalError, setLinkCompanyModalError] = useState<string | null>(null);
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -628,6 +668,7 @@ export default function RubricasPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [criticalConflictMessage, setCriticalConflictMessage] = useState<string | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -756,6 +797,7 @@ export default function RubricasPage() {
         allProjectCompanies,
         allPeople,
         allCompanies,
+        summary,
       ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
@@ -767,7 +809,9 @@ export default function RubricasPage() {
         fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })),
         fetchAllPages((query) => listPeople(query)),
         fetchAllPages((query) => listCompanies(query)),
+        getProjectBudgetSummary(projectId),
       ]);
+      setBudgetSummary(summary);
 
       const projectGoals = (allGoals as GoalResponseDTO[])
         .filter((goal) => goal.projectId === projectId)
@@ -924,6 +968,7 @@ export default function RubricasPage() {
       setAvailablePeople([]);
       setAvailableCompanies([]);
       setRemanejamentos([]);
+      setBudgetSummary(null);
     } finally {
       setIsLoading(false);
     }
@@ -1072,27 +1117,21 @@ export default function RubricasPage() {
     setItemFieldErrors({});
   };
 
-  const applyBeneficiarySelection = (
-    type: BeneficiaryType,
-    referenceId: string,
-    label: string
-  ) => {
-    if (type === 'person') {
-      setProjectPeopleOptions((current) => {
-        if (current.some((item) => item.id === referenceId)) return current;
-        return [...current, { id: referenceId, label }].sort((a, b) =>
-          a.label.localeCompare(b.label, 'pt-BR')
-        );
-      });
-    } else {
-      setProjectCompanyOptions((current) => {
-        if (current.some((item) => item.id === referenceId)) return current;
-        return [...current, { id: referenceId, label, name: label }].sort((a, b) =>
-          a.label.localeCompare(b.label, 'pt-BR')
-        );
-      });
-    }
+  const appendProjectPersonOption = (option: ProjectPersonOption) => {
+    setProjectPeopleOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
 
+  const appendProjectCompanyOption = (option: ProjectCompanyOption) => {
+    setProjectCompanyOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
+
+  const applyBeneficiarySelection = (type: BeneficiaryType, referenceId: string) => {
     setNewItem((current) => ({
       ...current,
       projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
@@ -1105,41 +1144,51 @@ export default function RubricasPage() {
 
   const handleLinkExistingPerson = async () => {
     if (!selectedPersonToLink) return;
-    const actorUserId = await requireCurrentUserId();
-    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-    const draftMeses = toPositiveInt(newItem.meses, 1);
-    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
-    const personLabel =
-      availablePeople.find((person) => String(person.id) === selectedPersonToLink)?.fullName ??
-      `Pessoa #${selectedPersonToLink}`;
-    const linked = await createProjectPeople({
-      projectId,
-      personId: Number(selectedPersonToLink),
-      baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      createdBy: actorUserId,
-    });
-    applyBeneficiarySelection('person', String(linked.id), personLabel);
-    setShowLinkPersonModal(false);
-    setSelectedPersonToLink(undefined);
-    await loadData();
+    try {
+      setIsSubmitting(true);
+      setLinkPersonModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const draftItemTotal = buildDraftItemTotal(newItem);
+      const selectedPerson =
+        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
+      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
+      const linked = await createProjectPeople({
+        projectId,
+        personId: Number(selectedPersonToLink),
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+        createdBy: actorUserId,
+      });
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: personLabel,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
+      setAvailablePeople((current) =>
+        current.filter((person) => String(person.id) !== selectedPersonToLink)
+      );
+      setShowLinkPersonModal(false);
+      setSelectedPersonToLink(undefined);
+      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLinkExistingCompany = async () => {
     if (!selectedCompanyToLink) return;
     try {
       setIsSubmitting(true);
-      setActionError(null);
-      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-      const draftMeses = toPositiveInt(newItem.meses, 1);
-      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+      setLinkCompanyModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
-      const companyLabel =
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)
-          ?.tradeName ||
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink)?.name ||
-        `Empresa #${selectedCompanyToLink}`;
+      const selectedCompany =
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
+      const companyName =
+        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
       const linked = await createProjectCompany({
         projectId,
         companyId: Number(selectedCompanyToLink),
@@ -1147,12 +1196,32 @@ export default function RubricasPage() {
         status: RUBRICA_DEFAULT_COMPANY_STATUS,
         createdBy: actorUserId,
       });
-      applyBeneficiarySelection('company', String(linked.id), companyLabel);
+
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
+          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
+          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: selectedCompany?.cnpj ?? null,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
+        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
+      setAvailableCompanies((current) =>
+        current.filter((company) => String(company.id) !== selectedCompanyToLink)
+      );
       setShowLinkCompanyModal(false);
       setSelectedCompanyToLink(undefined);
-      await loadData();
+      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
+      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1160,7 +1229,7 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkPerson = async () => {
     if (!hasRequiredMemberFields(newPersonForm)) {
-      setActionError('Preencha os campos obrigatórios da pessoa antes de salvar.');
+      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa antes de salvar.');
       return;
     }
 
@@ -1182,11 +1251,8 @@ export default function RubricasPage() {
 
     try {
       setIsSubmitting(true);
-      setActionError(null);
-      const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-      const draftMeses = toPositiveInt(newItem.meses, 1);
-      const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-      const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+      setCreatePersonModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
       const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
       const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
@@ -1237,15 +1303,27 @@ export default function RubricasPage() {
         });
       }
 
-      applyBeneficiarySelection('person', String(linked.id), newPersonForm.nome.trim());
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: newPersonForm.nome.trim(),
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
       setShowCreatePersonModal(false);
       setNewPersonForm(defaultMemberFormData());
       setNewPersonAvatarFile(null);
       setNewPersonCpfError('');
       setNewPersonPhoneError('');
-      await loadData();
+      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.'));
+      setCreatePersonModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1253,18 +1331,15 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkCompany = async () => {
     if (!hasRequiredCompanyFields(newCompanyForm)) {
-      setActionError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
+      setCreateCompanyModalError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
       return;
     }
     const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
     if (cnpjDigits.length !== 14) {
-      setActionError('Informe um CNPJ válido com 14 dígitos.');
+      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
       return;
     }
-    const draftQuantidade = toPositiveInt(newItem.quantidade, 1);
-    const draftMeses = toPositiveInt(newItem.meses, 1);
-    const draftValorUnitario = toMoneyValue(newItem.valorUnitario);
-    const draftItemTotal = Number((draftQuantidade * draftMeses * draftValorUnitario).toFixed(2));
+    const draftItemTotal = buildDraftItemTotal(newItem);
     const totalValueForProjectCompany =
       typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
         ? newCompanyForm.valorContrato
@@ -1273,7 +1348,7 @@ export default function RubricasPage() {
           : undefined;
     try {
       setIsSubmitting(true);
-      setActionError(null);
+      setCreateCompanyModalError(null);
       const actorUserId = await requireCurrentUserId();
       const company = await createCompany({
         name: newCompanyForm.razaoSocial!.trim(),
@@ -1301,16 +1376,33 @@ export default function RubricasPage() {
         status: newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS,
         createdBy: actorUserId,
       });
-      applyBeneficiarySelection(
-        'company',
-        String(linked.id),
-        newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim()
-      );
+      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
+      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
+      const formattedCnpj = formatCnpjCompact(cnpjDigits);
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
+          formatContractingStatus(companyStatus),
+          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: formattedCnpj,
+        status: companyStatus,
+        availableBalance: totalValueForProjectCompany ?? null,
+        totalValue: totalValueForProjectCompany ?? null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
       setShowCreateCompanyModal(false);
       setNewCompanyForm(createEmptyCompanyForm());
-      await loadData();
+      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.'));
+      setCreateCompanyModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1435,7 +1527,13 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1546,7 +1644,13 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1944,11 +2048,60 @@ export default function RubricasPage() {
 
   return (
     <div className="space-y-6">
+      {budgetSummary && (
+        <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-5 shadow-sm md:p-6">
+          <div className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryMetricCard
+              label="Contrato"
+              value={formatCurrency(budgetSummary.contractValue)}
+              description="Base de comparação do planejamento"
+              tooltip="Valor total aprovado para este contrato."
+              tone="slate"
+            />
+            <SummaryMetricCard
+              label="Planejado"
+              value={formatCurrency(budgetSummary.totalBudgetItems)}
+              description="Compromisso orçamentário atual"
+              tooltip="Soma de todos os itens planejados nas rubricas deste projeto."
+              tone="emerald"
+            />
+            <SummaryMetricCard
+              label={budgetSummary.isExceeded ? 'Excedente' : 'Saldo'}
+              value={formatCurrency(
+                budgetSummary.isExceeded ? budgetSummary.exceededAmount : budgetSummary.remainingAmount
+              )}
+              description={
+                budgetSummary.isExceeded
+                  ? 'Planejamento acima do limite do contrato'
+                  : 'Ainda pode ser distribuído em rubricas'
+              }
+              tooltip={
+                budgetSummary.isExceeded
+                  ? 'Diferença que excede o valor total do contrato.'
+                  : 'Diferença entre o valor do contrato e o total planejado em rubricas.'
+              }
+              tone={budgetSummary.isExceeded ? 'danger' : 'green'}
+            />
+            <SummaryMetricCard
+              label="Planejamento"
+              value={`${budgetSummary.plannedPercentage.toFixed(2)}%`}
+              description="Percentual do valor do contrato já distribuído nas rubricas"
+              tooltip="Mostra quanto do contrato já foi planejado nas rubricas. Exemplo: 35% significa que 35% do valor total já foi distribuído."
+              tone={budgetSummary.isExceeded ? 'danger' : 'blue'}
+            />
+          </div>
+        </section>
+      )}
+      {budgetSummary?.isExceeded && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          As rubricas excedem o valor do contrato em {formatCurrency(budgetSummary.exceededAmount)}.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
           <p className="text-sm text-gray-500">
-            Gerencie os itens de despesa organizados por categoria orçamentária
+            Cadastre e ajuste os itens de despesa por rubrica, com controle de metas e beneficiários.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -2714,7 +2867,10 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowLinkPersonModal(true)}
+                      onClick={() => {
+                        setLinkPersonModalError(null);
+                        setShowLinkPersonModal(true);
+                      }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular pessoa existente
@@ -2726,6 +2882,7 @@ export default function RubricasPage() {
                         setNewPersonAvatarFile(null);
                         setNewPersonCpfError('');
                         setNewPersonPhoneError('');
+                        setCreatePersonModalError(null);
                         setShowCreatePersonModal(true);
                       }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
@@ -2739,14 +2896,20 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowLinkCompanyModal(true)}
+                      onClick={() => {
+                        setLinkCompanyModalError(null);
+                        setShowLinkCompanyModal(true);
+                      }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular empresa existente
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowCreateCompanyModal(true)}
+                      onClick={() => {
+                        setCreateCompanyModalError(null);
+                        setShowCreateCompanyModal(true);
+                      }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
                     >
                       Cadastrar nova empresa
@@ -3297,9 +3460,17 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={showLinkPersonModal}
         title="Vincular pessoa existente"
-        onClose={() => setShowLinkPersonModal(false)}
+        onClose={() => {
+          setShowLinkPersonModal(false);
+          setLinkPersonModalError(null);
+        }}
       >
         <div className="space-y-4">
+          {linkPersonModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkPersonModalError}
+            </div>
+          ) : null}
           <Dropdown
             searchable
             options={availablePeople.map((person) => ({
@@ -3313,7 +3484,10 @@ export default function RubricasPage() {
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setShowLinkPersonModal(false)}
+              onClick={() => {
+                setShowLinkPersonModal(false);
+                setLinkPersonModalError(null);
+              }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               Cancelar
@@ -3332,9 +3506,17 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={showLinkCompanyModal}
         title="Vincular empresa existente"
-        onClose={() => setShowLinkCompanyModal(false)}
+        onClose={() => {
+          setShowLinkCompanyModal(false);
+          setLinkCompanyModalError(null);
+        }}
       >
         <div className="space-y-4">
+          {linkCompanyModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkCompanyModalError}
+            </div>
+          ) : null}
           <Dropdown
             searchable
             options={availableCompanies.map((company) => ({
@@ -3348,7 +3530,10 @@ export default function RubricasPage() {
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setShowLinkCompanyModal(false)}
+              onClick={() => {
+                setShowLinkCompanyModal(false);
+                setLinkCompanyModalError(null);
+              }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               Cancelar
@@ -3379,12 +3564,14 @@ export default function RubricasPage() {
             setNewPersonAvatarFile(null);
             setNewPersonCpfError('');
             setNewPersonPhoneError('');
+            setCreatePersonModalError(null);
           }}
           onSave={() => void handleCreateAndLinkPerson()}
           cpfError={newPersonCpfError}
           setCpfError={setNewPersonCpfError}
           phoneError={newPersonPhoneError}
           setPhoneError={setNewPersonPhoneError}
+          errorMessage={createPersonModalError}
         />
       ) : null}
 
@@ -3397,8 +3584,10 @@ export default function RubricasPage() {
         onClose={() => {
           setShowCreateCompanyModal(false);
           setNewCompanyForm(createEmptyCompanyForm());
+          setCreateCompanyModalError(null);
         }}
         onSave={() => void handleCreateAndLinkCompany()}
+        errorMessage={createCompanyModalError}
       />
 
       {canManageChildren && itemParaRemanejamento && (
@@ -3424,6 +3613,141 @@ export default function RubricasPage() {
           onComeback={handleComebackRemanejamento}
         />
       )}
+
+      <AppModalShell
+        isOpen={Boolean(criticalConflictMessage)}
+        title="Conflito de vínculo financeiro"
+        description="A mesma pessoa não pode receber duas vezes no mesmo projeto."
+        icon={<AlertCircle className="h-5 w-5" />}
+        tone="danger"
+        onClose={() => setCriticalConflictMessage(null)}
+        maxWidthClassName="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800">Bloqueio de regra de negócio</p>
+            <p className="mt-1 text-sm text-red-700">{criticalConflictMessage}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            Ajuste o beneficiário deste item para continuar: selecione outra pessoa ou outra
+            empresa sem responsável já vinculado financeiramente neste projeto.
+          </div>
+          <div className="flex justify-end border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={() => setCriticalConflictMessage(null)}
+              className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#00351d]"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+    </div>
+  );
+}
+
+function SummaryMetricCard({
+  label,
+  value,
+  description,
+  tooltip,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string;
+  description: string;
+  tooltip: string;
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
+}) {
+  const toneStyles = {
+    emerald: {
+      surface: 'border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white',
+      accent: 'from-emerald-500 to-teal-500',
+      eyebrow: 'text-emerald-900/80',
+      value: 'text-emerald-950',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800',
+    },
+    slate: {
+      surface: 'border-slate-200 bg-gradient-to-br from-slate-100 via-white to-white',
+      accent: 'from-slate-500 to-slate-700',
+      eyebrow: 'text-slate-700',
+      value: 'text-slate-950',
+      dot: 'bg-slate-500',
+      tooltipButton:
+        'border-slate-200 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-800',
+    },
+    amber: {
+      surface: 'border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white',
+      accent: 'from-amber-400 to-orange-500',
+      eyebrow: 'text-amber-900/80',
+      value: 'text-amber-700',
+      dot: 'bg-amber-500',
+      tooltipButton:
+        'border-amber-200 bg-white/80 text-amber-700 hover:border-amber-300 hover:text-amber-800',
+    },
+    green: {
+      surface: 'border-lime-200/80 bg-gradient-to-br from-lime-50 via-white to-white',
+      accent: 'from-lime-500 to-emerald-500',
+      eyebrow: 'text-lime-900/80',
+      value: 'text-emerald-700',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-lime-200 bg-white/80 text-emerald-700 hover:border-lime-300 hover:text-emerald-800',
+    },
+    blue: {
+      surface: 'border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-white',
+      accent: 'from-blue-500 to-indigo-500',
+      eyebrow: 'text-blue-900/80',
+      value: 'text-blue-700',
+      dot: 'bg-blue-500',
+      tooltipButton:
+        'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+    danger: {
+      surface: 'border-red-200/90 bg-gradient-to-br from-red-50 via-white to-rose-50/80',
+      accent: 'from-red-500 to-rose-500',
+      eyebrow: 'text-red-900/85',
+      value: 'text-red-700',
+      dot: 'bg-red-500',
+      tooltipButton:
+        'border-red-200 bg-white/85 text-red-700 hover:border-red-300 hover:text-red-800',
+    },
+  }[tone];
+
+  return (
+    <div className={`relative overflow-visible rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${toneStyles.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${toneStyles.dot}`} />
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneStyles.eyebrow}`}>
+              {label}
+            </p>
+          </div>
+          <p className={`mt-3 text-xl font-semibold tracking-tight ${toneStyles.value}`}>{value}</p>
+          <p className="mt-2 text-sm text-slate-500">{description}</p>
+        </div>
+
+        <div className="group/tooltip relative shrink-0">
+          <button
+            type="button"
+            aria-label={`Saiba mais sobre ${label}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${toneStyles.tooltipButton}`}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-3rem)] translate-y-1 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 invisible group-hover/tooltip:visible group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:visible group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+          >
+            {tooltip}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -169,12 +169,15 @@ function SummaryCard({
 export function ContratoOverviewCard() {
   const params = useParams();
   const contratoId = params.contratoId as string;
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState>({
     project: null,
     totals: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
+  const [hasTitleOverflow, setHasTitleOverflow] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -202,6 +205,36 @@ export function ContratoOverviewCard() {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  const dashboardTitle = dashboardState.project?.name || `Contrato ${contratoId}`;
+
+  useEffect(() => {
+    setIsTitleExpanded(false);
+    setHasTitleOverflow(false);
+  }, [dashboardTitle]);
+
+  useEffect(() => {
+    if (loading || error || isTitleExpanded) {
+      return;
+    }
+
+    const measureTitleOverflow = () => {
+      const titleElement = titleRef.current;
+      if (!titleElement) {
+        setHasTitleOverflow(false);
+        return;
+      }
+
+      setHasTitleOverflow(titleElement.scrollHeight > titleElement.clientHeight + 1);
+    };
+
+    measureTitleOverflow();
+    window.addEventListener("resize", measureTitleOverflow);
+
+    return () => {
+      window.removeEventListener("resize", measureTitleOverflow);
+    };
+  }, [dashboardTitle, error, isTitleExpanded, loading]);
 
   const metrics = useMemo(() => calculateMetrics(dashboardState), [dashboardState]);
   const isNegativeBalance = metrics.saldoDisponivel < 0;
@@ -252,17 +285,31 @@ export function ContratoOverviewCard() {
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-[#004225]">Dashboard do contrato</p>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900 break-words [overflow-wrap:anywhere]">
-            {dashboardState.project?.name || `Contrato ${contratoId}`}
+          <h2
+            ref={titleRef}
+            className={`mt-1 text-2xl font-bold text-gray-900 break-words [overflow-wrap:anywhere] ${
+              !isTitleExpanded ? "line-clamp-2" : ""
+            }`}
+          >
+            {dashboardTitle}
           </h2>
+          {(hasTitleOverflow || isTitleExpanded) && (
+            <button
+              type="button"
+              onClick={() => setIsTitleExpanded((current) => !current)}
+              className="mt-3 inline-flex text-sm font-semibold text-[#004225] transition-colors hover:text-[#0b5f3c]"
+            >
+              {isTitleExpanded ? "Ver menos" : "Ver mais"}
+            </button>
+          )}
           <p className="mt-2 max-w-3xl text-sm text-gray-600">
             Visão consolidada dos principais indicadores financeiros e operacionais do contrato.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <div className={`rounded-lg border px-4 py-3 ${statusCardStyle.accentClass}`}>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Status</p>
             <p className={`mt-1 text-sm font-semibold ${statusCardStyle.valueClassName}`}>

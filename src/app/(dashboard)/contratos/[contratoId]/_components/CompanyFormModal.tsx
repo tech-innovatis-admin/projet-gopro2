@@ -119,6 +119,7 @@ type CompanyFormModalProps = {
   onSave: () => void;
   onClose: () => void;
   onDelete?: () => void;
+  errorMessage?: string | null;
 };
 
 export function CompanyFormModal({
@@ -130,6 +131,7 @@ export function CompanyFormModal({
   onSave,
   onClose,
   onDelete,
+  errorMessage,
 }: CompanyFormModalProps) {
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
@@ -191,6 +193,11 @@ export function CompanyFormModal({
         </div>
 
         <div className="max-h-[60vh] space-y-4 overflow-y-auto p-6">
+          {errorMessage ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Razao Social" required>
               <input type="text" value={formData.razaoSocial || ''} onChange={(event) => setFormData({ ...formData, razaoSocial: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Razao social da empresa" />

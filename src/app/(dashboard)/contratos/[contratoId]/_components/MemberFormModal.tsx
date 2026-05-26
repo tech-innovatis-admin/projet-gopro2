@@ -109,6 +109,7 @@ export function MemberFormModal({
   setCpfError,
   phoneError,
   setPhoneError,
+  errorMessage,
 }: {
   formData: MembroFormData;
   setFormData: Dispatch<SetStateAction<MembroFormData>>;
@@ -124,6 +125,7 @@ export function MemberFormModal({
   setCpfError: Dispatch<SetStateAction<string>>;
   phoneError: string;
   setPhoneError: Dispatch<SetStateAction<string>>;
+  errorMessage?: string | null;
 }) {
   const avatarPreview = useMemo(
     () => (avatarFile ? URL.createObjectURL(avatarFile) : ""),
@@ -252,6 +254,11 @@ export function MemberFormModal({
         </div>
 
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+          {errorMessage ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          ) : null}
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
