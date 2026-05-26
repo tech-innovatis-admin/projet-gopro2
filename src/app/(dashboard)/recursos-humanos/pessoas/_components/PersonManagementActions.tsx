@@ -11,8 +11,10 @@ import {
 import { Loader2, Pencil, Trash2, UserCircle, UserX, X } from "lucide-react";
 import { AppModalShell } from "@/components/ui/app-modal-shell";
 import { Button } from "@/components/ui/button";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { deletePeople, updatePeople } from "@/src/lib/api/endpoints";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { fetchBrazilStates, fetchCitiesByState } from "@/src/lib/ibge";
@@ -316,6 +318,20 @@ function PersonEditModal({
 
   const initials = useMemo(() => getInitials(person.fullName), [person.fullName]);
   const canSave = Boolean(formData.fullName.trim()) && !cpfError && !phoneError;
+  const initialFormData = useMemo(() => createPersonFormData(person), [person]);
+  const hasFilledData = useMemo(
+    () =>
+      (Object.keys(initialFormData) as Array<keyof PersonFormData>).some(
+        (field) => formData[field] !== initialFormData[field],
+      ),
+    [formData, initialFormData],
+  );
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen: true,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSaving,
+    onClose,
+  });
 
   const resolvedCityOptions = useMemo(() => {
     if (!formData.city) {
@@ -396,7 +412,7 @@ function PersonEditModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSaving}
             className="rounded-lg p-2 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
             aria-label="Fechar modal"
@@ -664,7 +680,7 @@ function PersonEditModal({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSaving}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -681,6 +697,7 @@ function PersonEditModal({
           </div>
         </div>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

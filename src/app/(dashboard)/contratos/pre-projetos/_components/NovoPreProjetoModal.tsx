@@ -1,14 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Upload, FileText, Trash2, AlertCircle, Loader2 } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { listPartners, listPublicAgencies } from "@/src/lib/api/endpoints";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import {
+  IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatFileSize,
+  validateUploadFile,
+} from "@/src/lib/upload";
 import type {
   PageResponseDTO,
   PartnerResponseDTO,
   PublicAgencyResponseDTO,
 } from "@/src/lib/api/types";
+import { Dropdown } from "@/components/ui/dropdown";
 
 export type TipoDocumento = "contrato" | "tr" | "planoTrabalho" | "outro";
 export type PreProjetoDocumentos = Partial<Record<TipoDocumento, File>>;
@@ -53,9 +62,31 @@ const documentoLabels: Record<TipoDocumento, string> = {
   outro: "Outro Documento",
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const ALLOWED_TYPES = ["application/pdf", ...IMAGE_UPLOAD_ALLOWED_MIME_TYPES];
 const PAGE_SIZE = 20;
+
+function createInitialFormData(): PreProjetoFormData {
+  return {
+    titulo: "",
+    objeto: "",
+    govIf: "",
+    tipo: "",
+    primaryPartnerId: null,
+    primaryPartnerName: "",
+    primaryClientId: null,
+    primaryClientName: "",
+    localidade: "",
+    valorTotal: "",
+    documentos: {},
+  };
+}
+
+const INITIAL_FILE_ERRORS: Record<TipoDocumento, string> = {
+  contrato: "",
+  tr: "",
+  planoTrabalho: "",
+  outro: "",
+};
 
 interface NovoPreProjetoModalProps {
   isOpen: boolean;
@@ -83,26 +114,9 @@ export default function NovoPreProjetoModal({
   onClose,
   onSubmit,
 }: NovoPreProjetoModalProps) {
-  const [formData, setFormData] = useState<PreProjetoFormData>({
-    titulo: "",
-    objeto: "",
-    govIf: "",
-    tipo: "",
-    primaryPartnerId: null,
-    primaryPartnerName: "",
-    primaryClientId: null,
-    primaryClientName: "",
-    localidade: "",
-    valorTotal: "",
-    documentos: {},
-  });
+  const [formData, setFormData] = useState<PreProjetoFormData>(() => createInitialFormData());
   const [errors, setErrors] = useState<PreProjetoFormErrors>({});
-  const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>({
-    contrato: "",
-    tr: "",
-    planoTrabalho: "",
-    outro: "",
-  });
+  const [fileErrors, setFileErrors] = useState<Record<TipoDocumento, string>>(INITIAL_FILE_ERRORS);
   const [partnerOptions, setPartnerOptions] = useState<SelectOption[]>([]);
   const [clientOptions, setClientOptions] = useState<SelectOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
@@ -112,6 +126,34 @@ export default function NovoPreProjetoModal({
 
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const hasFilledData = useMemo(
+    () =>
+      formData.titulo.trim().length > 0 ||
+      formData.objeto.trim().length > 0 ||
+      formData.govIf.length > 0 ||
+      formData.tipo.length > 0 ||
+      formData.primaryPartnerId !== null ||
+      formData.primaryClientId !== null ||
+      formData.localidade.trim().length > 0 ||
+      formData.valorTotal.trim().length > 0 ||
+      Object.keys(formData.documentos).length > 0,
+    [formData]
+  );
+
+  const resetFormState = useCallback(() => {
+    setFormData(createInitialFormData());
+    setErrors({});
+    setFileErrors(INITIAL_FILE_ERRORS);
+    setSubmitError(null);
+  }, []);
+
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   const loadOptions = useCallback(async () => {
     setIsLoadingOptions(true);
@@ -156,22 +198,12 @@ export default function NovoPreProjetoModal({
     return () => clearTimeout(focusTimeout);
   }, [isOpen, loadOptions]);
 
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen && !isSubmitting) {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [isOpen, isSubmitting, onClose]);
-
   const handleBackdropClick = (event: React.MouseEvent) => {
     if (isSubmitting) {
       return;
     }
     if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-      onClose();
+      requestClose();
     }
   };
 
@@ -207,18 +239,16 @@ export default function NovoPreProjetoModal({
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    const fileValidationError = validateUploadFile({
+      file,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: ALLOWED_TYPES,
+      allowedTypesLabel: "PDF, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Máximo: 20MB.",
-      }));
-      return;
-    }
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setFileErrors((prev) => ({
-        ...prev,
-        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG ou JPEG.",
+        [tipo]: fileValidationError,
       }));
       return;
     }
@@ -288,22 +318,7 @@ export default function NovoPreProjetoModal({
   };
 
   const handleReset = () => {
-    setFormData({
-      titulo: "",
-      objeto: "",
-      govIf: "",
-      tipo: "",
-      primaryPartnerId: null,
-      primaryPartnerName: "",
-      primaryClientId: null,
-      primaryClientName: "",
-      localidade: "",
-      valorTotal: "",
-      documentos: {},
-    });
-    setErrors({});
-    setFileErrors({ contrato: "", tr: "", planoTrabalho: "", outro: "" });
-    setSubmitError(null);
+    resetFormState();
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -352,7 +367,7 @@ export default function NovoPreProjetoModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSubmitting}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Fechar modal"
@@ -414,33 +429,32 @@ export default function NovoPreProjetoModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Gov/IF" required error={errors.govIf}>
-                <select
+                <Dropdown
+                  options={[
+                    { value: "IF", label: "IF" },
+                    { value: "Gov", label: "Gov" },
+                  ]}
                   value={formData.govIf}
-                  onChange={(event) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      govIf: event.target.value as "IF" | "Gov" | "",
-                    }));
+                  onChange={(value) => {
+                    setFormData((prev) => ({ ...prev, govIf: value as "IF" | "Gov" | "" }));
                     if (errors.govIf) {
                       setErrors((prev) => ({ ...prev, govIf: undefined }));
                     }
                   }}
-                  className={inputClassName(Boolean(errors.govIf))}
-                  disabled={isSubmitting}
-                >
-                  <option value="">Selecione...</option>
-                  <option value="IF">IF</option>
-                  <option value="Gov">Gov</option>
-                </select>
+                />
               </FormField>
 
               <FormField label="Tipo de Contrato" required error={errors.tipo}>
-                <select
+                <Dropdown
+                  options={[
+                    { value: "PROJETO", label: "Projeto" },
+                    { value: "PRODUTO", label: "Produto" },
+                  ]}
                   value={formData.tipo}
-                  onChange={(event) => {
+                  onChange={(value) => {
                     setFormData((prev) => ({
                       ...prev,
-                      tipo: event.target.value as "PROJETO" | "PRODUTO" | "",
+                      tipo: value as "PROJETO" | "PRODUTO" | "",
                     }));
                     if (errors.tipo) {
                       setErrors((prev) => ({ ...prev, tipo: undefined }));
@@ -448,21 +462,21 @@ export default function NovoPreProjetoModal({
                   }}
                   className={inputClassName(Boolean(errors.tipo))}
                   disabled={isSubmitting}
-                >
-                  <option value="">Selecione...</option>
-                  <option value="PROJETO">Projeto</option>
-                  <option value="PRODUTO">Produto</option>
-                </select>
+                />
               </FormField>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Parceiro Primario" required error={errors.primaryPartnerId}>
-                <select
-                  value={formData.primaryPartnerId ?? ""}
-                  onChange={(event) => {
-                    const id = event.target.value ? Number(event.target.value) : null;
-                    const selected = partnerOptions.find((partner) => partner.id === id);
+                <Dropdown
+                  options={partnerOptions.map((partner) => ({
+                    value: String(partner.id),
+                    label: partner.name,
+                  }))}
+                  value={formData.primaryPartnerId ? String(formData.primaryPartnerId) : undefined}
+                  onChange={(value) => {
+                    const id = value ? Number(value) : null;
+                    const selected = partnerOptions.find((partner) => String(partner.id) === value);
                     setFormData((prev) => ({
                       ...prev,
                       primaryPartnerId: id,
@@ -472,26 +486,22 @@ export default function NovoPreProjetoModal({
                       setErrors((prev) => ({ ...prev, primaryPartnerId: undefined }));
                     }
                   }}
+                  placeholder="Selecione..."
                   className={inputClassName(Boolean(errors.primaryPartnerId))}
                   disabled={isSubmitting || isLoadingOptions}
-                >
-                  <option value="">
-                    {isLoadingOptions ? "Carregando parceiros..." : "Selecione..."}
-                  </option>
-                  {partnerOptions.map((partner) => (
-                    <option key={partner.id} value={partner.id}>
-                      {partner.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
 
               <FormField label="Cliente Primario" required error={errors.primaryClientId}>
-                <select
-                  value={formData.primaryClientId ?? ""}
-                  onChange={(event) => {
-                    const id = event.target.value ? Number(event.target.value) : null;
-                    const selected = clientOptions.find((client) => client.id === id);
+                <Dropdown
+                  options={clientOptions.map((client) => ({
+                    value: String(client.id),
+                    label: client.name,
+                  }))}
+                  value={formData.primaryClientId ? String(formData.primaryClientId) : undefined}
+                  onChange={(value) => {
+                    const id = value ? Number(value) : null;
+                    const selected = clientOptions.find((client) => String(client.id) === value);
                     setFormData((prev) => ({
                       ...prev,
                       primaryClientId: id,
@@ -501,18 +511,10 @@ export default function NovoPreProjetoModal({
                       setErrors((prev) => ({ ...prev, primaryClientId: undefined }));
                     }
                   }}
+                  placeholder="Selecione..."
                   className={inputClassName(Boolean(errors.primaryClientId))}
                   disabled={isSubmitting || isLoadingOptions}
-                >
-                  <option value="">
-                    {isLoadingOptions ? "Carregando clientes..." : "Selecione..."}
-                  </option>
-                  {clientOptions.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
             </div>
 
@@ -556,7 +558,7 @@ export default function NovoPreProjetoModal({
                 <h3 className="text-sm font-semibold text-gray-900">Documentos (opcional)</h3>
               </div>
               <p className="text-xs text-gray-500">
-                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho máximo: 20MB por arquivo.
+                Formatos aceitos: PDF, PNG, JPG, JPEG. Tamanho máximo: {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)} por arquivo.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -584,7 +586,7 @@ export default function NovoPreProjetoModal({
           <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -607,6 +609,7 @@ export default function NovoPreProjetoModal({
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

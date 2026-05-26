@@ -33,6 +33,8 @@ import { type DocumentResponseDTO } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
+import { Dropdown } from "@/components/ui/dropdown";
+import { ContractFilesLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 
 export type ContractDocumentCategory =
   | "CONTRATO"
@@ -463,20 +465,16 @@ export default function ArquivosPage() {
 
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm text-gray-600">Filtrar por tipo:</label>
-        <select
+        <Dropdown
+          options={CATEGORY_OPTIONS.map((category) => ({
+            value: category,
+            label: CATEGORY_LABELS[category],
+          }))}
           value={filterCategory}
-          onChange={(event) =>
-            setFilterCategory(event.target.value as FilterCategory)
-          }
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="ALL">Todos</option>
-          {CATEGORY_OPTIONS.map((category) => (
-            <option key={category} value={category}>
-              {CATEGORY_LABELS[category]}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setFilterCategory(value as FilterCategory)}
+          placeholder="Selecione..."
+          className="min-w-[280px]"
+        />
         <span className="text-sm text-gray-500">
           {filteredDocuments.length} arquivo(s)
         </span>
@@ -491,10 +489,7 @@ export default function ArquivosPage() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#004225]" />
-          <p className="mt-2 text-sm text-gray-500">Carregando arquivos...</p>
-        </div>
+        <ContractFilesLoadingSkeleton />
       ) : filteredDocuments.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
           <UploadCloud className="mx-auto h-10 w-10 text-gray-300" />

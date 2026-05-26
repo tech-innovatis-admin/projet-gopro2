@@ -1,5 +1,6 @@
 import { http } from '../http';
 import type {
+  BudgetItemBeneficiaryAssignRequestDTO,
   BudgetItemRequestDTO,
   BudgetItemResponseDTO,
   BudgetItemUpdateDTO,
@@ -13,6 +14,7 @@ export interface ListBudgetItemsParams {
   size?: number;
   categoryId?: number;
   projectId?: number;
+  projectCompanyId?: number;
 }
 
 export function listBudgetItems(params: ListBudgetItemsParams = {}) {
@@ -22,6 +24,7 @@ export function listBudgetItems(params: ListBudgetItemsParams = {}) {
       size: params.size ?? 20,
       categoryId: params.categoryId,
       projectId: params.projectId,
+      projectCompanyId: params.projectCompanyId,
     },
   });
 }
@@ -40,4 +43,15 @@ export function updateBudgetItem(id: number | string, payload: BudgetItemUpdateD
 
 export function deleteBudgetItem(id: number | string) {
   return http.delete<void>(`${BASE}/${id}`);
+}
+
+export function assignBudgetItemBeneficiary(
+  id: number | string,
+  payload: BudgetItemBeneficiaryAssignRequestDTO
+) {
+  return http.put<void>(`${BASE}/${id}/beneficiary`, { body: payload });
+}
+
+export function removeBudgetItemBeneficiary(id: number | string) {
+  return http.delete<void>(`${BASE}/${id}/beneficiary`);
 }

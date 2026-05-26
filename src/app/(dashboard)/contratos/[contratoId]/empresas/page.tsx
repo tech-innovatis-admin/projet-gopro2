@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, Trash2, UserCircle2, X } from "lucide-react";
-import { DatePicker } from "@/components/ui/DatePicker";
+import { CheckCircle, Edit2, FileText, Globe, Link2, MapPin, Plus, UserCircle2, X } from "lucide-react";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
-import { CompanyResponsiblePersonSection } from "@/src/app/(dashboard)/fornecedores/_components/CompanyResponsiblePersonSection";
 import {
+  CompanyFormModal as SharedCompanyFormModal,
+  type CompanyFormData,
+  hasRequiredCompanyFields as hasRequiredSharedCompanyFields,
+  onlyDigits as onlyDigitsShared,
+} from "../_components/CompanyFormModal";
+import { ContractLinkedItemsLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
+import {
+  listBudgetItems,
+  listBudgetTransfers,
+  listExpenses,
   createCompany,
   createProjectCompany,
   deleteProjectCompany,
@@ -21,7 +29,13 @@ import {
   fetchCurrentUser,
   requireCurrentUserId,
 } from "@/src/lib/auth/session";
-import { type CompanyResponseDTO } from "@/src/lib/api/types";
+import {
+  type BudgetItemResponseDTO,
+  type BudgetTransferResponseDTO,
+  type CompanyResponseDTO,
+  type ExpenseResponseDTO,
+  type PageResponseDTO,
+} from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 const BriefcaseBusinessIcon = () => (
@@ -64,6 +78,14 @@ type EmpresaProjeto = {
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
+  availableBalance?: number;
+  executionPercentage?: number;
+};
+
+type BeneficiaryFinancialSummary = {
+  finalBudgetAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
 };
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -77,23 +99,6 @@ function digits(value?: string) {
   return (value || "").replace(/\D/g, "");
 }
 
-function formatZipCode(value?: string) {
-  const onlyNumbers = digits(value).slice(0, 8);
-  if (onlyNumbers.length <= 5) return onlyNumbers;
-  return `${onlyNumbers.slice(0, 5)}-${onlyNumbers.slice(5)}`;
-}
-
-function formatPhone(value?: string) {
-  const onlyNumbers = digits(value).slice(0, 11);
-  if (!onlyNumbers) return "";
-  if (onlyNumbers.length <= 2) return `(${onlyNumbers}`;
-  if (onlyNumbers.length <= 6) return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2)}`;
-  if (onlyNumbers.length <= 10) {
-    return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 6)}-${onlyNumbers.slice(6)}`;
-  }
-  return `(${onlyNumbers.slice(0, 2)}) ${onlyNumbers.slice(2, 7)}-${onlyNumbers.slice(7)}`;
-}
-
 function formatCnpj(value?: string) {
   const onlyNumbers = digits(value).slice(0, 14);
   if (onlyNumbers.length <= 2) return onlyNumbers;
@@ -105,48 +110,14 @@ function formatCnpj(value?: string) {
   return `${onlyNumbers.slice(0, 2)}.${onlyNumbers.slice(2, 5)}.${onlyNumbers.slice(5, 8)}/${onlyNumbers.slice(8, 12)}-${onlyNumbers.slice(12)}`;
 }
 
-type ViaCepResponse = {
-  cep?: string;
-  logradouro?: string;
-  localidade?: string;
-  uf?: string;
-  erro?: boolean;
-};
-
-async function fetchViaCep(zipCode: string) {
-  const normalizedZipCode = digits(zipCode);
-  if (normalizedZipCode.length !== 8) return null;
-
-  const response = await fetch(`https://viacep.com.br/ws/${normalizedZipCode}/json/`);
-  if (!response.ok) {
-    throw new Error("Não foi possível consultar o CEP.");
-  }
-
-  const data = (await response.json()) as ViaCepResponse;
-  if (data.erro) return null;
-  return data;
-}
-
-function isBlank(value?: string) {
-  return !value || value.trim().length === 0;
-}
-
-function hasRequiredCompanyFields(formData: Partial<EmpresaProjeto>) {
-  return (
-    !isBlank(formData.razaoSocial) &&
-    !isBlank(formData.nomeFantasia) &&
-    !isBlank(formData.cnpj) &&
-    !isBlank(formData.email) &&
-    !isBlank(formData.telefone) &&
-    !isBlank(formData.endereco) &&
-    !isBlank(formData.cidade) &&
-    !isBlank(formData.uf)
-  );
-}
-
 function toOptional(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function formatCurrency(value?: number) {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
 function formatDateBr(value?: string) {
@@ -156,27 +127,38 @@ function formatDateBr(value?: string) {
   return value;
 }
 
-function formatCurrency(value?: number) {
-  if (typeof value !== "number") return "—";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+function toSafeNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatCurrencyInput(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+function getDisplayedCompanyTotal(
+  empresa: EmpresaProjeto,
+  financialSummary?: BeneficiaryFinancialSummary,
+) {
+  if (financialSummary) {
+    return financialSummary.finalBudgetAmount;
+  }
+
+  return typeof empresa.valorContrato === "number" ? empresa.valorContrato : undefined;
 }
 
-function parseCurrencyInput(input: string) {
-  const onlyDigits = input.replace(/\D/g, "");
-  if (!onlyDigits) return undefined;
-  const cents = Number(onlyDigits);
-  if (!Number.isFinite(cents)) return undefined;
-  return cents / 100;
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>,
+): Promise<T[]> {
+  const pageSize = 100;
+  const allItems: T[] = [];
+  let page = 0;
+  let hasNext = true;
+
+  while (hasNext) {
+    const response = await fetchPage({ page, size: pageSize });
+    allItems.push(...response.content);
+    hasNext = !response.last;
+    page += 1;
+  }
+
+  return allItems;
 }
 
 function getCompanyLabel(company: CompanyResponseDTO) {
@@ -225,12 +207,18 @@ export default function EmpresasPage() {
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingEmpresa, setEditingEmpresa] = useState<EmpresaProjeto | null>(null);
-  const [formData, setFormData] = useState<Partial<EmpresaProjeto>>({});
+  const [formData, setFormData] = useState<Partial<CompanyFormData>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | "">("");
   const [isLinking, setIsLinking] = useState(false);
+  const [financialSummaryByProjectCompanyId, setFinancialSummaryByProjectCompanyId] = useState<
+    Map<number, BeneficiaryFinancialSummary>
+  >(new Map());
+  const [rubricaUsageCountByProjectCompanyId, setRubricaUsageCountByProjectCompanyId] = useState<
+    Map<number, number>
+  >(new Map());
 
   const linkedCompanyIds = useMemo(
     () => new Set(empresas.map((e) => e.companyId).filter((id): id is number => typeof id === "number")),
@@ -254,7 +242,12 @@ export default function EmpresasPage() {
     [availableCompanies],
   );
 
-  const totalValor = empresas.reduce((acc, empresa) => acc + (empresa.valorContrato || 0), 0);
+  const totalValor = empresas.reduce((acc, empresa) => {
+    const financialSummary = empresa.projectCompanyId
+      ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
+      : undefined;
+    return acc + toSafeNumber(getDisplayedCompanyTotal(empresa, financialSummary));
+  }, 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,11 +293,31 @@ export default function EmpresasPage() {
       setLoadError(null);
       setActionError(null);
 
-      const linksPage = await listProjectCompaniesDetailed({
-        page: 0,
-        size: DEFAULT_PAGE_SIZE,
-        projectId,
-      });
+      const [linksPage, budgetItems, budgetTransfers, expenses] = await Promise.all([
+        listProjectCompaniesDetailed({
+          page: 0,
+          size: DEFAULT_PAGE_SIZE,
+          projectId,
+        }),
+        fetchAllPages<BudgetItemResponseDTO>((query) =>
+          listBudgetItems({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<BudgetTransferResponseDTO>((query) =>
+          listBudgetTransfers({
+            ...query,
+            projectId,
+          }),
+        ),
+        fetchAllPages<ExpenseResponseDTO>((query) =>
+          listExpenses({
+            ...query,
+            projectId,
+          }),
+        ),
+      ]);
 
       const links = linksPage.content.filter((item) => item.projectId === projectId);
 
@@ -339,13 +352,75 @@ export default function EmpresasPage() {
           dataInicio: link.startDate || undefined,
           dataFim: link.endDate || undefined,
           observacao: link.notes || undefined,
+          availableBalance: typeof link.availableBalance === "number" ? link.availableBalance : undefined,
+          executionPercentage:
+            typeof link.executionPercentage === "number" ? link.executionPercentage : undefined,
         };
       });
 
+      const activeTransfers = budgetTransfers.filter((transfer) => transfer.isActive);
+      const transferBalanceByItemId = new Map<number, number>();
+      for (const transfer of activeTransfers) {
+        transferBalanceByItemId.set(
+          transfer.toItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.toItemId)) + toSafeNumber(transfer.amount),
+        );
+        transferBalanceByItemId.set(
+          transfer.fromItemId,
+          toSafeNumber(transferBalanceByItemId.get(transfer.fromItemId)) - toSafeNumber(transfer.amount),
+        );
+      }
+
+      const paidByBudgetItemId = new Map<number, number>();
+      for (const expense of expenses) {
+        if (!expense.isActive || expense.paymentStatus !== "PAGO") continue;
+        paidByBudgetItemId.set(
+          expense.budgetItemId,
+          toSafeNumber(paidByBudgetItemId.get(expense.budgetItemId)) + toSafeNumber(expense.amount),
+        );
+      }
+
+      const summaryByProjectCompanyId = new Map<number, BeneficiaryFinancialSummary>();
+      const usageCountByProjectCompanyId = new Map<number, number>();
+      for (const item of budgetItems) {
+        if (!item.isActive) continue;
+        const isCompanyLinkedItem =
+          item.projectCompanyId != null &&
+          (item.beneficiaryType === "company" || item.beneficiaryType == null);
+        if (!isCompanyLinkedItem) continue;
+
+        const finalBudgetAmount =
+          toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
+        const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
+
+        const projectCompanyId = item.projectCompanyId as number;
+        const current = summaryByProjectCompanyId.get(projectCompanyId) ?? {
+          finalBudgetAmount: 0,
+          paidAmount: 0,
+          pendingAmount: 0,
+        };
+
+        const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
+        const nextPaidAmount = current.paidAmount + paidAmount;
+        summaryByProjectCompanyId.set(projectCompanyId, {
+          finalBudgetAmount: nextFinalBudgetAmount,
+          paidAmount: nextPaidAmount,
+          pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
+        });
+        usageCountByProjectCompanyId.set(
+          projectCompanyId,
+          toSafeNumber(usageCountByProjectCompanyId.get(projectCompanyId)) + 1,
+        );
+      }
+
+      setFinancialSummaryByProjectCompanyId(summaryByProjectCompanyId);
+      setRubricaUsageCountByProjectCompanyId(usageCountByProjectCompanyId);
       setEmpresas(mapped);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar empresas do projeto."));
       setEmpresas([]);
+      setFinancialSummaryByProjectCompanyId(new Map());
+      setRubricaUsageCountByProjectCompanyId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -373,7 +448,6 @@ export default function EmpresasPage() {
       responsavelPersonId: "",
       responsavel: undefined,
       tipoServico: "",
-      tipoEmpresa: "INDEPENDENTE",
       valorContrato: undefined,
       dataInicio: "",
       dataFim: "",
@@ -416,12 +490,12 @@ export default function EmpresasPage() {
       setActionError("ID do contrato inválido.");
       return;
     }
-    if (!hasRequiredCompanyFields(formData)) {
+    if (!hasRequiredSharedCompanyFields(formData)) {
       setActionError("Preencha os campos obrigatórios: razão social, nome fantasia, CNPJ, e-mail, telefone, endereço, cidade e UF.");
       return;
     }
 
-    const cnpjDigits = digits(formData.cnpj);
+    const cnpjDigits = onlyDigitsShared(formData.cnpj);
     if (cnpjDigits.length !== 14) {
       setActionError("Informe um CNPJ válido com 14 dígitos.");
       return;
@@ -455,6 +529,7 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
+          status: formData.status,
           updatedBy: actorUserId,
         });
       } else {
@@ -468,6 +543,7 @@ export default function EmpresasPage() {
           endDate: toOptional(formData.dataFim),
           notes: toOptional(formData.observacao),
           isIncubated: formData.tipoEmpresa === "INCUBADA",
+          status: formData.status,
           createdBy: actorUserId,
         });
       }
@@ -492,6 +568,15 @@ export default function EmpresasPage() {
       setActionError(null);
       const empresa = empresas.find((item) => item.id === empresaId);
       if (!empresa?.projectCompanyId) throw new Error("Vínculo da empresa não encontrado.");
+      const linkedItemsCount = toSafeNumber(
+        rubricaUsageCountByProjectCompanyId.get(empresa.projectCompanyId),
+      );
+      if (linkedItemsCount > 0) {
+        setActionError(
+          `Não é possível desvincular a empresa. Existem ${linkedItemsCount} item(ns) de rubrica ativo(s) vinculados a ela neste contrato.`,
+        );
+        return;
+      }
       await deleteProjectCompany(empresa.projectCompanyId);
       await loadProjectCompanies();
     } catch (error) {
@@ -570,7 +655,7 @@ export default function EmpresasPage() {
       )}
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center"><p className="text-sm text-gray-500">Carregando empresas do projeto...</p></div>
+        <ContractLinkedItemsLoadingSkeleton titleWidthClassName="w-52" />
       ) : empresas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4"><div className="h-8 w-8 text-gray-400"><BriefcaseBusinessIcon /></div></div>
@@ -585,8 +670,19 @@ export default function EmpresasPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {empresas.map((empresa) => (
-            <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+          {empresas.map((empresa) => {
+            const financialSummary = empresa.projectCompanyId
+              ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
+              : undefined;
+            const displayedCompanyTotal = getDisplayedCompanyTotal(empresa, financialSummary);
+            const executionPercentage =
+              typeof empresa.executionPercentage === "number"
+                ? empresa.executionPercentage
+                : financialSummary && financialSummary.finalBudgetAmount > 0
+                  ? (financialSummary.paidAmount / financialSummary.finalBudgetAmount) * 100
+                  : 0;
+            return (
+              <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-green-50 rounded-lg"><div className="h-5 w-5 text-green-600"><BriefcaseBusinessIcon /></div></div>
@@ -638,6 +734,39 @@ export default function EmpresasPage() {
                     </div>
                   </div>
                 </div>
+                {financialSummary && (
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 space-y-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
+                      Financeiro na rubrica
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Valor final:{" "}
+                      <strong className="text-gray-900">
+                        {formatCurrency(financialSummary.finalBudgetAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Pago:{" "}
+                      <strong className="text-emerald-700">
+                        {formatCurrency(financialSummary.paidAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Falta pagar:{" "}
+                      <strong className="text-amber-700">
+                        {formatCurrency(financialSummary.pendingAmount)}
+                      </strong>
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      Percentual executado:{" "}
+                      <strong className="text-blue-700">
+                        {Number.isFinite(executionPercentage)
+                          ? `${executionPercentage.toFixed(2).replace(".", ",")}%`
+                          : "0,00%"}
+                      </strong>
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-end justify-between mt-4 pt-3 border-t border-gray-100 gap-3">
@@ -658,10 +787,11 @@ export default function EmpresasPage() {
                     </span>
                   )}
                 </div>
-                <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
+                <span className="font-semibold text-[#004225]">{formatCurrency(displayedCompanyTotal)}</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -673,7 +803,8 @@ export default function EmpresasPage() {
       )}
 
       {canManageChildren && isFormModalOpen && (
-        <CompanyFormModal
+        <SharedCompanyFormModal
+          isOpen={isFormModalOpen}
           formData={formData}
           setFormData={setFormData}
           isSaving={isSaving}
@@ -694,228 +825,6 @@ export default function EmpresasPage() {
           onConfirm={() => { void linkExistingCompany(); }}
         />
       )}
-    </div>
-  );
-}
-
-function CompanyFormModal({
-  formData,
-  setFormData,
-  isSaving,
-  isEditingItem,
-  onSave,
-  onClose,
-  onDelete,
-}: {
-  formData: Partial<EmpresaProjeto>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<EmpresaProjeto>>>;
-  isSaving: boolean;
-  isEditingItem: boolean;
-  onSave: () => void;
-  onClose: () => void;
-  onDelete?: () => void;
-}) {
-  const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
-  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
-
-  const handleLookupZipCode = async (rawZipCode?: string) => {
-    const normalizedZipCode = digits(rawZipCode ?? formData.cep);
-    if (normalizedZipCode.length !== 8) {
-      setZipCodeLookupError("CEP deve conter 8 dígitos.");
-      return;
-    }
-
-    try {
-      setZipCodeLookupError(null);
-      setIsResolvingZipCode(true);
-      const viaCepData = await fetchViaCep(normalizedZipCode);
-
-      if (!viaCepData) {
-        setZipCodeLookupError("CEP não encontrado.");
-        return;
-      }
-
-      setFormData((prev) => {
-        if (digits(prev.cep) !== normalizedZipCode) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          cep: formatZipCode(normalizedZipCode),
-          endereco: viaCepData.logradouro || prev.endereco,
-          cidade: viaCepData.localidade || prev.cidade,
-          uf: (viaCepData.uf || prev.uf || "").toUpperCase(),
-        };
-      });
-    } catch {
-      setZipCodeLookupError("Não foi possível consultar o CEP.");
-    } finally {
-      setIsResolvingZipCode(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
-          <div className="flex items-center gap-3">
-            <div className="h-6 w-6"><BriefcaseBusinessIcon /></div>
-            <h2 className="text-lg font-bold">{isEditingItem ? "Editar Empresa" : "Nova Empresa"}</h2>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors"><X className="h-5 w-5" /></button>
-        </div>
-
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Razão Social" required>
-              <input type="text" value={formData.razaoSocial || ""} onChange={(e) => setFormData({ ...formData, razaoSocial: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Razão social da empresa" />
-            </Field>
-            <Field label="Nome Fantasia" required>
-              <input type="text" value={formData.nomeFantasia || ""} onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Nome fantasia" />
-            </Field>
-            <Field label="CNPJ" required>
-              <input
-                type="text"
-                value={formData.cnpj || ""}
-                onChange={(e) => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
-                maxLength={18}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="00.000.000/0000-00"
-              />
-            </Field>
-            <Field label="E-mail" required>
-              <input type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="email@empresa.com.br" />
-            </Field>
-            <Field label="Telefone" required>
-              <input
-                type="text"
-                value={formData.telefone || ""}
-                onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
-                maxLength={15}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="(00) 00000-0000"
-              />
-            </Field>
-            <Field label="CEP">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={formData.cep || ""}
-                    onChange={(e) => {
-                      const formattedZipCode = formatZipCode(e.target.value);
-                      setFormData({ ...formData, cep: formattedZipCode });
-                      if (digits(formattedZipCode).length === 8) {
-                        void handleLookupZipCode(formattedZipCode);
-                      } else {
-                        setZipCodeLookupError(null);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (digits(formData.cep).length === 8) {
-                        void handleLookupZipCode();
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                    placeholder="00000-000"
-                    maxLength={9}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleLookupZipCode();
-                    }}
-                    className="px-3 py-2 text-xs font-medium text-[#004225] border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={isResolvingZipCode}
-                  >
-                    {isResolvingZipCode ? "Buscando..." : "Buscar CEP"}
-                  </button>
-                </div>
-                {zipCodeLookupError ? (
-                  <p className="text-xs text-red-600">{zipCodeLookupError}</p>
-                ) : null}
-              </div>
-            </Field>
-            <Field label="Endereço" required className="md:col-span-2">
-              <input type="text" value={formData.endereco || ""} onChange={(e) => setFormData({ ...formData, endereco: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Rua, número e bairro" />
-            </Field>
-            <Field label="Cidade" required>
-              <input type="text" value={formData.cidade || ""} onChange={(e) => setFormData({ ...formData, cidade: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Cidade" />
-            </Field>
-            <Field label="UF" required>
-              <input
-                type="text"
-                value={formData.uf || ""}
-                onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase().slice(0, 2) })}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="UF"
-                maxLength={2}
-              />
-            </Field>
-            <div className="md:col-span-2">
-              <CompanyResponsiblePersonSection
-                value={formData.responsavelPersonId || undefined}
-                responsavel={formData.responsavel}
-                onChange={(responsavelPersonId, responsavel) =>
-                  setFormData((current) => ({
-                    ...current,
-                    responsavelPersonId: responsavelPersonId ?? "",
-                    responsavel,
-                  }))
-                }
-                disabled={isSaving}
-                enabled
-                labels={{
-                  description:
-                    "Opcional. Vincule uma pessoa ja cadastrada ou cadastre uma nova para usar como responsavel desta empresa.",
-                  helperText:
-                    "Esse vinculo prepara as validacoes futuras entre a empresa do contrato e pessoas ja alocadas no projeto.",
-                  createModalDescription:
-                    "Cadastre a pessoa e vincule-a imediatamente como responsavel desta empresa.",
-                }}
-              />
-            </div>
-            <Field label="Tipo de Serviço" className="md:col-span-2">
-              <input type="text" value={formData.tipoServico || ""} onChange={(e) => setFormData({ ...formData, tipoServico: e.target.value })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="Ex: Desenvolvimento de software" />
-            </Field>
-            <Field label="Tipo de Empresa">
-              <select value={formData.tipoEmpresa || "INDEPENDENTE"} onChange={(e) => setFormData({ ...formData, tipoEmpresa: e.target.value as TipoEmpresa })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]">
-                <option value="INDEPENDENTE">Independente</option>
-                <option value="INCUBADA">Incubada</option>
-              </select>
-            </Field>
-            <Field label="Valor do Contrato (R$)">
-              <input type="text" inputMode="numeric" value={formatCurrencyInput(formData.valorContrato)} onChange={(e) => setFormData({ ...formData, valorContrato: parseCurrencyInput(e.target.value) })} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]" placeholder="R$ 0,00" />
-            </Field>
-            <Field label="Data de Início">
-              <DatePicker value={formData.dataInicio || ""} onChange={(value) => setFormData({ ...formData, dataInicio: value })} />
-            </Field>
-            <Field label="Data de Término">
-              <DatePicker value={formData.dataFim || ""} onChange={(value) => setFormData({ ...formData, dataFim: value })} />
-            </Field>
-            <Field label="Observações" className="md:col-span-2">
-              <textarea value={formData.observacao || ""} onChange={(e) => setFormData({ ...formData, observacao: e.target.value })} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] resize-none" placeholder="Observações adicionais" />
-            </Field>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <div>
-            {isEditingItem && onDelete && (
-              <button onClick={() => { if (confirm("Deseja realmente excluir esta empresa do projeto?")) { onDelete(); onClose(); } }} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
-                <Trash2 className="h-4 w-4 inline-block mr-2" />Excluir Vínculo
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
-            <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || digits(formData.cnpj).length !== 14} className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {isSaving ? "Salvando..." : isEditingItem ? "Salvar Alterações" : "Adicionar Empresa"}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -975,23 +884,5 @@ function LinkExistingCompanyModal({
   );
 }
 
-function Field({
-  label,
-  required,
-  className,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className || ""}`}>
-      <label className="block text-sm font-medium text-gray-700">
-        {label} {required ? <span className="text-red-500">*</span> : null}
-      </label>
-      {children}
-    </div>
-  );
-}
+
+

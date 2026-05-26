@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Label } from "@/components/ui/label";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { ProjectCreatedModal } from "./_components/ProjectCreatedModal";
 import {
   createPartner,
@@ -69,6 +70,13 @@ import {
   type StatusDisbursementScheduleEnum,
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import {
+  formatFileSize,
+  IMAGE_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  validateUploadFile,
+} from "@/src/lib/upload";
 import {
   canManageContractChildren,
   fetchCurrentUser,
@@ -223,8 +231,9 @@ const documentoLabels: Record<TipoDocumento, string> = {
   outro: "Outro Documento",
 };
 
-const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
-const ALLOWED_DOCUMENT_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const TITLE_CHAR_LIMIT = 255;
+const SCOPE_CHAR_LIMIT = 1000;
+const ALLOWED_DOCUMENT_TYPES = ["application/pdf", ...IMAGE_UPLOAD_ALLOWED_MIME_TYPES];
 
 const DEFAULT_MAX_CONTRACT_VALUE = 9999999999999.99;
 const configuredMaxContractValue = Number(process.env.NEXT_PUBLIC_PROJECT_MAX_CONTRACT_VALUE);
@@ -517,6 +526,7 @@ const formatPhoneInput = (value: string) => {
 };
 
 function NovoContratoPageContent() {
+  type InlineModalKey = "partner" | "client" | "secretary" | "coordinator";
   const router = useRouter();
   const searchParams = useSearchParams();
   const isPopupMode = searchParams.get("popup") === "1";
@@ -532,7 +542,6 @@ function NovoContratoPageContent() {
     : "Preencha as informações do contrato";
   const [form, setForm] = useState<NovoContratoForm>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingEditProject, setIsLoadingEditProject] = useState(false);
   const [, setTouched] = useState<Set<keyof NovoContratoForm>>(new Set());
   const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
@@ -551,7 +560,6 @@ function NovoContratoPageContent() {
   const [postSubmitActionLoading, setPostSubmitActionLoading] = useState<"view" | "new" | null>(
     null
   );
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [organizacoesFinanciadoras, setOrganizacoesFinanciadoras] = useState<OptionItem[]>([]);
   const [organizacoesParceiras, setOrganizacoesParceiras] = useState<OptionItem[]>([]);
@@ -561,6 +569,7 @@ function NovoContratoPageContent() {
   const [isAddingParcela, setIsAddingParcela] = useState(false);
   const [editingParcelaId, setEditingParcelaId] = useState<string | null>(null);
   const [showCoordinatorModal, setShowCoordinatorModal] = useState(false);
+  const [pendingModalClose, setPendingModalClose] = useState<InlineModalKey | null>(null);
   const [isCreatingCoordinator, setIsCreatingCoordinator] = useState(false);
   const [coordinatorForm, setCoordinatorForm] = useState<CoordinatorForm>(
     initialCoordinatorFormState
@@ -586,6 +595,10 @@ function NovoContratoPageContent() {
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [clientForm, setClientForm] = useState<ClientCreateForm>(initialClientCreateFormState);
   const [clientFormError, setClientFormError] = useState<string | null>(null);
+  const [clientCityOptions, setClientCityOptions] = useState<DropdownOption[]>([]);
+  const [isClientCityLoading, setIsClientCityLoading] = useState(false);
+  const [clientCityLookupError, setClientCityLookupError] = useState<string | null>(null);
+  const [allowManualClientCityEntry, setAllowManualClientCityEntry] = useState(false);
   const [showSecretaryModal, setShowSecretaryModal] = useState(false);
   const [isCreatingSecretary, setIsCreatingSecretary] = useState(false);
   const [secretaryForm, setSecretaryForm] = useState<SecretaryCreateForm>(
@@ -605,6 +618,30 @@ function NovoContratoPageContent() {
   
   const firstInputRef = useRef<HTMLInputElement>(null);
   const submitGuardRef = useRef(false);
+  const {
+    fieldErrors: apiFieldErrors,
+    globalError: submitError,
+    isSubmitting,
+    handleSubmitError,
+    clearErrors,
+    setSubmitting: setIsSubmitting,
+    focusFirstError,
+  } = useFormApiErrors<keyof NovoContratoForm>({
+    fieldMap: {
+      name: "titulo",
+      object: "scope",
+      primaryPartnerId: "parceiroId",
+      primaryClientId: "clientePrimarioId",
+      projectGovIf: "govIf",
+      projectType: "tipo",
+      contractValue: "contract_value",
+      endDate: "dataFim",
+      startDate: "dataInicio",
+      state: "uf",
+      city: "cidade",
+      expectedMonth: "dataInicio",
+    },
+  });
 
   // Carregar organizacoes disponiveis
   const loadOrganizations = useCallback(async () => {
@@ -691,6 +728,7 @@ function NovoContratoPageContent() {
   );
   const partnerUfDropdownOptions = useMemo(() => ufOptions, [ufOptions]);
   const partnerCityDropdownOptions = useMemo(() => partnerCityOptions, [partnerCityOptions]);
+  const clientCityDropdownOptions = useMemo(() => clientCityOptions, [clientCityOptions]);
 
   const tipoDropdownOptions: DropdownOption[] = useMemo(() => 
     tipoOptions.map(opt => ({ value: opt.value, label: opt.label })),
@@ -793,7 +831,7 @@ function NovoContratoPageContent() {
 
     setIsLoadingEditProject(true);
     setLoadError(null);
-    setSubmitError(null);
+    clearErrors();
 
     try {
       const project = await getProjectById(editContractId);
@@ -973,6 +1011,38 @@ function NovoContratoPageContent() {
     };
   }, [partnerForm.state]);
 
+  useEffect(() => {
+    const selectedUf = clientForm.state.trim().toUpperCase();
+
+    setClientCityLookupError(null);
+    setAllowManualClientCityEntry(false);
+
+    if (!selectedUf) {
+      setClientCityOptions([]);
+      setIsClientCityLoading(false);
+      return;
+    }
+
+    setIsClientCityLoading(true);
+
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
+        setClientCityOptions(lookup.options);
+        setAllowManualClientCityEntry(lookup.allowManualEntry);
+        setClientCityLookupError(lookup.message ?? null);
+      })
+      .catch((error) => {
+        setClientCityOptions([]);
+        setAllowManualClientCityEntry(true);
+        setClientCityLookupError(
+          getUserErrorMessage(error, "Nao foi possivel carregar as cidades da UF selecionada.")
+        );
+      })
+      .finally(() => {
+        setIsClientCityLoading(false);
+      });
+  }, [clientForm.state]);
+
   // Validation
   const validateField = (
     name: keyof NovoContratoForm,
@@ -982,6 +1052,7 @@ function NovoContratoPageContent() {
       case "titulo":
         if (typeof value !== "string" || !value.trim()) return "O título do projeto é obrigatório";
         if (value.trim().length < 5) return "O título deve ter pelo menos 5 caracteres";
+        if (value.length > TITLE_CHAR_LIMIT) return `O titulo deve ter no maximo ${TITLE_CHAR_LIMIT} caracteres`;
         return "";
       case "govIf":
         if (typeof value !== "string" || !value || (value !== "IF" && value !== "GOV")) return "Selecione uma opção";
@@ -1062,6 +1133,8 @@ function NovoContratoPageContent() {
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
         if (value.trim().length < 10) return "O objeto do contrato deve ter pelo menos 10 caracteres";
+        if (value.length > SCOPE_CHAR_LIMIT)
+          return `O objeto do contrato deve ter no maximo ${SCOPE_CHAR_LIMIT} caracteres`;
         return "";
       case "contract_value":
         if (typeof value !== "string" || !value.trim()) return "O valor do projeto é obrigatório";
@@ -1085,7 +1158,7 @@ function NovoContratoPageContent() {
     }
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = (): { isValid: boolean; errors: FormErrors } => {
     const newErrors: FormErrors = {};
     let isValid = true;
 
@@ -1098,7 +1171,7 @@ function NovoContratoPageContent() {
     });
 
     setErrors(newErrors);
-    return isValid;
+    return { isValid, errors: newErrors };
   };
 
   // Funcao para formatar valor monetario
@@ -1176,18 +1249,16 @@ function NovoContratoPageContent() {
       return;
     }
 
-    if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+    const fileValidationError = validateUploadFile({
+      file,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: ALLOWED_DOCUMENT_TYPES,
+      allowedTypesLabel: "PDF, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
       setFileErrors((prev) => ({
         ...prev,
-        [tipo]: "Arquivo muito grande. Máximo de 20MB por arquivo.",
-      }));
-      return;
-    }
-
-    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
-      setFileErrors((prev) => ({
-        ...prev,
-        [tipo]: "Formato inválido. Aceitos: PDF, PNG, JPG e JPEG.",
+        [tipo]: fileValidationError,
       }));
       return;
     }
@@ -1313,6 +1384,30 @@ function NovoContratoPageContent() {
   };
 
   const closePartnerModal = () => {
+    const isDirty =
+      partnerForm.name.trim() ||
+      partnerForm.tradeName.trim() ||
+      partnerForm.cnpj.trim() ||
+      partnerForm.email.trim() ||
+      partnerForm.phone.trim() ||
+      partnerForm.address.trim() ||
+      partnerForm.site.trim() ||
+      partnerForm.city.trim() ||
+      partnerForm.state.trim() ||
+      partnerForm.acronym.trim() ||
+      partnerForm.partnersType !== initialPartnerCreateFormState.partnersType;
+    if (isDirty) {
+      setPendingModalClose("partner");
+      return;
+    }
+    setShowPartnerModal(false);
+    setPartnerForm(initialPartnerCreateFormState);
+    setPartnerFormError(null);
+    setPartnerCityOptions([]);
+    setPartnerCityLookupError(null);
+    setIsPartnerCityLoading(false);
+  };
+  const forceClosePartnerModal = () => {
     setShowPartnerModal(false);
     setPartnerForm(initialPartnerCreateFormState);
     setPartnerFormError(null);
@@ -1387,7 +1482,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange(partnerTargetField, String(createdPartner.id));
-      closePartnerModal();
+      forceClosePartnerModal();
     } catch (error) {
       setPartnerFormError(getUserErrorMessage(error, "Não foi possível cadastrar o parceiro."));
     } finally {
@@ -1396,6 +1491,27 @@ function NovoContratoPageContent() {
   };
 
   const closeClientModal = () => {
+    const isDirty =
+      clientForm.name.trim() ||
+      clientForm.cnpj.trim() ||
+      clientForm.sigla.trim() ||
+      clientForm.code.trim() ||
+      clientForm.email.trim() ||
+      clientForm.phone.trim() ||
+      clientForm.address.trim() ||
+      clientForm.contactPerson.trim() ||
+      clientForm.city.trim() ||
+      clientForm.state.trim() ||
+      clientForm.publicAgencyType !== initialClientCreateFormState.publicAgencyType;
+    if (isDirty) {
+      setPendingModalClose("client");
+      return;
+    }
+    setShowClientModal(false);
+    setClientForm(initialClientCreateFormState);
+    setClientFormError(null);
+  };
+  const forceCloseClientModal = () => {
     setShowClientModal(false);
     setClientForm(initialClientCreateFormState);
     setClientFormError(null);
@@ -1457,7 +1573,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("clientePrimarioId", String(createdClient.id));
-      closeClientModal();
+      forceCloseClientModal();
     } catch (error) {
       setClientFormError(getUserErrorMessage(error, "Não foi possível cadastrar o cliente."));
     } finally {
@@ -1466,6 +1582,24 @@ function NovoContratoPageContent() {
   };
 
   const closeSecretaryModal = () => {
+    const isDirty =
+      secretaryForm.name.trim() ||
+      secretaryForm.cnpj.trim() ||
+      secretaryForm.sigla.trim() ||
+      secretaryForm.code.trim() ||
+      secretaryForm.email.trim() ||
+      secretaryForm.phone.trim() ||
+      secretaryForm.address.trim() ||
+      secretaryForm.contactPerson.trim();
+    if (isDirty) {
+      setPendingModalClose("secretary");
+      return;
+    }
+    setShowSecretaryModal(false);
+    setSecretaryForm(initialSecretaryCreateFormState);
+    setSecretaryFormError(null);
+  };
+  const forceCloseSecretaryModal = () => {
     setShowSecretaryModal(false);
     setSecretaryForm(initialSecretaryCreateFormState);
     setSecretaryFormError(null);
@@ -1535,7 +1669,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("clienteSecundarioId", String(createdSecretary.id));
-      closeSecretaryModal();
+      forceCloseSecretaryModal();
     } catch (error) {
       setSecretaryFormError(getUserErrorMessage(error, "Não foi possível cadastrar a secretaria."));
     } finally {
@@ -1544,6 +1678,18 @@ function NovoContratoPageContent() {
   };
 
   const closeCoordinatorModal = () => {
+    const isDirty =
+      coordinatorForm.fullName.trim() ||
+      coordinatorForm.cpf.trim() ||
+      coordinatorForm.email.trim() ||
+      coordinatorForm.phone.trim() ||
+      coordinatorForm.birthDate.trim() ||
+      coordinatorForm.city.trim() ||
+      coordinatorForm.state.trim();
+    if (isDirty) {
+      setPendingModalClose("coordinator");
+      return;
+    }
     setShowCoordinatorModal(false);
     setCoordinatorForm(initialCoordinatorFormState);
     setCoordinatorFormError(null);
@@ -1551,6 +1697,60 @@ function NovoContratoPageContent() {
     setIsCoordinatorCityLoading(false);
     setCoordinatorCityOptions([]);
   };
+  const forceCloseCoordinatorModal = () => {
+    setShowCoordinatorModal(false);
+    setCoordinatorForm(initialCoordinatorFormState);
+    setCoordinatorFormError(null);
+    setCoordinatorCityLookupError(null);
+    setIsCoordinatorCityLoading(false);
+    setCoordinatorCityOptions([]);
+  };
+
+  const confirmDiscardPendingModalClose = () => {
+    if (pendingModalClose === "partner") forceClosePartnerModal();
+    if (pendingModalClose === "client") forceCloseClientModal();
+    if (pendingModalClose === "secretary") forceCloseSecretaryModal();
+    if (pendingModalClose === "coordinator") forceCloseCoordinatorModal();
+    setPendingModalClose(null);
+  };
+
+  useEffect(() => {
+    if (pendingModalClose) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+
+      if (showCoordinatorModal) {
+        closeCoordinatorModal();
+        return;
+      }
+      if (showSecretaryModal) {
+        closeSecretaryModal();
+        return;
+      }
+      if (showClientModal) {
+        closeClientModal();
+        return;
+      }
+      if (showPartnerModal) {
+        closePartnerModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [
+    showPartnerModal,
+    showClientModal,
+    showSecretaryModal,
+    showCoordinatorModal,
+    pendingModalClose,
+    closePartnerModal,
+    closeClientModal,
+    closeSecretaryModal,
+    closeCoordinatorModal,
+  ]);
 
   const openCoordinatorModal = () => {
     setCoordinatorForm(initialCoordinatorFormState);
@@ -1620,7 +1820,7 @@ function NovoContratoPageContent() {
       });
 
       handleChange("coordenador", String(createdPerson.id));
-      closeCoordinatorModal();
+      forceCloseCoordinatorModal();
     } catch (error) {
       setCoordinatorFormError(getUserErrorMessage(error, "Não foi possível cadastrar o coordenador."));
     } finally {
@@ -2208,19 +2408,22 @@ function NovoContratoPageContent() {
 
     submitGuardRef.current = true;
     setTouched(new Set(Object.keys(form) as Array<keyof NovoContratoForm>));
-    setSubmitError(null);
+    clearErrors();
 
     let createdProjectId: number | null = null;
 
     try {
-      if (!validateForm()) {
+      const validation = validateForm();
+      if (!validation.isValid) {
+        focusFirstError(validation.errors);
+        handleSubmitError(null, "Revise os campos obrigatorios destacados antes de criar o contrato.");
         return;
       }
 
       if (!isEditMode) {
         const hierarchyError = validateHierarchyBeforeSubmit(form);
         if (hierarchyError) {
-          setSubmitError(hierarchyError);
+          handleSubmitError(null, hierarchyError);
           return;
         }
       }
@@ -2279,7 +2482,7 @@ function NovoContratoPageContent() {
       const message = createdProjectId
         ? `${rootMessage} O projeto ${createdProjectId} ja foi criado, mas ocorreu erro ao salvar cronograma/metas. Nao tente cadastrar novamente; abra o contrato criado para concluir os dados pendentes.`
         : rootMessage;
-      setSubmitError(message);
+      handleSubmitError(error, message);
     } finally {
       submitGuardRef.current = false;
       setIsSubmitting(false);
@@ -2405,22 +2608,34 @@ function NovoContratoPageContent() {
               <FormField
                 label="Título do Projeto"
                 required
-                error={errors.titulo}
+                error={undefined}
                 icon={<FileText className="h-4 w-4" />}
               >
-                <input
-                  ref={firstInputRef}
-                  type="text"
-                  value={form.titulo}
-                  onChange={(e) => handleChange("titulo", e.target.value)}
-                  onBlur={() => handleBlur("titulo")}
-                  placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
-                  className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
-                    errors.titulo
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
+                <div className="relative">
+                  <input
+                    ref={firstInputRef}
+                    type="text"
+                    value={form.titulo}
+                    name="titulo"
+                    onChange={(e) => handleChange("titulo", e.target.value)}
+                    onBlur={() => handleBlur("titulo")}
+                    placeholder="Ex.: Plataforma de Gestão de Projetos da Innovatis"
+                    className={`w-full h-11 px-4 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                      (apiFieldErrors.titulo ?? errors.titulo)
+                        ? "border-red-300 focus:border-red-500"
+                        : "border-gray-300 focus:border-[#004225]"
+                    }`}
+                  />
+</div>
+                <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-red-600">
+                    {(apiFieldErrors.titulo ?? errors.titulo) ? <AlertCircle className="h-3 w-3" /> : null}
+                    {(apiFieldErrors.titulo ?? errors.titulo) ?? ""}
+                  </span>
+                  <span className={form.titulo.length > TITLE_CHAR_LIMIT ? "font-medium text-red-600" : "text-gray-500"}>
+                    {form.titulo.length}/{TITLE_CHAR_LIMIT}
+                  </span>
+                </div>
               </FormField>
 
               {/* Gov/IF, Tipo e Status - Grid 3 colunas */}
@@ -2429,7 +2644,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Gov/IF"
                   required
-                  error={errors.govIf}
+                  error={apiFieldErrors.govIf ?? errors.govIf}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2446,7 +2661,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Tipo de Contrato"
                   required
-                  error={errors.tipo}
+                  error={apiFieldErrors.tipo ?? errors.tipo}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2463,7 +2678,7 @@ function NovoContratoPageContent() {
                 <FormField
                   label="Status"
                   required
-                  error={errors.status}
+                  error={apiFieldErrors.status ?? errors.status}
                   icon={<Tag className="h-4 w-4" />}
                 >
                   <Dropdown
@@ -2845,21 +3060,33 @@ function NovoContratoPageContent() {
               <FormField
                 label="Objeto do Contrato"
                 required
-                error={errors.scope}
+                error={undefined}
                 icon={<FileText className="h-4 w-4" />}
               >
-                <textarea
-                  value={form.scope}
-                  onChange={(e) => handleChange("scope", e.target.value)}
-                  onBlur={() => handleBlur("scope")}
-                  placeholder="Descreva o objeto/escopo do contrato..."
-                  rows={4}
-                  className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 resize-none ${
-                    errors.scope
-                      ? "border-red-300 focus:border-red-500"
-                      : "border-gray-300 focus:border-[#004225]"
-                  }`}
-                />
+                <div className="relative">
+                  <textarea
+                    name="scope"
+                    value={form.scope}
+                    onChange={(e) => handleChange("scope", e.target.value)}
+                    onBlur={() => handleBlur("scope")}
+                    placeholder="Descreva o objeto/escopo do contrato..."
+                    rows={4}
+                    className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 resize-none ${
+                      (apiFieldErrors.scope ?? errors.scope)
+                        ? "border-red-300 focus:border-red-500"
+                        : "border-gray-300 focus:border-[#004225]"
+                    }`}
+                  />
+</div>
+                <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-red-600">
+                    {(apiFieldErrors.scope ?? errors.scope) ? <AlertCircle className="h-3 w-3" /> : null}
+                    {(apiFieldErrors.scope ?? errors.scope) ?? ""}
+                  </span>
+                  <span className={form.scope.length > SCOPE_CHAR_LIMIT ? "font-medium text-red-600" : "text-gray-500"}>
+                    {form.scope.length}/{SCOPE_CHAR_LIMIT}
+                  </span>
+                </div>
               </FormField>
 
               {/* Valor do Projeto */}
@@ -2901,7 +3128,7 @@ function NovoContratoPageContent() {
                 </div>
                 <p className="text-xs text-gray-500">
                   Os arquivos serão enviados automaticamente após o cadastro do projeto.
-                  Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: 20MB por arquivo.
+                  Formatos aceitos: PDF, PNG, JPG e JPEG. Máximo: {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)} por arquivo.
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3075,22 +3302,12 @@ function NovoContratoPageContent() {
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Status <span className="text-red-500">*</span>
                             </label>
-                            <select
-                              value={newParcela.status ?? "PREVISTO"}
-                              onChange={(e) =>
-                                setNewParcela({
-                                  ...newParcela,
-                                  status: e.target.value as StatusDesembolso,
-                                })
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-                            >
-                              {statusDesembolsoOptions.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
+                            <Dropdown
+                              options={statusDesembolsoOptions}
+                              value={newParcela.status || undefined}
+                              onChange={(value) => setNewParcela({ ...newParcela, status: value as StatusDesembolso })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
                           </div>
 
                           <div>
@@ -3600,7 +3817,6 @@ function NovoContratoPageContent() {
       {showPartnerModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closePartnerModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -3664,22 +3880,15 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Tipo <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={partnerForm.partnersType}
-                    onChange={(event) =>
-                      setPartnerForm((prev) => ({
-                        ...prev,
-                        partnersType: event.target.value as PartnersTypeEnum,
-                      }))
+                  <Dropdown
+                    options={partnerTypeOptions}
+                    value={partnerForm.partnersType || undefined}
+                    onChange={(value) =>
+                      setPartnerForm((prev) => ({ ...prev, partnersType: (value || "FUNDACAO") as PartnersTypeEnum }))
                     }
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  >
-                    {partnerTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione o tipo"
+                    className="h-10"
+                  />
                 </div>
 
                 <div>
@@ -3886,7 +4095,6 @@ function NovoContratoPageContent() {
       {showClientModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeClientModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -3955,22 +4163,18 @@ function NovoContratoPageContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Tipo de órgão <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={clientForm.publicAgencyType}
-                    onChange={(event) =>
+                  <Dropdown
+                    options={publicAgencyTypeOptions}
+                    value={clientForm.publicAgencyType || undefined}
+                    onChange={(value) =>
                       setClientForm((prev) => ({
                         ...prev,
-                        publicAgencyType: event.target.value as PublicAgencyTypeEnum,
+                        publicAgencyType: (value || "PREFEITURA") as PublicAgencyTypeEnum,
                       }))
                     }
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  >
-                    {publicAgencyTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione o tipo"
+                    className="h-10"
+                  />
                 </div>
 
                 <div>
@@ -3987,14 +4191,14 @@ function NovoContratoPageContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Codigo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
                   <input
                     type="text"
                     value={clientForm.code}
                     onChange={(event) =>
                       setClientForm((prev) => ({ ...prev, code: event.target.value }))
                     }
-                    placeholder="Codigo"
+                    placeholder="Código"
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
                   />
                 </div>
@@ -4035,32 +4239,64 @@ function NovoContratoPageContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Cidade</label>
-                  <input
-                    type="text"
-                    value={clientForm.city}
-                    onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, city: event.target.value }))
-                    }
-                    placeholder="Cidade"
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
-                  />
+                  {allowManualClientCityEntry && clientForm.state ? (
+                    <input
+                      type="text"
+                      value={clientForm.city}
+                      onChange={(event) =>
+                        setClientForm((prev) => ({ ...prev, city: event.target.value }))
+                      }
+                      placeholder="Digite a cidade"
+                      className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    />
+                  ) : (
+                    <Dropdown
+                      options={clientCityDropdownOptions}
+                      value={clientForm.city || undefined}
+                      onChange={(value) =>
+                        setClientForm((prev) => ({ ...prev, city: value || "" }))
+                      }
+                      placeholder={
+                        !clientForm.state
+                          ? "Selecione a UF primeiro"
+                          : isClientCityLoading
+                            ? "Carregando cidades..."
+                            : "Selecione a cidade"
+                      }
+                      disabled={
+                        !clientForm.state ||
+                        isClientCityLoading ||
+                        clientCityDropdownOptions.length === 0
+                      }
+                      searchable
+                      className="h-10"
+                    />
+                  )}
+                  {clientCityLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{clientCityLookupError}</p>
+                  ) : null}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Estado</label>
-                  <input
-                    type="text"
-                    value={clientForm.state}
-                    onChange={(event) =>
+                  <Dropdown
+                    options={ufDropdownOptions}
+                    value={clientForm.state || undefined}
+                    onChange={(value) =>
                       setClientForm((prev) => ({
                         ...prev,
-                        state: event.target.value.toUpperCase().slice(0, 2),
+                        state: (value || "").toUpperCase(),
+                        city: "",
                       }))
                     }
-                    placeholder="UF"
-                    maxLength={2}
-                    className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225]"
+                    placeholder={isUfLoading ? "Carregando estados..." : "Selecione a UF"}
+                    disabled={isUfLoading || ufDropdownOptions.length === 0}
+                    searchable
+                    className="h-10"
                   />
+                  {ufLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">{ufLookupError}</p>
+                  ) : null}
                 </div>
               </div>
 
@@ -4131,7 +4367,6 @@ function NovoContratoPageContent() {
       {showSecretaryModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeSecretaryModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -4319,7 +4554,6 @@ function NovoContratoPageContent() {
       {showCoordinatorModal && (
         <div
           className="fixed inset-0 z-[80] bg-black/45 p-4 overflow-y-auto"
-          onClick={closeCoordinatorModal}
         >
           <div className="flex min-h-full items-center justify-center py-4">
             <div
@@ -4530,6 +4764,11 @@ function NovoContratoPageContent() {
           </div>
         </div>
       )}
+      <ConfirmDiscardModal
+        isOpen={pendingModalClose !== null}
+        onCancel={() => setPendingModalClose(null)}
+        onConfirm={confirmDiscardPendingModalClose}
+      />
     </div>
   );
 }
@@ -4637,12 +4876,14 @@ function FormField({
   label,
   required,
   error,
+  errorAlignRight,
   icon,
   children,
 }: {
   label: string;
   required?: boolean;
   error?: string;
+  errorAlignRight?: boolean;
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -4655,7 +4896,7 @@ function FormField({
       </label>
       {children}
       {error && (
-        <p className="flex items-center gap-1 text-xs text-red-600 mt-1">
+        <p className={`flex items-center gap-1 text-xs text-red-600 mt-1 ${errorAlignRight ? "justify-end text-right" : ""}`}> 
           <AlertCircle className="h-3 w-3" />
           {error}
         </p>
@@ -4663,5 +4904,22 @@ function FormField({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

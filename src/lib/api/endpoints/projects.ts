@@ -12,6 +12,8 @@ import type {
   ProjectTypeDistributionResponseDTO,
   ProjectRequestDTO,
   ProjectResponseDTO,
+  ProjectBudgetSummaryDTO,
+  ProjectDisbursementSummaryDTO,
   ProjectTotalsDTO,
   ProjectUpdateDTO,
 } from '../types';
@@ -70,6 +72,14 @@ export function getProjectById(id: number | string) {
 
 export function getProjectTotals(id: number | string) {
   return http.get<ProjectTotalsDTO>(`${BASE}/${id}/totals`);
+}
+
+export function getProjectBudgetSummary(id: number | string) {
+  return http.get<ProjectBudgetSummaryDTO>(`${BASE}/${id}/budget-summary`);
+}
+
+export function getProjectDisbursementSummary(id: number | string) {
+  return http.get<ProjectDisbursementSummaryDTO>(`${BASE}/${id}/disbursement-summary`);
 }
 
 export function getProjectDashboard(filters: ProjectDashboardFilters = {}) {

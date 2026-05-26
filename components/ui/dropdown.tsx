@@ -19,6 +19,12 @@ interface DropdownProps {
   className?: string;
   disabled?: boolean;
   searchable?: boolean;
+  loading?: boolean;
+  loadingText?: string;
+  error?: string | null;
+  onRetry?: () => void;
+  emptyText?: string;
+  menuClassName?: string;
 }
 
 interface MenuPosition {
@@ -41,6 +47,12 @@ export function Dropdown({
   className,
   disabled = false,
   searchable = false,
+  loading = false,
+  loadingText = "Carregando...",
+  error = null,
+  onRetry,
+  emptyText = "Nenhuma opção disponível",
+  menuClassName,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -98,9 +110,7 @@ export function Dropdown({
         Math.max(VIEWPORT_PADDING, triggerRect.left),
         viewportWidth - width - VIEWPORT_PADDING
       );
-      const top = shouldOpenUpward
-        ? triggerRect.top - maxHeight - MENU_GAP
-        : triggerRect.bottom + MENU_GAP;
+      const top = shouldOpenUpward ? triggerRect.top - MENU_GAP : triggerRect.bottom + MENU_GAP;
 
       setOpenUpward(shouldOpenUpward);
       setMenuPosition({
@@ -172,49 +182,83 @@ export function Dropdown({
       <div
         ref={menuRef}
         className={cn(
-          "fixed bg-white border border-zinc-200 rounded-lg shadow-lg z-[9999] overflow-hidden transition-all duration-150 ease-out",
-          openUpward ? "origin-bottom" : "origin-top"
+          "fixed bg-white border border-zinc-200 rounded-lg shadow-lg z-[100000] overflow-hidden transition-all duration-150 ease-out",
+          openUpward ? "origin-bottom" : "origin-top",
+          menuClassName
         )}
         style={{
           top: menuPosition.top,
           left: menuPosition.left,
           width: menuPosition.width,
+          transform: openUpward ? "translateY(-100%)" : "none",
         }}
+        role="listbox"
       >
         <div style={{ maxHeight: menuPosition.maxHeight }} className="overflow-y-auto">
-          {(!searchable || !searchTerm) && (
-            <button
-              type="button"
-              onClick={() => selectOption(undefined)}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
-                !value ? "bg-zinc-50 font-medium" : ""
-              )}
-            >
-              <span>{placeholder}</span>
-            </button>
-          )}
-
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => selectOption(option.value)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
-                  value === option.value ? "bg-zinc-50 font-medium" : ""
-                )}
-              >
-                {option.icon}
-                <span>{option.label}</span>
-              </button>
-            ))
-          ) : searchable && searchTerm ? (
-            <div className="px-4 py-3 text-sm text-zinc-500 text-center">
-              Nenhum resultado encontrado
+          {loading ? (
+            <div className="flex items-center gap-3 px-4 py-3 text-sm text-zinc-600">
+              <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+              <span>{loadingText}</span>
             </div>
-          ) : null}
+          ) : error ? (
+            <div className="px-4 py-3 text-sm">
+              <div className="text-zinc-700">Falha ao carregar opções.</div>
+              <div className="mt-1 text-xs text-zinc-500">{error}</div>
+              {onRetry ? (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-3 inline-flex items-center justify-center rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Tentar novamente
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              {(!searchable || !searchTerm) && (
+                <button
+                  type="button"
+                  onClick={() => selectOption(undefined)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
+                    !value ? "bg-zinc-50 font-medium" : ""
+                  )}
+                  role="option"
+                  aria-selected={!value}
+                >
+                  <span>{placeholder}</span>
+                </button>
+              )}
+
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => selectOption(option.value)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors duration-150 text-left",
+                      value === option.value ? "bg-zinc-50 font-medium" : ""
+                    )}
+                    role="option"
+                    aria-selected={value === option.value}
+                  >
+                    {option.icon}
+                    <span>{option.label}</span>
+                  </button>
+                ))
+              ) : searchable && searchTerm ? (
+                <div className="px-4 py-3 text-sm text-zinc-500 text-center">
+                  Nenhum resultado encontrado
+                </div>
+              ) : (
+                <div className="px-4 py-3 text-sm text-zinc-500 text-center">
+                  {emptyText}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     ) : null;
@@ -235,6 +279,8 @@ export function Dropdown({
             onClick={handleSearchClick}
             placeholder={placeholder}
             disabled={disabled}
+            aria-disabled={disabled || loading ? true : undefined}
+            aria-haspopup="listbox"
             className={cn(
               "w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 border border-gray-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]",
               selectedOption?.icon && !searchTerm ? "pl-9" : "pl-3",
@@ -249,6 +295,9 @@ export function Dropdown({
             disabled={disabled}
             className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded transition-colors z-10"
             type="button"
+            aria-label="Abrir opções"
+            aria-expanded={isOpen}
+            aria-haspopup="listbox"
           >
             <ChevronDown
               className={cn(
@@ -269,6 +318,9 @@ export function Dropdown({
             disabled && "opacity-50 cursor-not-allowed",
             className
           )}
+          aria-disabled={disabled || loading ? true : undefined}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
         >
           <div className="flex items-center gap-3 min-w-0">
             {selectedOption?.icon}
@@ -283,7 +335,7 @@ export function Dropdown({
         </button>
       )}
 
-      {typeof document !== "undefined" && dropdownMenu
+      {dropdownMenu && typeof document !== "undefined"
         ? createPortal(dropdownMenu, document.body)
         : null}
     </div>

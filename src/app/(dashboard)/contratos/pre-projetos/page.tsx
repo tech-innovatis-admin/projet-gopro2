@@ -34,6 +34,7 @@ import {
   Trash2,
   FileCheck,
 } from "lucide-react";
+import { Dropdown } from "@/components/ui/dropdown";
 
 // Tipos
 type PreProjetoTipo = "PROJETO" | "PRODUTO";
@@ -581,21 +582,14 @@ export default function PreProjetosPage() {
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Parceiro</label>
-                <select
-                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                 <Dropdown
+                  options={availablePartners.map((partner) => ({ value: partner, label: partner }))}
                   value={filters.parceiro}
-                  onChange={(e) => {
-                    setFilters((f) => ({ ...f, parceiro: e.target.value }));
+                  onChange={(value) => {
+                    setFilters((f) => ({ ...f, parceiro: value ?? "" }));
                     setPage(1);
                   }}
-                >
-                  <option value="">Todos os parceiros</option>
-                  {availablePartners.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
           )}

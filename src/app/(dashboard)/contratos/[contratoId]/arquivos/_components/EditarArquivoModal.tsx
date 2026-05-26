@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, Pencil, UploadCloud, X } from "lucide-react";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
+import {
+  DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatFileSize,
+  validateUploadFile,
+} from "@/src/lib/upload";
 import type { ContractDocument, ContractDocumentCategory } from "../page";
 
 type ReplacePayload = {
@@ -36,14 +44,7 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
 };
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ContractDocumentCategory[];
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 export function EditarArquivoModal({
   isOpen,
@@ -57,21 +58,42 @@ export function EditarArquivoModal({
   );
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasFilledData = file !== null || (arquivo ? category !== arquivo.category : false);
+  const resetModalState = useCallback(() => {
+    setCategory(arquivo?.category ?? "OUTRO");
+    setFile(null);
+    setError(null);
+  }, [arquivo?.category]);
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetModalState,
+  });
 
   const replacementFileLabel = useMemo(() => {
     if (!file) return null;
     return `${file.name} (${formatFileSize(file.size)})`;
   }, [file]);
 
+  useEffect(() => {
+    resetModalState();
+  }, [arquivo?.id, isOpen, resetModalState]);
+
   const handleFileChange = (nextFile: File | null) => {
     if (!nextFile) {
       setFile(null);
       return;
     }
-    if (nextFile.size > MAX_FILE_SIZE) {
-      setError(
-        `Arquivo maior que o permitido (${formatFileSize(MAX_FILE_SIZE)}).`
-      );
+    const fileValidationError = validateUploadFile({
+      file: nextFile,
+      maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+      allowedTypesLabel: "PDF, DOC, DOCX, XLS, XLSX, PNG, JPG e JPEG",
+    });
+    if (fileValidationError) {
+      setError(fileValidationError);
       return;
     }
     setError(null);
@@ -100,7 +122,7 @@ export function EditarArquivoModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
       onClick={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
-          onClose();
+          requestClose();
         }
       }}
     >
@@ -114,7 +136,7 @@ export function EditarArquivoModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSubmitting}
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
             aria-label="Fechar modal"
@@ -167,7 +189,7 @@ export function EditarArquivoModal({
             />
             <p className="text-xs text-gray-500">
               Esta ação substitui o documento atual. Tamanho máximo:{" "}
-              {formatFileSize(MAX_FILE_SIZE)}.
+              {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)}.
             </p>
             {replacementFileLabel && (
               <div className="inline-flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700">
@@ -187,7 +209,7 @@ export function EditarArquivoModal({
           <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
@@ -203,6 +225,7 @@ export function EditarArquivoModal({
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

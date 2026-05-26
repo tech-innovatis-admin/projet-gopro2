@@ -20,6 +20,7 @@ import {
 import { AppModalShell } from "@/components/ui/app-modal-shell";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { MoneyInput } from "../desembolso/_components/MoneyImput";
+import { ContractMetaLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   createGoal,
   createPhase,
@@ -275,6 +276,37 @@ type FaseCreateModalState =
       faseId?: string;
     }
   | null;
+
+function areMetaDraftsEqual(first: MetaModalDraft, second: MetaModalDraft) {
+  return (
+    first.titulo === second.titulo &&
+    first.descricao === second.descricao &&
+    first.dataInicio === second.dataInicio &&
+    first.dataFim === second.dataFim &&
+    first.hasFinancialValue === second.hasFinancialValue &&
+    first.financialAmountCents === second.financialAmountCents
+  );
+}
+
+function areEtapaDraftsEqual(first: EtapaModalDraft, second: EtapaModalDraft) {
+  return (
+    first.titulo === second.titulo &&
+    first.descricao === second.descricao &&
+    first.dataInicio === second.dataInicio &&
+    first.dataFim === second.dataFim &&
+    first.hasFinancialValue === second.hasFinancialValue &&
+    first.financialAmountCents === second.financialAmountCents
+  );
+}
+
+function areStructureDraftsEqual(first: StructureModalDraft, second: StructureModalDraft) {
+  return (
+    first.titulo === second.titulo &&
+    first.descricao === second.descricao &&
+    first.dataInicio === second.dataInicio &&
+    first.dataFim === second.dataFim
+  );
+}
 
 function cloneMetaHierarchy(list: Meta[]) {
   return JSON.parse(JSON.stringify(list)) as Meta[];
@@ -1724,6 +1756,83 @@ export default function MetaEtapaFasePage() {
     faseCreateModalState?.mode === "edit"
       ? "Atualize os dados da fase e salve diretamente por este modal."
       : "Cadastre uma fase dentro da etapa selecionada e salve diretamente por este modal.";
+  const metaModalInitialDraft = useMemo<MetaModalDraft>(() => {
+    if (metaModalState?.mode === "edit") {
+      const meta = metas.find((item) => item.id === metaModalState.metaId);
+      if (meta) {
+        return {
+          titulo: meta.titulo,
+          descricao: meta.descricao ?? "",
+          dataInicio: meta.dataInicio ?? "",
+          dataFim: meta.dataFim ?? "",
+          hasFinancialValue: Boolean(meta.hasFinancialValue),
+          financialAmountCents: amountToCents(meta.financialAmount),
+        };
+      }
+    }
+    return {
+      titulo: metaModalState ? `Meta ${metaModalState.numero}` : "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: 0,
+    };
+  }, [metaModalState, metas]);
+  const etapaModalInitialDraft = useMemo<EtapaModalDraft>(() => {
+    if (etapaCreateModalState?.mode === "edit") {
+      const meta = metas.find((item) => item.id === etapaCreateModalState.metaId);
+      const etapa = meta?.etapas.find((item) => item.id === etapaCreateModalState.etapaId);
+      if (etapa) {
+        return {
+          titulo: etapa.titulo,
+          descricao: etapa.descricao ?? "",
+          dataInicio: etapa.dataInicio ?? "",
+          dataFim: etapa.dataFim ?? "",
+          hasFinancialValue: Boolean(etapa.hasFinancialValue),
+          financialAmountCents: amountToCents(etapa.financialAmount),
+        };
+      }
+    }
+    return {
+      titulo: etapaCreateModalState ? `Etapa ${etapaCreateModalState.numero}` : "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+      hasFinancialValue: false,
+      financialAmountCents: etapaModalFinancialContext?.availableForEtapaCents ?? 0,
+    };
+  }, [etapaCreateModalState, etapaModalFinancialContext?.availableForEtapaCents, metas]);
+  const faseModalInitialDraft = useMemo<StructureModalDraft>(() => {
+    if (faseCreateModalState?.mode === "edit") {
+      const meta = metas.find((item) => item.id === faseCreateModalState.metaId);
+      const etapa = meta?.etapas.find((item) => item.id === faseCreateModalState.etapaId);
+      const fase = etapa?.fases.find((item) => item.id === faseCreateModalState.faseId);
+      if (fase) {
+        return {
+          titulo: fase.titulo,
+          descricao: fase.descricao ?? "",
+          dataInicio: fase.dataInicio ?? "",
+          dataFim: fase.dataFim ?? "",
+        };
+      }
+    }
+    return {
+      titulo: faseCreateModalState ? `Fase ${faseCreateModalState.numero}` : "",
+      descricao: "",
+      dataInicio: "",
+      dataFim: "",
+    };
+  }, [faseCreateModalState, metas]);
+  const isMetaModalDirty = Boolean(metaModalState) && !areMetaDraftsEqual(metaModalDraft, metaModalInitialDraft);
+  const isEtapaModalDirty =
+    Boolean(etapaCreateModalState) && !areEtapaDraftsEqual(etapaCreateDraft, etapaModalInitialDraft);
+  const isFaseModalDirty =
+    Boolean(faseCreateModalState) && !areStructureDraftsEqual(faseCreateDraft, faseModalInitialDraft);
+
+  if (isLoadingData) {
+    return <ContractMetaLoadingSkeleton />;
+  }
 
   return (
     <div className="space-y-4">
@@ -1781,12 +1890,6 @@ export default function MetaEtapaFasePage() {
         </div>
       )}
 
-      {isLoadingData && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          Carregando metas, etapas e fases...
-        </div>
-      )}
-
       {loadError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {loadError}
@@ -1809,7 +1912,7 @@ export default function MetaEtapaFasePage() {
       </div>
 
       {/* Lista de Metas */}
-      {!isLoadingData && currentMetas.length === 0 ? (
+      {currentMetas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 bg-gray-100 rounded-full mb-4">
             <Crosshair className="h-8 w-8 text-gray-400" />
@@ -1895,7 +1998,7 @@ export default function MetaEtapaFasePage() {
                   <span className="hidden text-[11px] text-slate-600 md:inline">
                     {metaFasesCount} fases
                   </span>
-                </div>
+        </div>
                 {false ? (
                   <div className="flex items-center gap-2">
                     {editingDate?.id === meta.id && editingDate?.field === "dataInicio" ? (
@@ -2446,11 +2549,12 @@ export default function MetaEtapaFasePage() {
         tone={metaModalState?.mode === "edit" ? "info" : "brand"}
         onClose={closeMetaModal}
         maxWidthClassName="max-w-2xl"
-        footer={
+        isDirty={isMetaModalDirty}
+        footer={({ requestClose }) => (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={closeMetaModal}
+              onClick={requestClose}
               className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               Cancelar
@@ -2464,7 +2568,7 @@ export default function MetaEtapaFasePage() {
               {metaModalState?.mode === "edit" ? "Salvar alterações" : "Criar meta"}
             </button>
           </div>
-        }
+        )}
       >
         {metaModalState && (
           <form
@@ -2640,11 +2744,12 @@ export default function MetaEtapaFasePage() {
         tone="info"
         onClose={closeEtapaCreateModal}
         maxWidthClassName="max-w-2xl"
-        footer={
+        isDirty={isEtapaModalDirty}
+        footer={({ requestClose }) => (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={closeEtapaCreateModal}
+              onClick={requestClose}
               className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               Cancelar
@@ -2658,7 +2763,7 @@ export default function MetaEtapaFasePage() {
               {etapaCreateModalState?.mode === "edit" ? "Salvar etapa" : "Criar etapa"}
             </button>
           </div>
-        }
+        )}
       >
         {etapaCreateModalState && (
           <form
@@ -2925,11 +3030,12 @@ export default function MetaEtapaFasePage() {
         tone="neutral"
         onClose={closeFaseCreateModal}
         maxWidthClassName="max-w-2xl"
-        footer={
+        isDirty={isFaseModalDirty}
+        footer={({ requestClose }) => (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={closeFaseCreateModal}
+              onClick={requestClose}
               className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               Cancelar
@@ -2943,7 +3049,7 @@ export default function MetaEtapaFasePage() {
               {faseCreateModalState?.mode === "edit" ? "Salvar fase" : "Criar fase"}
             </button>
           </div>
-        }
+        )}
       >
         {faseCreateModalState && (
           <form
@@ -3107,7 +3213,7 @@ export default function MetaEtapaFasePage() {
       <AppModalShell
         isOpen={Boolean(etapaPendingDeletion)}
         title="Excluir etapa"
-        description="Confirme a exclusÃ£o da etapa antes de continuar."
+        description="Confirme a exclusão da etapa antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteEtapaModal}
@@ -3141,7 +3247,7 @@ export default function MetaEtapaFasePage() {
                 Tem certeza de que deseja excluir esta etapa?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a etapa e todas as fases vinculadas.
+                Esta ação remove a etapa e todas as fases vinculadas.
               </p>
             </div>
 
@@ -3164,7 +3270,7 @@ export default function MetaEtapaFasePage() {
       <AppModalShell
         isOpen={Boolean(fasePendingDeletion)}
         title="Excluir fase"
-        description="Confirme a exclusÃ£o da fase antes de continuar."
+        description="Confirme a exclusão da fase antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={closeDeleteFaseModal}
@@ -3198,7 +3304,7 @@ export default function MetaEtapaFasePage() {
                 Tem certeza de que deseja excluir esta fase?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a fase da etapa e nÃ£o pode ser desfeita.
+                Esta ação remove a fase da etapa e não pode ser desfeita.
               </p>
             </div>
 

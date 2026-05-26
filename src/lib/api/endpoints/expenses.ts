@@ -39,3 +39,13 @@ export function updateExpense(id: number | string, payload: ExpenseUpdateDTO) {
 export function deleteExpense(id: number | string) {
   return http.delete<void>(`${BASE}/${id}`);
 }
+
+export interface ExpenseReclassifyPayload {
+  targetBudgetItemId: number;
+  reason: string;
+  updatedBy?: number;
+}
+
+export function reclassifyExpense(id: number | string, payload: ExpenseReclassifyPayload) {
+  return http.patch<ExpenseResponseDTO>(`${BASE}/${id}/reclassify`, { body: payload });
+}

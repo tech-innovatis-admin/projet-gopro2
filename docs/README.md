@@ -858,7 +858,7 @@ Gestão de documentos e arquivos anexados ao contrato.
 - Descrição
 
 **Funcionalidades:**
-- Upload de arquivos (máx. 10MB)
+- Upload de arquivos (máx. 200MB no backend; proxy configurado para 210MB no BFF)
 - Filtro por tipo de documento
 - Visualizar e baixar arquivos
 - Remover arquivos (modo edição)
@@ -1313,7 +1313,7 @@ Veja a [documentação de deploy](https://nextjs.org/docs/app/building-your-appl
 - Cards de métricas (Total, Projetos, Produtos, Valor Estimado)
 - Modal de cadastro com formatação monetária automática
 - Upload opcional de 4 tipos de documento (Contrato, TR, Plano de Trabalho, Outro)
-- Validação de arquivos (tipo, tamanho máximo 10MB)
+- Validação de arquivos (tipo, tamanho máximo 200MB)
 
 **🧭 Integração com NavBar**
 - Suporte a links `modal:*` no menu de navegação

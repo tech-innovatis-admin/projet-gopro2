@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { X, FileText, Calendar, MapPin, User, Building2, Tag, AlertCircle, DollarSign, FileText as FileTextIcon } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import { getOrganizationsFinanciadoras, getOrganizationsParceiras } from "../mockData";
 
 // Tipos
@@ -93,6 +95,25 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
   // Carregar organizações disponíveis
   const organizacoesFinanciadoras = useMemo(() => getOrganizationsFinanciadoras(), []);
   const organizacoesParceiras = useMemo(() => getOrganizationsParceiras(), []);
+  const hasFilledData = useMemo(
+    () =>
+      Object.values(form).some((value) =>
+        Array.isArray(value) ? value.length > 0 : value.trim().length > 0
+      ),
+    [form]
+  );
+  const resetFormState = () => {
+    setForm(initialFormState);
+    setErrors({});
+    setTouched(new Set());
+  };
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen,
+    shouldConfirm: hasFilledData,
+    closeDisabled: isSubmitting,
+    onClose,
+    onDiscardConfirm: resetFormState,
+  });
 
   // Reset form when modal opens
   useEffect(() => {
@@ -105,17 +126,6 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
       setTimeout(() => firstInputRef.current?.focus(), 100);
     }
   }, [isOpen]);
-
-  // Handle ESC key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -131,9 +141,7 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
 
   // Handle click outside
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
+    // Modal não fecha ao clicar fora - apenas via botão X ou ação do formulário
   };
 
   // Validation
@@ -338,7 +346,8 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            disabled={isSubmitting}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             aria-label="Fechar modal"
           >
@@ -691,7 +700,7 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
           <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
             >
@@ -714,6 +723,7 @@ export function NovoContratoModal({ isOpen, onClose, onSubmit }: NovoContratoMod
           </div>
         </form>
       </div>
+      <ConfirmDiscardModal {...discardConfirmProps} />
     </div>
   );
 }

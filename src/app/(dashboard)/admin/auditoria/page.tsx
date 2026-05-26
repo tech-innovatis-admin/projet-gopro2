@@ -9,6 +9,7 @@ import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
 import { canManageAdminAudit, fetchCurrentUser } from "@/src/lib/auth/session";
 import { AuditLogResponseDTO, AuditScopeEnum } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { Dropdown } from "@/components/ui/dropdown";
 
 const PAGE_SIZE = 10;
 
@@ -168,21 +169,15 @@ export default function AdminAuditoriaPage() {
                   <label htmlFor="auditScope" className="text-sm font-medium text-zinc-700">
                     Escopo
                   </label>
-                  <select
-                    id="auditScope"
+                  <Dropdown
+                    options={scopeOptions}
                     value={scope}
-                    onChange={(event) => {
-                      setScope(event.target.value as AuditScopeEnum | "");
+                    onChange={(value) => {
+                      setScope((value ?? "") as AuditScopeEnum | "");
                       setCurrentPage(0);
                     }}
                     className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-                  >
-                    {scopeOptions.map((option) => (
-                      <option key={option.value || "all"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div className="space-y-1">

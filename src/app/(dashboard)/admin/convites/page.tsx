@@ -20,6 +20,7 @@ import {
   UserRoleEnum,
 } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { Dropdown } from "@/components/ui/dropdown";
 
 const roleOptions: UserRoleEnum[] = ["OWNER", "SUPERADMIN", "ADMIN", "ANALISTA", "ESTAGIARIO"];
 const statusOptions: Array<AllowedRegistrationStatusEnum | ""> = [
@@ -301,19 +302,13 @@ export default function AdminConvitesPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="inviteRole">Perfil</Label>
-                  <select
-                    id="inviteRole"
+                  <Dropdown
+                    options={roleOptions.map((option) => ({ value: option, label: roleLabels[option] }))}
                     value={role}
-                    onChange={(event) => setRole(event.target.value as UserRoleEnum)}
-                    className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    onChange={(value) => setRole(value as UserRoleEnum)}
+                    placeholder="Selecione o perfil"
                     disabled={creating}
-                  >
-                    {roleOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {roleLabels[option]}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -371,20 +366,13 @@ export default function AdminConvitesPage() {
 
                 <div className="w-full md:w-60">
                   <Label htmlFor="statusFilter">Filtrar por status</Label>
-                  <select
-                    id="statusFilter"
+                  <Dropdown
+                    options={statusOptions.map((option) => ({ value: option, label: option ? statusLabels[option] : "Todos" }))}
                     value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(event.target.value as AllowedRegistrationStatusEnum | "")
-                    }
-                    className="mt-1 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-                  >
-                    {statusOptions.map((option) => (
-                      <option key={option || "all"} value={option}>
-                        {option ? statusLabels[option] : "Todos"}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setStatusFilter(value as AllowedRegistrationStatusEnum | "")}
+                    placeholder="Selecione o status"
+                    disabled={creating}
+                  />
                 </div>
               </div>
 

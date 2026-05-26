@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -11,25 +11,60 @@ import {
   Check,
   X,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
+import { Dropdown } from '@/components/ui/dropdown';
 import { RemanejamentoModal } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
+import { ContractRubricasLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
+import {
+  CompanyFormModal,
+  type CompanyFormData,
+  hasRequiredCompanyFields,
+  onlyDigits,
+} from '../_components/CompanyFormModal';
+import {
+  MemberFormModal,
+  defaultMemberFormData,
+  hasRequiredMemberFields,
+  type MembroFormData,
+} from '../_components/MemberFormModal';
+import { unformatCPF, validateCPFComplete } from '../equipe-tecnica/_components/CPFValidator';
+import {
+  unformatPhone,
+  validatePhoneComplete,
+} from '../equipe-tecnica/_components/PhoneValidator';
 import {
   createBudgetCategory,
   createBudgetItem,
+  assignBudgetItemBeneficiary,
+  removeBudgetItemBeneficiary,
   createBudgetTransfer,
+  createCompany,
+  createPeople,
+  createProjectCompany,
+  createProjectPeople,
   deleteBudgetCategory,
   deleteBudgetItem,
   listBudgetCategories,
   listBudgetItems,
   listBudgetTransfers,
+  listCompanies,
   listGoals,
+  listPeople,
+  listProjectCompaniesDetailed,
+  listProjectPeopleDetailed,
+  updatePeople,
+  updateProjectPeople,
+  updateProjectCompany,
   updateBudgetCategory,
   updateBudgetItem,
+  uploadDocument,
+  getProjectBudgetSummary,
 } from '@/src/lib/api/endpoints';
 import { resolveUserNamesById } from '@/src/lib/audit/userLookup';
 import {
@@ -44,8 +79,15 @@ import {
 } from '@/src/lib/budget-transfers/comeback';
 import {
   type BudgetTransferRequestDTO,
+  type CompanyResponseDTO,
+  type ContractingStatusEnum,
   type GoalResponseDTO,
+  HttpError,
   type PageResponseDTO,
+  type PeopleResponseDTO,
+  type ProjectCompanyDetailedResponseDTO,
+  type ProjectBudgetSummaryDTO,
+  type RoleProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -68,6 +110,17 @@ type Lancamento = {
   valor: number;
   dataPag: string;
 };
+type BeneficiaryType = 'person' | 'company';
+
+function toOptional(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function papelToRole(papel: MembroFormData['papel']): RoleProjectPeopleEnum {
+  if (papel === 'BOLSISTA') return 'BOLSISTA';
+  return 'DIRETOR';
+}
 
 type Subitem = {
   id: ID;
@@ -87,10 +140,32 @@ interface ItemRubrica {
   metaId?: string;
   metaIds?: string[];
   notes?: string;
+  webs?: string;
+  serviceOrder?: string;
+  protocol?: string;
   subitens?: Subitem[];
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
   valorFinal?: number;
+  projectPeopleId?: string;
+  projectCompanyId?: string;
+  beneficiaryType?: BeneficiaryType;
+  beneficiaryReferenceId?: string;
+  unlinkedItem?: boolean;
+}
+interface ProjectPersonOption {
+  id: string;
+  label: string;
+  baseAmount?: number | null;
+}
+interface ProjectCompanyOption {
+  id: string;
+  label: string;
+  name: string;
+  cnpj?: string | null;
+  status?: ContractingStatusEnum | null;
+  availableBalance?: number | null;
+  totalValue?: number | null;
 }
 
 interface Rubrica {
@@ -129,6 +204,54 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
+const CONTRACTING_STATUS_LABELS: Record<ContractingStatusEnum, string> = {
+  EM_CADASTRO: 'Em cadastro',
+  EM_CONTRATACAO: 'Em contratação',
+  CONTRATADA: 'Contratada',
+  EM_EXECUCAO: 'Em execução',
+  CONCLUIDA: 'Concluída',
+  CANCELADA: 'Cancelada',
+};
+
+const formatContractingStatus = (status?: ContractingStatusEnum | null) =>
+  status ? CONTRACTING_STATUS_LABELS[status] ?? status : 'Status não informado';
+
+const buildProjectCompanyOption = (
+  company: ProjectCompanyDetailedResponseDTO
+): ProjectCompanyOption => {
+  const name =
+    company.companyTradeName?.trim() ||
+    company.companyName?.trim() ||
+    `Empresa #${company.companyId}`;
+  const cnpj = company.companyCnpj?.trim() || null;
+  const status = company.status ?? null;
+  const balance =
+    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
+      ? company.availableBalance
+      : null;
+  const totalValue =
+    typeof company.totalValue === 'number' && Number.isFinite(company.totalValue)
+      ? company.totalValue
+      : null;
+
+  return {
+    id: String(company.id),
+    name,
+    cnpj,
+    status,
+    availableBalance: balance,
+    totalValue,
+    label: [
+      name,
+      cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado',
+      formatContractingStatus(status),
+      balance != null ? `Saldo ${formatCurrency(balance)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' - '),
+  };
+};
+
 const toSafeNumber = (value: number | null | undefined): number => {
   if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
     return 0;
@@ -162,8 +285,41 @@ const toInputDateValue = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatCnpjCompact = (value?: string | null) => {
+  const digits = (value ?? '').replace(/\D/g, '').slice(0, 14);
+  if (digits.length !== 14) return null;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
+
+const extractCriticalBeneficiaryConflictMessage = (error: unknown): string | null => {
+  if (!(error instanceof HttpError) || !error.fieldErrors) {
+    return null;
+  }
+
+  const candidateMessages = [
+    error.fieldErrors.projectPeopleId,
+    error.fieldErrors.projectCompanyId,
+  ].filter((message): message is string => Boolean(message?.trim()));
+
+  for (const message of candidateMessages) {
+    const normalized = message.toLowerCase();
+    const isConflictMessage =
+      normalized.includes('responsavel') &&
+      normalized.includes('rubrica') &&
+      (normalized.includes('ja recebe') || normalized.includes('nao pode receber'));
+
+    if (isConflictMessage) {
+      return message;
+    }
+  }
+
+  return null;
+};
+
+const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
 
 const isPersistedId = (id: string) => /^\d+$/.test(id);
 const toPersistedId = (id: string) => Number.parseInt(id, 10);
@@ -176,7 +332,56 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   meses: 1,
   valorUnitario: 0,
   metaIds: [],
+  webs: '',
+  serviceOrder: '',
+  protocol: '',
+  projectPeopleId: undefined,
+  projectCompanyId: undefined,
+  beneficiaryType: undefined,
+  beneficiaryReferenceId: undefined,
+  unlinkedItem: false,
 });
+
+const createEmptyCompanyForm = (): CompanyFormData => ({
+  razaoSocial: '',
+  nomeFantasia: '',
+  cnpj: '',
+  email: '',
+  telefone: '',
+  endereco: '',
+  cidade: '',
+  uf: '',
+  status: RUBRICA_DEFAULT_COMPANY_STATUS,
+});
+
+const buildDraftItemTotal = (draft: Partial<ItemRubrica>) => {
+  const quantidade = toPositiveInt(draft.quantidade, 1);
+  const meses = toPositiveInt(draft.meses, 1);
+  const valorUnitario = toMoneyValue(draft.valorUnitario);
+  return Number((quantidade * meses * valorUnitario).toFixed(2));
+};
+
+
+const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
+  if (!draft) return false;
+
+  const selectedMetaIds = (draft.metaIds ?? []).filter(Boolean);
+  return (
+    (draft.descricao ?? '').trim().length > 0 ||
+    (draft.webs ?? '').trim().length > 0 ||
+    (draft.serviceOrder ?? '').trim().length > 0 ||
+    (draft.protocol ?? '').trim().length > 0 ||
+    toPositiveInt(draft.quantidade, 1) !== 1 ||
+    toPositiveInt(draft.meses, 1) !== 1 ||
+    toMoneyValue(draft.valorUnitario) > 0 ||
+    selectedMetaIds.length > 0 ||
+    Boolean(draft.projectPeopleId) ||
+    Boolean(draft.projectCompanyId) ||
+    Boolean(draft.beneficiaryType) ||
+    Boolean(draft.beneficiaryReferenceId) ||
+    Boolean(draft.unlinkedItem)
+  );
+};
 
 const calculateDraftTotal = (draft: Partial<ItemRubrica>) => {
   const quantidade = toPositiveInt(draft.quantidade, 0);
@@ -415,6 +620,26 @@ export default function RubricasPage() {
 
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [metas, setMetas] = useState<MetaOption[]>([]);
+  const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
+  const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
+  const [budgetSummary, setBudgetSummary] = useState<ProjectBudgetSummaryDTO | null>(null);
+  const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
+  const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [showCreatePersonModal, setShowCreatePersonModal] = useState(false);
+  const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
+  const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
+  const [showLinkCompanyModal, setShowLinkCompanyModal] = useState(false);
+  const [selectedPersonToLink, setSelectedPersonToLink] = useState<string | undefined>(undefined);
+  const [selectedCompanyToLink, setSelectedCompanyToLink] = useState<string | undefined>(undefined);
+  const [newPersonForm, setNewPersonForm] = useState<MembroFormData>(defaultMemberFormData);
+  const [newPersonAvatarFile, setNewPersonAvatarFile] = useState<File | null>(null);
+  const [newPersonCpfError, setNewPersonCpfError] = useState('');
+  const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
+  const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
+  const [createPersonModalError, setCreatePersonModalError] = useState<string | null>(null);
+  const [createCompanyModalError, setCreateCompanyModalError] = useState<string | null>(null);
+  const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
+  const [linkCompanyModalError, setLinkCompanyModalError] = useState<string | null>(null);
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -441,11 +666,21 @@ export default function RubricasPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [criticalConflictMessage, setCriticalConflictMessage] = useState<string | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
     setTimeout(() => setSavedMessage(null), 2500);
+  };
+
+  const captureItemFieldErrors = (error: unknown) => {
+    if (error instanceof HttpError && error.fieldErrors) {
+      setItemFieldErrors(error.fieldErrors);
+      return;
+    }
+    setItemFieldErrors({});
   };
 
   useEffect(() => {
@@ -492,6 +727,48 @@ export default function RubricasPage() {
         : null,
     [editingItem, rubricas]
   );
+  const originalEditingItem = useMemo(
+    () =>
+      editingItem
+        ? currentEditRubrica?.itens.find((item) => item.id === editingItem) ?? null
+        : null,
+    [currentEditRubrica, editingItem]
+  );
+  const isCreateItemDirty = isItemDraftDirty(newItem);
+  const isEditItemDirty = useMemo(() => {
+    if (!editForm || !originalEditingItem) return false;
+
+    const currentMetaIds =
+      editForm.metaIds && editForm.metaIds.length > 0
+        ? getOrderedSelectedMetaIds(editForm.metaIds, metas)
+        : editForm.metaId
+          ? getOrderedSelectedMetaIds([editForm.metaId], metas)
+          : [];
+    const originalMetaIds =
+      originalEditingItem.metaIds && originalEditingItem.metaIds.length > 0
+        ? getOrderedSelectedMetaIds(originalEditingItem.metaIds, metas)
+        : originalEditingItem.metaId
+          ? getOrderedSelectedMetaIds([originalEditingItem.metaId], metas)
+          : [];
+
+    return (
+      (editForm.descricao ?? '').trim() !== (originalEditingItem.descricao ?? '').trim() ||
+      (editForm.webs ?? '').trim() !== (originalEditingItem.webs ?? '').trim() ||
+      (editForm.serviceOrder ?? '').trim() !== (originalEditingItem.serviceOrder ?? '').trim() ||
+      (editForm.protocol ?? '').trim() !== (originalEditingItem.protocol ?? '').trim() ||
+      toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
+      toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
+      toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
+      Boolean(editForm.unlinkedItem) !==
+        Boolean(!originalEditingItem.beneficiaryType || !originalEditingItem.beneficiaryReferenceId) ||
+      (editForm.beneficiaryType ?? '') !== (originalEditingItem.beneficiaryType ?? '') ||
+      (editForm.beneficiaryReferenceId ?? '') !==
+        (originalEditingItem.beneficiaryReferenceId ?? '') ||
+      (editForm.projectPeopleId ?? '') !== (originalEditingItem.projectPeopleId ?? '') ||
+      (editForm.projectCompanyId ?? '') !== (originalEditingItem.projectCompanyId ?? '') ||
+      JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
+    );
+  }, [editForm, metas, originalEditingItem]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -500,6 +777,10 @@ export default function RubricasPage() {
     if (!Number.isFinite(projectId)) {
       setRubricas([]);
       setMetas([]);
+      setProjectPeopleOptions([]);
+      setProjectCompanyOptions([]);
+      setAvailablePeople([]);
+      setAvailableCompanies([]);
       setRemanejamentos([]);
       setLoadError('ID do contrato inválido para carregar rubricas.');
       setIsLoading(false);
@@ -507,14 +788,30 @@ export default function RubricasPage() {
     }
 
     try {
-      const [allCategories, allItems, allGoals, allTransfers] = await Promise.all([
+      const [
+        allCategories,
+        allItems,
+        allGoals,
+        allTransfers,
+        allProjectPeople,
+        allProjectCompanies,
+        allPeople,
+        allCompanies,
+        summary,
+      ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
         fetchAllPages((query) => listGoals({ ...query, projectId })).catch(
           () => [] as GoalResponseDTO[]
         ),
         fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
+        fetchAllPages((query) => listProjectPeopleDetailed({ ...query, projectId })),
+        fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })),
+        fetchAllPages((query) => listPeople(query)),
+        fetchAllPages((query) => listCompanies(query)),
+        getProjectBudgetSummary(projectId),
       ]);
+      setBudgetSummary(summary);
 
       const projectGoals = (allGoals as GoalResponseDTO[])
         .filter((goal) => goal.projectId === projectId)
@@ -526,6 +823,40 @@ export default function RubricasPage() {
           numero: goal.numero,
           titulo: goal.titulo,
         }))
+      );
+
+      const projectPeople = allProjectPeople
+        .filter((item) => item.projectId === projectId && item.isActive)
+        .map((item) => ({
+          id: String(item.id),
+          label: item.personFullName?.trim() || `Pessoa #${item.personId}`,
+          baseAmount:
+            typeof item.baseAmount === 'number' && Number.isFinite(item.baseAmount)
+              ? item.baseAmount
+              : null,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+      setProjectPeopleOptions(projectPeople);
+
+      const projectCompanies = allProjectCompanies
+        .filter((item) => item.projectId === projectId && item.isActive)
+        .map(buildProjectCompanyOption)
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+      setProjectCompanyOptions(projectCompanies);
+
+      const projectPeopleIds = new Set(
+        allProjectPeople.filter((item) => item.projectId === projectId).map((item) => item.personId)
+      );
+      const projectCompanyIds = new Set(
+        allProjectCompanies
+          .filter((item) => item.projectId === projectId)
+          .map((item) => item.companyId)
+      );
+      setAvailablePeople(
+        allPeople.filter((person) => person.isActive && !projectPeopleIds.has(person.id))
+      );
+      setAvailableCompanies(
+        allCompanies.filter((company) => company.isActive && !projectCompanyIds.has(company.id))
       );
 
       const categories = allCategories
@@ -568,6 +899,17 @@ export default function RubricasPage() {
           metaId: selectedMetaIds[0],
           metaIds: selectedMetaIds,
           notes: parsedNotes.cleanedNotes,
+          webs: item.webs ?? undefined,
+          serviceOrder: item.serviceOrder ?? undefined,
+          protocol: item.protocol ?? undefined,
+          projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
+          projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
+          beneficiaryType: item.beneficiaryType ?? undefined,
+          beneficiaryReferenceId: item.projectPeopleId
+            ? String(item.projectPeopleId)
+            : item.projectCompanyId
+              ? String(item.projectCompanyId)
+              : undefined,
           subitens: [],
         };
 
@@ -621,7 +963,12 @@ export default function RubricasPage() {
       setLoadError(toErrorMessage(error, 'Não foi possível carregar as rubricas.'));
       setRubricas([]);
       setMetas([]);
+      setProjectPeopleOptions([]);
+      setProjectCompanyOptions([]);
+      setAvailablePeople([]);
+      setAvailableCompanies([]);
       setRemanejamentos([]);
+      setBudgetSummary(null);
     } finally {
       setIsLoading(false);
     }
@@ -695,6 +1042,49 @@ export default function RubricasPage() {
     [metas, resolveMetaIdsForDraft]
   );
 
+  const resolveBeneficiaryLabel = useCallback(
+    (item: ItemRubrica) => {
+      if (!item.beneficiaryType || !item.beneficiaryReferenceId) {
+        return 'Sem vínculo';
+      }
+
+      if (item.beneficiaryType === 'person') {
+        const personLabel =
+          projectPeopleOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
+          `Pessoa #${item.beneficiaryReferenceId}`;
+        return `Pessoa: ${personLabel}`;
+      }
+
+      const company = projectCompanyOptions.find(
+        (option) => option.id === item.beneficiaryReferenceId
+      );
+      if (!company) {
+        return `Empresa: #${item.beneficiaryReferenceId}`;
+      }
+
+      const cnpj = formatCnpjCompact(company.cnpj);
+      return `Empresa: ${company.name}${cnpj ? ` (${cnpj})` : ''}`;
+    },
+    [projectCompanyOptions, projectPeopleOptions]
+  );
+
+  const resolveProjectCompanyLabel = useCallback(
+    (item: ItemRubrica) => {
+      if (!item.projectCompanyId) {
+        return 'Não definida';
+      }
+
+      const company = projectCompanyOptions.find((option) => option.id === item.projectCompanyId);
+      if (!company) {
+        return `Empresa #${item.projectCompanyId}`;
+      }
+
+      const cnpj = formatCnpjCompact(company.cnpj);
+      return `${company.name}${cnpj ? ` (${cnpj})` : ''}`;
+    },
+    [projectCompanyOptions]
+  );
+
   const toggleExpand = (rubricaId: string) => {
     setRubricas((current) =>
       current.map((rubrica) =>
@@ -707,6 +1097,7 @@ export default function RubricasPage() {
     if (!ensureCanManageChildren()) return;
 
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
     setEditingItem(null);
     setEditForm(null);
@@ -723,6 +1114,298 @@ export default function RubricasPage() {
   const closeAddItemModal = () => {
     setAddingToRubrica(null);
     setNewItem(createEmptyItemDraft());
+    setItemFieldErrors({});
+  };
+
+  const appendProjectPersonOption = (option: ProjectPersonOption) => {
+    setProjectPeopleOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
+
+  const appendProjectCompanyOption = (option: ProjectCompanyOption) => {
+    setProjectCompanyOptions((current) => {
+      const next = current.filter((item) => item.id !== option.id);
+      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    });
+  };
+
+  const applyBeneficiarySelection = (type: BeneficiaryType, referenceId: string) => {
+    setNewItem((current) => ({
+      ...current,
+      projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
+      projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
+      beneficiaryType: type,
+      beneficiaryReferenceId: referenceId,
+      unlinkedItem: false,
+    }));
+  };
+
+  const handleLinkExistingPerson = async () => {
+    if (!selectedPersonToLink) return;
+    try {
+      setIsSubmitting(true);
+      setLinkPersonModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const draftItemTotal = buildDraftItemTotal(newItem);
+      const selectedPerson =
+        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
+      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
+      const linked = await createProjectPeople({
+        projectId,
+        personId: Number(selectedPersonToLink),
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+        createdBy: actorUserId,
+      });
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: personLabel,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
+      setAvailablePeople((current) =>
+        current.filter((person) => String(person.id) !== selectedPersonToLink)
+      );
+      setShowLinkPersonModal(false);
+      setSelectedPersonToLink(undefined);
+      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLinkExistingCompany = async () => {
+    if (!selectedCompanyToLink) return;
+    try {
+      setIsSubmitting(true);
+      setLinkCompanyModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
+      const actorUserId = await requireCurrentUserId();
+      const selectedCompany =
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
+      const companyName =
+        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: Number(selectedCompanyToLink),
+        totalValue: draftItemTotal > 0 ? draftItemTotal : undefined,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        createdBy: actorUserId,
+      });
+
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
+          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
+          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: selectedCompany?.cnpj ?? null,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
+        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
+      setAvailableCompanies((current) =>
+        current.filter((company) => String(company.id) !== selectedCompanyToLink)
+      );
+      setShowLinkCompanyModal(false);
+      setSelectedCompanyToLink(undefined);
+      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateAndLinkPerson = async () => {
+    if (!hasRequiredMemberFields(newPersonForm)) {
+      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa antes de salvar.');
+      return;
+    }
+
+    if (newPersonForm.cpf.trim()) {
+      const validation = validateCPFComplete(newPersonForm.cpf);
+      if (!validation.isValid) {
+        setNewPersonCpfError(validation.errorMessage);
+        return;
+      }
+    }
+
+    if (newPersonForm.telefone.trim()) {
+      const validation = validatePhoneComplete(newPersonForm.telefone);
+      if (!validation.isValid) {
+        setNewPersonPhoneError(validation.errorMessage);
+        return;
+      }
+    }
+
+    try {
+      setIsSubmitting(true);
+      setCreatePersonModalError(null);
+      const draftItemTotal = buildDraftItemTotal(newItem);
+      const actorUserId = await requireCurrentUserId();
+      const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
+      const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
+      const peoplePayload = {
+        fullName: newPersonForm.nome.trim(),
+        cpf: cpf || undefined,
+        email: toOptional(newPersonForm.email),
+        phone: toOptional(phone),
+        birthDate: toOptional(newPersonForm.birthDate),
+        address: toOptional(newPersonForm.endereco),
+        city: newPersonForm.city.trim(),
+        state: newPersonForm.state.trim().toUpperCase(),
+        notes: toOptional(newPersonForm.notes),
+      };
+
+      const person = await createPeople(peoplePayload);
+      const linked = await createProjectPeople({
+        projectId,
+        personId: person.id,
+        role: papelToRole(newPersonForm.papel),
+        workloadHours: newPersonForm.cargaHoraria,
+        institutionalLink: toOptional(newPersonForm.vinculo),
+        contractType: newPersonForm.contractType || undefined,
+        startDate: toOptional(newPersonForm.startDate),
+        endDate: toOptional(newPersonForm.endDate),
+        status: newPersonForm.status || undefined,
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+        notes: toOptional(newPersonForm.notes),
+        createdBy: actorUserId,
+      });
+
+      if (newPersonAvatarFile) {
+        const uploaded = await uploadDocument({
+          file: newPersonAvatarFile,
+          ownerType: 'PEOPLE',
+          ownerId: person.id,
+          category: 'FOTO_PERFIL',
+        });
+
+        await updatePeople(person.id, {
+          ...peoplePayload,
+          avatarUrl: uploaded.id,
+        });
+      }
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: newPersonForm.nome.trim(),
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+      });
+      applyBeneficiarySelection('person', String(linked.id));
+      setShowCreatePersonModal(false);
+      setNewPersonForm(defaultMemberFormData());
+      setNewPersonAvatarFile(null);
+      setNewPersonCpfError('');
+      setNewPersonPhoneError('');
+      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setCreatePersonModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateAndLinkCompany = async () => {
+    if (!hasRequiredCompanyFields(newCompanyForm)) {
+      setCreateCompanyModalError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
+      return;
+    }
+    const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
+    if (cnpjDigits.length !== 14) {
+      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
+      return;
+    }
+    const draftItemTotal = buildDraftItemTotal(newItem);
+    const totalValueForProjectCompany =
+      typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
+        ? newCompanyForm.valorContrato
+        : draftItemTotal > 0
+          ? draftItemTotal
+          : undefined;
+    try {
+      setIsSubmitting(true);
+      setCreateCompanyModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const company = await createCompany({
+        name: newCompanyForm.razaoSocial!.trim(),
+        tradeName: newCompanyForm.nomeFantasia!.trim(),
+        cnpj: cnpjDigits,
+        email: newCompanyForm.email!.trim(),
+        phone: onlyDigits(newCompanyForm.telefone),
+        address: newCompanyForm.endereco!.trim(),
+        city: newCompanyForm.cidade!.trim(),
+        state: newCompanyForm.uf!.trim().toUpperCase(),
+        responsiblePersonId: newCompanyForm.responsavelPersonId
+          ? Number(newCompanyForm.responsavelPersonId)
+          : undefined,
+        createdBy: actorUserId,
+      });
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: company.id,
+        serviceType: toOptional(newCompanyForm.tipoServico),
+        totalValue: totalValueForProjectCompany,
+        startDate: toOptional(newCompanyForm.dataInicio),
+        endDate: toOptional(newCompanyForm.dataFim),
+        notes: toOptional(newCompanyForm.observacao),
+        isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
+        status: newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS,
+        createdBy: actorUserId,
+      });
+      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
+      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
+      const formattedCnpj = formatCnpjCompact(cnpjDigits);
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
+          formatContractingStatus(companyStatus),
+          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: formattedCnpj,
+        status: companyStatus,
+        availableBalance: totalValueForProjectCompany ?? null,
+        totalValue: totalValueForProjectCompany ?? null,
+      });
+      applyBeneficiarySelection('company', String(linked.id));
+      setShowCreateCompanyModal(false);
+      setNewCompanyForm(createEmptyCompanyForm());
+      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setCreateCompanyModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddItem = async (rubricaId: string) => {
@@ -737,15 +1420,28 @@ export default function RubricasPage() {
       setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
+    if (!newItem.unlinkedItem && newItem.beneficiaryType && !newItem.beneficiaryReferenceId) {
+      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
+      return;
+    }
 
     const quantidade = toPositiveInt(newItem.quantidade, 1);
     const meses = toPositiveInt(newItem.meses, 1);
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(newItem);
+    const selectedProjectCompanyId =
+      !newItem.unlinkedItem && newItem.beneficiaryType === 'company'
+        ? (newItem.projectCompanyId ?? newItem.beneficiaryReferenceId)
+        : undefined;
+    const selectedCompany =
+      selectedProjectCompanyId
+        ? projectCompanyOptions.find((option) => option.id === selectedProjectCompanyId)
+        : null;
 
     setIsSubmitting(true);
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
 
     try {
@@ -759,11 +1455,64 @@ export default function RubricasPage() {
         plannedAmount: valorTotal,
         executedAmount: 0,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
+        projectPeopleId:
+          !newItem.unlinkedItem && newItem.projectPeopleId
+            ? toPersistedId(newItem.projectPeopleId)
+            : null,
+        projectCompanyId:
+          !newItem.unlinkedItem && newItem.projectCompanyId
+            ? toPersistedId(newItem.projectCompanyId)
+            : null,
         notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
+        webs: toOptional(newItem.webs),
+        serviceOrder: toOptional(newItem.serviceOrder),
+        protocol: toOptional(newItem.protocol),
         createdBy: actorUserId,
       };
 
-      await createBudgetItem(basePayload);
+      const selectedProjectPeopleId =
+        !newItem.unlinkedItem && newItem.beneficiaryType === 'person'
+          ? (newItem.projectPeopleId ?? newItem.beneficiaryReferenceId)
+          : undefined;
+      const selectedPerson =
+        selectedProjectPeopleId
+          ? projectPeopleOptions.find((option) => option.id === selectedProjectPeopleId)
+          : null;
+
+      if (selectedPerson && selectedProjectPeopleId && isPersistedId(selectedProjectPeopleId)) {
+        const currentBaseAmount =
+          typeof selectedPerson.baseAmount === 'number' ? selectedPerson.baseAmount : 0;
+        const nextBaseAmount = Number((Math.max(0, currentBaseAmount) + valorTotal).toFixed(2));
+        await updateProjectPeople(toPersistedId(selectedProjectPeopleId), {
+          baseAmount: nextBaseAmount,
+          updatedBy: actorUserId,
+        });
+      }
+
+      if (selectedProjectCompanyId && isPersistedId(selectedProjectCompanyId)) {
+        const currentTotalValue =
+          selectedCompany && typeof selectedCompany.totalValue === 'number'
+            ? selectedCompany.totalValue
+            : 0;
+        const nextTotalValue = Number((Math.max(0, currentTotalValue) + valorTotal).toFixed(2));
+        await updateProjectCompany(toPersistedId(selectedProjectCompanyId), {
+          totalValue: nextTotalValue,
+          updatedBy: actorUserId,
+        });
+      }
+
+      const createdItem = await createBudgetItem(basePayload);
+      if (
+        !newItem.unlinkedItem &&
+        newItem.beneficiaryType &&
+        newItem.beneficiaryReferenceId
+      ) {
+        await assignBudgetItemBeneficiary(createdItem.id, {
+          beneficiaryType: newItem.beneficiaryType,
+          referenceId: toPersistedId(newItem.beneficiaryReferenceId),
+          contractedAmount: valorTotal,
+        });
+      }
 
       await loadData();
       closeAddItemModal();
@@ -777,7 +1526,14 @@ export default function RubricasPage() {
         showSavedMessage('Item adicionado com sucesso.');
       }
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      captureItemFieldErrors(error);
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -786,6 +1542,7 @@ export default function RubricasPage() {
   const handleStartEdit = (item: ItemRubrica) => {
     if (!ensureCanManageChildren()) return;
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
     setEditingItem(item.id);
     setAddingToRubrica(null);
@@ -793,6 +1550,7 @@ export default function RubricasPage() {
     setEditForm({
       ...item,
       metaIds: resolveMetaIdsForDraft(item),
+      unlinkedItem: !item.beneficiaryType || !item.beneficiaryReferenceId,
     });
   };
 
@@ -812,15 +1570,27 @@ export default function RubricasPage() {
       setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
+    if (!editForm.unlinkedItem && editForm.beneficiaryType && !editForm.beneficiaryReferenceId) {
+      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
+      return;
+    }
 
     const quantidade = toPositiveInt(editForm.quantidade, 1);
     const meses = toPositiveInt(editForm.meses, 1);
     const valorUnitario = toMoneyValue(editForm.valorUnitario);
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(editForm);
+    const hadBeneficiaryBefore = Boolean(
+      originalEditingItem?.beneficiaryType && originalEditingItem?.beneficiaryReferenceId
+    );
+    const shouldBeUnlinked =
+      Boolean(editForm.unlinkedItem) ||
+      !editForm.beneficiaryType ||
+      !editForm.beneficiaryReferenceId;
 
     setIsSubmitting(true);
     setActionError(null);
+    setItemFieldErrors({});
     setSavedMessage(null);
 
     try {
@@ -833,9 +1603,32 @@ export default function RubricasPage() {
         unitCost: valorUnitario,
         plannedAmount: valorTotal,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
+        projectPeopleId:
+          !editForm.unlinkedItem && editForm.projectPeopleId
+            ? toPersistedId(editForm.projectPeopleId)
+            : null,
+        projectCompanyId:
+          !editForm.unlinkedItem && editForm.projectCompanyId
+            ? toPersistedId(editForm.projectCompanyId)
+            : null,
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
+        webs: toOptional(editForm.webs),
+        serviceOrder: toOptional(editForm.serviceOrder),
+        protocol: toOptional(editForm.protocol),
         updatedBy: actorUserId,
       });
+
+      if (shouldBeUnlinked) {
+        if (hadBeneficiaryBefore) {
+          await removeBudgetItemBeneficiary(toPersistedId(editingItem));
+        }
+      } else if (editForm.beneficiaryType && editForm.beneficiaryReferenceId) {
+        await assignBudgetItemBeneficiary(toPersistedId(editingItem), {
+          beneficiaryType: editForm.beneficiaryType,
+          referenceId: toPersistedId(editForm.beneficiaryReferenceId),
+          contractedAmount: valorTotal,
+        });
+      }
 
       await loadData();
       setEditingItem(null);
@@ -850,7 +1643,14 @@ export default function RubricasPage() {
         showSavedMessage('Item atualizado com sucesso.');
       }
     } catch (error) {
-      setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      captureItemFieldErrors(error);
+      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
+      if (conflictMessage) {
+        setCriticalConflictMessage(conflictMessage);
+        setActionError(null);
+      } else {
+        setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -859,6 +1659,7 @@ export default function RubricasPage() {
   const handleCancelEdit = () => {
     setEditingItem(null);
     setEditForm(null);
+    setItemFieldErrors({});
   };
 
   const openDeleteItemModal = (rubricaId: string, item: ItemRubrica) => {
@@ -1010,7 +1811,7 @@ export default function RubricasPage() {
     if (!ensureCanManageChildren()) return;
     if (rubricaPendingDeletion?.id === rubricaId) {
       if (!isPersistedId(rubricaId)) {
-        setActionError('Rubrica invÃ¡lida para remoÃ§Ã£o.');
+        setActionError('Rubrica inválida para remoção.');
         return;
       }
 
@@ -1024,7 +1825,7 @@ export default function RubricasPage() {
         closeDeleteRubricaModal();
         showSavedMessage('Rubrica removida com sucesso.');
       } catch (error) {
-        setActionError(toErrorMessage(error, 'NÃ£o foi possÃ­vel remover a rubrica.'));
+        setActionError(toErrorMessage(error, 'Não foi possível remover a rubrica.'));
       } finally {
         setIsSubmitting(false);
       }
@@ -1237,13 +2038,70 @@ export default function RubricasPage() {
     });
   }, [remanejamentos, rubricas]);
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <ContractRubricasLoadingSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {budgetSummary && (
+        <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-5 shadow-sm md:p-6">
+          <div className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryMetricCard
+              label="Contrato"
+              value={formatCurrency(budgetSummary.contractValue)}
+              description="Base de comparação do planejamento"
+              tooltip="Valor total aprovado para este contrato."
+              tone="slate"
+            />
+            <SummaryMetricCard
+              label="Planejado"
+              value={formatCurrency(budgetSummary.totalBudgetItems)}
+              description="Compromisso orçamentário atual"
+              tooltip="Soma de todos os itens planejados nas rubricas deste projeto."
+              tone="emerald"
+            />
+            <SummaryMetricCard
+              label={budgetSummary.isExceeded ? 'Excedente' : 'Saldo'}
+              value={formatCurrency(
+                budgetSummary.isExceeded ? budgetSummary.exceededAmount : budgetSummary.remainingAmount
+              )}
+              description={
+                budgetSummary.isExceeded
+                  ? 'Planejamento acima do limite do contrato'
+                  : 'Ainda pode ser distribuído em rubricas'
+              }
+              tooltip={
+                budgetSummary.isExceeded
+                  ? 'Diferença que excede o valor total do contrato.'
+                  : 'Diferença entre o valor do contrato e o total planejado em rubricas.'
+              }
+              tone={budgetSummary.isExceeded ? 'danger' : 'green'}
+            />
+            <SummaryMetricCard
+              label="Planejamento"
+              value={`${budgetSummary.plannedPercentage.toFixed(2)}%`}
+              description="Percentual do valor do contrato já distribuído nas rubricas"
+              tooltip="Mostra quanto do contrato já foi planejado nas rubricas. Exemplo: 35% significa que 35% do valor total já foi distribuído."
+              tone={budgetSummary.isExceeded ? 'danger' : 'blue'}
+            />
+          </div>
+        </section>
+      )}
+      {budgetSummary?.isExceeded && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          As rubricas excedem o valor do contrato em {formatCurrency(budgetSummary.exceededAmount)}.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Rubricas Orçamentárias</h3>
           <p className="text-sm text-gray-500">
-            Gerencie os itens de despesa organizados por categoria orçamentária
+            Cadastre e ajuste os itens de despesa por rubrica, com controle de metas e beneficiários.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -1474,10 +2332,25 @@ export default function RubricasPage() {
                   </div>
                 ) : (
                   <ResizableTable
-                    columnCount={10}
-                    defaultWidths={[250, 80, 80, 150, 150, 120, 120, 150, 280, 130]}
-                    minColumnWidth={60}
-                    className="text-sm"
+                    columnCount={14}
+                    defaultWidths={[
+                      { minWidth: 180, defaultWidth: 220, maxWidth: 420 }, // Descrição
+                      { minWidth: 70, defaultWidth: 80, maxWidth: 110 }, // Qtd
+                      { minWidth: 70, defaultWidth: 80, maxWidth: 110 }, // Meses
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 220 }, // Valor Unit.
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 220 }, // Valor Total
+                      { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Deb.)
+                      { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Cred.)
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 230 }, // Valor Final
+                      { minWidth: 200, defaultWidth: 230, maxWidth: 320 }, // Responsável
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 240 }, // WEBS
+                      { minWidth: 140, defaultWidth: 160, maxWidth: 280 }, // Ordem de Serviço
+                      { minWidth: 120, defaultWidth: 140, maxWidth: 260 }, // Protocolo
+                      { minWidth: 220, defaultWidth: 280, maxWidth: 380 }, // Metas
+                      { minWidth: 120, defaultWidth: 130, maxWidth: 170 }, // Ações
+                    ]}
+                    minColumnWidth={70}
+                    className="text-sm min-w-max"
                   >
                     <thead>
                       <tr className="border-b border-gray-200">
@@ -1489,8 +2362,12 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Responsável do item</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">WEBS</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Ordem de Serviço</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600">Protocolo</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Metas</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Ações</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1535,6 +2412,32 @@ export default function RubricasPage() {
                             <span className="font-semibold text-blue-600">
                               {formatCurrency(calcularValorFinalItem(item))}
                             </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-700">
+                            <span
+                              className={
+                                item.beneficiaryType ? 'text-gray-700' : 'text-gray-400'
+                              }
+                            >
+                              {resolveBeneficiaryLabel(item)}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.webs?.trim() ? item.webs : <span className="text-gray-400">-</span>}
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.serviceOrder?.trim() ? (
+                              item.serviceOrder
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-gray-700 text-center">
+                            {item.protocol?.trim() ? (
+                              item.protocol
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="py-2 px-2 text-gray-700">
                             {(() => {
@@ -1716,6 +2619,7 @@ export default function RubricasPage() {
           }
         }}
         closeDisabled={isSubmitting}
+        isDirty={isCreateItemDirty}
       >
         {currentCreateRubrica && (
           <form
@@ -1752,6 +2656,57 @@ export default function RubricasPage() {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   disabled={isSubmitting}
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">WEBS</label>
+                <input
+                  type="text"
+                  value={newItem.webs ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      webs: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Ordem de Serviço</label>
+                <input
+                  type="text"
+                  value={newItem.serviceOrder ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      serviceOrder: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Protocolo</label>
+                <input
+                  type="text"
+                  value={newItem.protocol ?? ''}
+                  onChange={(event) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      protocol: event.target.value,
+                    }))
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -1813,6 +2768,157 @@ export default function RubricasPage() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                <Checkbox
+                  checked={Boolean(newItem.unlinkedItem)}
+                  onCheckedChange={(checked) =>
+                    setNewItem((current) => ({
+                      ...current,
+                      unlinkedItem: Boolean(checked),
+                      projectPeopleId: checked ? undefined : current.projectPeopleId,
+                      projectCompanyId: checked ? undefined : current.projectCompanyId,
+                      beneficiaryType: checked ? undefined : current.beneficiaryType,
+                      beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                />
+                Item de rúbrica sem vínculo
+              </label>
+
+              <div
+                className={`space-y-3 transition-opacity ${
+                  newItem.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
+                }`}
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
+                  <Dropdown
+                    options={[
+                      { value: 'person', label: 'Pessoa do projeto' },
+                      { value: 'company', label: 'Empresa do projeto' },
+                    ]}
+                    value={newItem.beneficiaryType}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setNewItem((current) => ({
+                        ...current,
+                        beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
+                        beneficiaryReferenceId: undefined,
+                        projectPeopleId: undefined,
+                        projectCompanyId: undefined,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Beneficiário no projeto
+                  </label>
+                  <Dropdown
+                    searchable
+                    options={(newItem.beneficiaryType === 'person'
+                      ? projectPeopleOptions
+                      : newItem.beneficiaryType === 'company'
+                        ? projectCompanyOptions
+                        : []
+                    ).map((option) => ({ value: option.id, label: option.label }))}
+                    value={newItem.beneficiaryReferenceId}
+                    placeholder={
+                      !newItem.beneficiaryType
+                        ? 'Selecione primeiro o tipo de vínculo'
+                        : newItem.beneficiaryType === 'company'
+                          ? 'Selecione a empresa do projeto'
+                          : 'Selecione a pessoa do projeto'
+                    }
+                    onChange={(value) =>
+                      setNewItem((current) => ({
+                        ...current,
+                        beneficiaryReferenceId: value ?? undefined,
+                        projectPeopleId:
+                          current.beneficiaryType === 'person' ? value ?? undefined : current.projectPeopleId,
+                        projectCompanyId:
+                          current.beneficiaryType === 'company' ? value ?? undefined : current.projectCompanyId,
+                      }))
+                    }
+                  disabled={isSubmitting || !newItem.beneficiaryType}
+                />
+                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-red-600">
+                      {itemFieldErrors.projectPeopleId}
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectCompanyId ? (
+                    <p className="mt-1 text-xs text-red-600">
+                      {itemFieldErrors.projectCompanyId}
+                    </p>
+                  ) : null}
+                </div>
+
+                {newItem.beneficiaryType === 'person' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkPersonModalError(null);
+                        setShowLinkPersonModal(true);
+                      }}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
+                    >
+                      Vincular pessoa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewPersonForm(defaultMemberFormData());
+                        setNewPersonAvatarFile(null);
+                        setNewPersonCpfError('');
+                        setNewPersonPhoneError('');
+                        setCreatePersonModalError(null);
+                        setShowCreatePersonModal(true);
+                      }}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Cadastrar nova pessoa
+                    </button>
+                  </div>
+                ) : null}
+
+                {newItem.beneficiaryType === 'company' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkCompanyModalError(null);
+                        setShowLinkCompanyModal(true);
+                      }}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
+                    >
+                      Vincular empresa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateCompanyModalError(null);
+                        setShowCreateCompanyModal(true);
+                      }}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Cadastrar nova empresa
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Valor total calculado
@@ -1844,7 +2950,11 @@ export default function RubricasPage() {
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
               <button
                 type="button"
-                onClick={closeAddItemModal}
+                onClick={() => {
+                  if (!isSubmitting) {
+                    closeAddItemModal();
+                  }
+                }}
                 disabled={isSubmitting}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1852,7 +2962,13 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !newItem.descricao?.trim()}
+                disabled={
+                  isSubmitting ||
+                  !newItem.descricao?.trim() ||
+                  (!newItem.unlinkedItem &&
+                    Boolean(newItem.beneficiaryType) &&
+                    !newItem.beneficiaryReferenceId)
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
@@ -1879,6 +2995,7 @@ export default function RubricasPage() {
           }
         }}
         closeDisabled={isSubmitting}
+        isDirty={isEditItemDirty}
       >
         {editForm && currentEditRubrica && (
           <form
@@ -1919,6 +3036,69 @@ export default function RubricasPage() {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   disabled={isSubmitting}
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">WEBS</label>
+                <input
+                  type="text"
+                  value={editForm.webs ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            webs: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Ordem de Serviço</label>
+                <input
+                  type="text"
+                  value={editForm.serviceOrder ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            serviceOrder: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Protocolo</label>
+                <input
+                  type="text"
+                  value={editForm.protocol ?? ''}
+                  onChange={(event) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            protocol: event.target.value,
+                          }
+                        : current
+                    )
+                  }
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -1992,6 +3172,115 @@ export default function RubricasPage() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                <Checkbox
+                  checked={Boolean(editForm.unlinkedItem)}
+                  onCheckedChange={(checked) =>
+                    setEditForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            unlinkedItem: Boolean(checked),
+                            projectPeopleId: checked ? undefined : current.projectPeopleId,
+                            projectCompanyId: checked ? undefined : current.projectCompanyId,
+                            beneficiaryType: checked ? undefined : current.beneficiaryType,
+                            beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
+                          }
+                        : current
+                    )
+                  }
+                  disabled={isSubmitting}
+                />
+                Item de rúbrica sem vínculo
+              </label>
+
+              <div
+                className={`space-y-3 transition-opacity ${
+                  editForm.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
+                }`}
+              >
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
+                  <Dropdown
+                    options={[
+                      { value: 'person', label: 'Pessoa do projeto' },
+                      { value: 'company', label: 'Empresa do projeto' },
+                    ]}
+                    value={editForm.beneficiaryType}
+                    placeholder="Selecione"
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
+                              beneficiaryReferenceId: undefined,
+                              projectPeopleId: undefined,
+                              projectCompanyId: undefined,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Beneficiário no projeto
+                  </label>
+                  <Dropdown
+                    searchable
+                    options={(editForm.beneficiaryType === 'person'
+                      ? projectPeopleOptions
+                      : editForm.beneficiaryType === 'company'
+                        ? projectCompanyOptions
+                        : []
+                    ).map((option) => ({ value: option.id, label: option.label }))}
+                    value={editForm.beneficiaryReferenceId}
+                    placeholder={
+                      !editForm.beneficiaryType
+                        ? 'Selecione primeiro o tipo de vínculo'
+                        : editForm.beneficiaryType === 'company'
+                          ? 'Selecione a empresa do projeto'
+                          : 'Selecione a pessoa do projeto'
+                    }
+                    onChange={(value) =>
+                      setEditForm((current) =>
+                        current
+                          ? {
+                              ...current,
+                              beneficiaryReferenceId: value ?? undefined,
+                              projectPeopleId:
+                                current.beneficiaryType === 'person'
+                                  ? value ?? undefined
+                                  : current.projectPeopleId,
+                              projectCompanyId:
+                                current.beneficiaryType === 'company'
+                                  ? value ?? undefined
+                                  : current.projectCompanyId,
+                            }
+                          : current
+                      )
+                    }
+                    disabled={isSubmitting || !editForm.beneficiaryType}
+                  />
+                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                    </p>
+                  ) : null}
+                  {itemFieldErrors.projectPeopleId ? (
+                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectPeopleId}</p>
+                  ) : null}
+                  {itemFieldErrors.projectCompanyId ? (
+                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Valor total calculado
@@ -2035,7 +3324,13 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !editForm.descricao?.trim()}
+                disabled={
+                  isSubmitting ||
+                  !editForm.descricao?.trim() ||
+                  (!editForm.unlinkedItem &&
+                    Boolean(editForm.beneficiaryType) &&
+                    !editForm.beneficiaryReferenceId)
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
@@ -2049,7 +3344,7 @@ export default function RubricasPage() {
       <AppModalShell
         isOpen={Boolean(rubricaPendingDeletion)}
         title="Excluir rubrica"
-        description="Confirme a exclusÃ£o da rubrica antes de continuar."
+        description="Confirme a exclusão da rubrica antes de continuar."
         icon={<Trash2 className="h-5 w-5" />}
         tone="danger"
         onClose={() => {
@@ -2067,7 +3362,7 @@ export default function RubricasPage() {
                 Tem certeza de que deseja excluir esta rubrica?
               </p>
               <p className="mt-1 text-sm text-red-700">
-                Esta aÃ§Ã£o remove a rubrica e todos os itens vinculados.
+                Esta ação remove a rubrica e todos os itens vinculados.
               </p>
             </div>
 
@@ -2162,6 +3457,139 @@ export default function RubricasPage() {
         )}
       </AppModalShell>
 
+      <AppModalShell
+        isOpen={showLinkPersonModal}
+        title="Vincular pessoa existente"
+        onClose={() => {
+          setShowLinkPersonModal(false);
+          setLinkPersonModalError(null);
+        }}
+      >
+        <div className="space-y-4">
+          {linkPersonModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkPersonModalError}
+            </div>
+          ) : null}
+          <Dropdown
+            searchable
+            options={availablePeople.map((person) => ({
+              value: String(person.id),
+              label: person.fullName,
+            }))}
+            value={selectedPersonToLink}
+            placeholder="Selecione uma pessoa"
+            onChange={(value) => setSelectedPersonToLink(value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowLinkPersonModal(false);
+                setLinkPersonModalError(null);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLinkExistingPerson()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Vincular
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      <AppModalShell
+        isOpen={showLinkCompanyModal}
+        title="Vincular empresa existente"
+        onClose={() => {
+          setShowLinkCompanyModal(false);
+          setLinkCompanyModalError(null);
+        }}
+      >
+        <div className="space-y-4">
+          {linkCompanyModalError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {linkCompanyModalError}
+            </div>
+          ) : null}
+          <Dropdown
+            searchable
+            options={availableCompanies.map((company) => ({
+              value: String(company.id),
+              label: company.tradeName || company.name,
+            }))}
+            value={selectedCompanyToLink}
+            placeholder="Selecione uma empresa"
+            onChange={(value) => setSelectedCompanyToLink(value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowLinkCompanyModal(false);
+                setLinkCompanyModalError(null);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLinkExistingCompany()}
+              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+            >
+              Vincular
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+
+      {showCreatePersonModal ? (
+        <MemberFormModal
+          formData={newPersonForm}
+          setFormData={setNewPersonForm}
+          avatarFile={newPersonAvatarFile}
+          setAvatarFile={setNewPersonAvatarFile}
+          currentAvatarUrl=""
+          isSaving={isSubmitting}
+          isEditingItem={false}
+          onClose={() => {
+            setShowCreatePersonModal(false);
+            setNewPersonForm(defaultMemberFormData());
+            setNewPersonAvatarFile(null);
+            setNewPersonCpfError('');
+            setNewPersonPhoneError('');
+            setCreatePersonModalError(null);
+          }}
+          onSave={() => void handleCreateAndLinkPerson()}
+          cpfError={newPersonCpfError}
+          setCpfError={setNewPersonCpfError}
+          phoneError={newPersonPhoneError}
+          setPhoneError={setNewPersonPhoneError}
+          errorMessage={createPersonModalError}
+        />
+      ) : null}
+
+      <CompanyFormModal
+        isOpen={showCreateCompanyModal}
+        formData={newCompanyForm}
+        setFormData={setNewCompanyForm}
+        isSaving={isSubmitting}
+        isEditingItem={false}
+        onClose={() => {
+          setShowCreateCompanyModal(false);
+          setNewCompanyForm(createEmptyCompanyForm());
+          setCreateCompanyModalError(null);
+        }}
+        onSave={() => void handleCreateAndLinkCompany()}
+        errorMessage={createCompanyModalError}
+      />
+
       {canManageChildren && itemParaRemanejamento && (
         <RemanejamentoModal
           isOpen={remanejamentoModalOpen}
@@ -2185,6 +3613,141 @@ export default function RubricasPage() {
           onComeback={handleComebackRemanejamento}
         />
       )}
+
+      <AppModalShell
+        isOpen={Boolean(criticalConflictMessage)}
+        title="Conflito de vínculo financeiro"
+        description="A mesma pessoa não pode receber duas vezes no mesmo projeto."
+        icon={<AlertCircle className="h-5 w-5" />}
+        tone="danger"
+        onClose={() => setCriticalConflictMessage(null)}
+        maxWidthClassName="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800">Bloqueio de regra de negócio</p>
+            <p className="mt-1 text-sm text-red-700">{criticalConflictMessage}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            Ajuste o beneficiário deste item para continuar: selecione outra pessoa ou outra
+            empresa sem responsável já vinculado financeiramente neste projeto.
+          </div>
+          <div className="flex justify-end border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={() => setCriticalConflictMessage(null)}
+              className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#00351d]"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      </AppModalShell>
+    </div>
+  );
+}
+
+function SummaryMetricCard({
+  label,
+  value,
+  description,
+  tooltip,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string;
+  description: string;
+  tooltip: string;
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
+}) {
+  const toneStyles = {
+    emerald: {
+      surface: 'border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white',
+      accent: 'from-emerald-500 to-teal-500',
+      eyebrow: 'text-emerald-900/80',
+      value: 'text-emerald-950',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800',
+    },
+    slate: {
+      surface: 'border-slate-200 bg-gradient-to-br from-slate-100 via-white to-white',
+      accent: 'from-slate-500 to-slate-700',
+      eyebrow: 'text-slate-700',
+      value: 'text-slate-950',
+      dot: 'bg-slate-500',
+      tooltipButton:
+        'border-slate-200 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-800',
+    },
+    amber: {
+      surface: 'border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white',
+      accent: 'from-amber-400 to-orange-500',
+      eyebrow: 'text-amber-900/80',
+      value: 'text-amber-700',
+      dot: 'bg-amber-500',
+      tooltipButton:
+        'border-amber-200 bg-white/80 text-amber-700 hover:border-amber-300 hover:text-amber-800',
+    },
+    green: {
+      surface: 'border-lime-200/80 bg-gradient-to-br from-lime-50 via-white to-white',
+      accent: 'from-lime-500 to-emerald-500',
+      eyebrow: 'text-lime-900/80',
+      value: 'text-emerald-700',
+      dot: 'bg-emerald-500',
+      tooltipButton:
+        'border-lime-200 bg-white/80 text-emerald-700 hover:border-lime-300 hover:text-emerald-800',
+    },
+    blue: {
+      surface: 'border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-white',
+      accent: 'from-blue-500 to-indigo-500',
+      eyebrow: 'text-blue-900/80',
+      value: 'text-blue-700',
+      dot: 'bg-blue-500',
+      tooltipButton:
+        'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+    danger: {
+      surface: 'border-red-200/90 bg-gradient-to-br from-red-50 via-white to-rose-50/80',
+      accent: 'from-red-500 to-rose-500',
+      eyebrow: 'text-red-900/85',
+      value: 'text-red-700',
+      dot: 'bg-red-500',
+      tooltipButton:
+        'border-red-200 bg-white/85 text-red-700 hover:border-red-300 hover:text-red-800',
+    },
+  }[tone];
+
+  return (
+    <div className={`relative overflow-visible rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneStyles.surface}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${toneStyles.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${toneStyles.dot}`} />
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneStyles.eyebrow}`}>
+              {label}
+            </p>
+          </div>
+          <p className={`mt-3 text-xl font-semibold tracking-tight ${toneStyles.value}`}>{value}</p>
+          <p className="mt-2 text-sm text-slate-500">{description}</p>
+        </div>
+
+        <div className="group/tooltip relative shrink-0">
+          <button
+            type="button"
+            aria-label={`Saiba mais sobre ${label}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${toneStyles.tooltipButton}`}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-3rem)] translate-y-1 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-xl transition-all duration-150 invisible group-hover/tooltip:visible group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:visible group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100"
+          >
+            {tooltip}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
