@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -14,6 +14,8 @@ import {
   Save,
   Info,
 } from 'lucide-react';
+import { ContractPagamentosLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
+import { ExpenseReclassifyModal } from '../_components/ExpenseReclassifyModal';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
@@ -39,6 +41,7 @@ import {
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
+  reclassifyExpense,
   updateExpense,
   updateIncome,
 } from '@/src/lib/api/endpoints';
@@ -56,12 +59,14 @@ import type {
   ExpenseUpdateDTO,
   GoalResponseDTO,
   IncomeResponseDTO,
+  IncomeStatusEnum,
   PageResponseDTO,
   PeopleResponseDTO,
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
   ProjectPeopleDetailedResponseDTO,
 } from '@/src/lib/api/types';
+import { HttpError } from '@/src/lib/api/types';
 import { Dropdown } from '@/components/ui/dropdown';
 
 type ID = string;
@@ -102,6 +107,9 @@ type ItemRubrica = {
   valorBaseOrcado: number;
   remanejamentoDebito: number;
   remanejamentoCredito: number;
+  beneficiaryType?: 'person' | 'company' | null;
+  projectPeopleId?: ID;
+  projectCompanyId?: ID;
 };
 
 type Rubrica = {
@@ -159,6 +167,7 @@ type Parcela = {
   numero: number;
   valorRecebido: number;
   dataRecebimento: string;
+  status: IncomeStatusEnum;
 };
 
 type ProjectLinkedPerson = {
@@ -173,6 +182,9 @@ type ProjectLinkedCompany = {
   companyId: ID;
   name: string;
   label: string;
+  cnpj?: string | null;
+  status?: ProjectCompanyDetailedResponseDTO['status'];
+  availableBalance?: number | null;
 };
 
 type NewSubitemFormState = {
@@ -181,6 +193,13 @@ type NewSubitemFormState = {
   personId: string;
   organizationId: string;
 };
+
+type PaymentFieldErrors = Partial<{
+  projectCompanyId: string;
+  personId: string;
+  budgetItemId: string;
+  categoryId: string;
+}>;
 
 const DEFAULT_NEW_SUBITEM_FORM: NewSubitemFormState = {
   nome: '',
@@ -233,6 +252,14 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 }
 
+function formatSignedCurrency(value: number) {
+  if (value < 0) {
+    return `- ${formatCurrency(Math.abs(value))}`;
+  }
+
+  return formatCurrency(value);
+}
+
 function formatDate(dateString: string): string {
   if (!dateString) return '-';
   try {
@@ -278,6 +305,28 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return getUserErrorMessage(error, fallback);
 }
 
+function mapPaymentFieldErrors(error: unknown): PaymentFieldErrors {
+  if (!(error instanceof HttpError) || !error.fieldErrors) {
+    return {};
+  }
+
+  const next: PaymentFieldErrors = {};
+  if (error.fieldErrors.projectCompanyId) {
+    next.projectCompanyId = 'A empresa selecionada não pertence a este contrato.';
+  }
+  if (error.fieldErrors.personId) {
+    next.personId = 'A pessoa selecionada não está vinculada a este contrato.';
+  }
+  if (error.fieldErrors.budgetItemId) {
+    next.budgetItemId = 'O item de rubrica selecionado não pertence a este contrato.';
+  }
+  if (error.fieldErrors.categoryId) {
+    next.categoryId = 'A categoria selecionada não pertence a este contrato.';
+  }
+
+  return next;
+}
+
 function isPersistedId(id: string | null | undefined): id is string {
   return typeof id === 'string' && /^\d+$/.test(id);
 }
@@ -300,7 +349,7 @@ function createDraftLancamento(): Lancamento {
     id: createDraftId('lanc'),
     valor: 0,
     dataPag: '',
-    paymentStatus: 'PAGO',
+    paymentStatus: 'RESERVADO',
     paidBy: 'INNOVATIS',
     expenseId: undefined,
   };
@@ -318,6 +367,49 @@ function companyNameLabel(company: Pick<CompanyResponseDTO, 'tradeName' | 'name'
   return company.tradeName?.trim() || company.name?.trim() || 'Empresa sem nome';
 }
 
+function formatCnpj(value: string | null | undefined) {
+  const digits = (value ?? '').replace(/\D/g, '').slice(0, 14);
+  if (digits.length !== 14) return null;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+function getContractingStatusLabel(status: ProjectCompanyDetailedResponseDTO['status']) {
+  switch (status) {
+    case 'EM_CADASTRO':
+      return 'Em cadastro';
+    case 'EM_CONTRATACAO':
+      return 'Em contratação';
+    case 'CONTRATADA':
+      return 'Contratada';
+    case 'EM_EXECUCAO':
+      return 'Em execução';
+    case 'CONCLUIDA':
+      return 'Concluída';
+    case 'CANCELADA':
+      return 'Cancelada';
+    default:
+      return null;
+  }
+}
+
+function buildProjectCompanyDisplayLabel(company: {
+  name: string;
+  cnpj?: string | null;
+  status?: ProjectCompanyDetailedResponseDTO['status'];
+  availableBalance?: number | null;
+}) {
+  const cnpjLabel = formatCnpj(company.cnpj);
+  const statusLabel = getContractingStatusLabel(company.status ?? null);
+  const balanceLabel =
+    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
+      ? `Saldo ${formatCurrency(company.availableBalance)}`
+      : null;
+
+  return [company.name, cnpjLabel ? `CNPJ ${cnpjLabel}` : null, statusLabel, balanceLabel]
+    .filter(Boolean)
+    .join(' • ');
+}
+
 function calculateRealBalance(totalRecebido: number, totalPago: number) {
   return Number((totalRecebido - totalPago).toFixed(2));
 }
@@ -327,13 +419,31 @@ function calculateProjectBalance(saldoReal: number, totalReservado: number) {
 }
 
 function getPaymentStatusLabel(status: ExpensePaymentStatusEnum) {
-  return status === 'RESERVADO' ? 'Reservado' : 'Pago';
+  if (status === 'RESERVADO') return 'Reservado';
+  if (status === 'PAGAMENTO_RECEBIDO') return 'Pagamento recebido';
+  return 'Pago';
 }
 
 function getPaymentStatusBadgeClassName(status: ExpensePaymentStatusEnum) {
-  return status === 'RESERVADO'
-    ? 'border-amber-200 bg-amber-50 text-amber-700'
-    : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'RESERVADO') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+  if (status === 'PAGAMENTO_RECEBIDO') {
+    return 'border-blue-200 bg-blue-50 text-blue-700';
+  }
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function getIncomeStatusLabel(status: IncomeStatusEnum) {
+  if (status === 'FATURADO') return 'Faturado (NF emitida)';
+  if (status === 'CANCELADO') return 'Cancelado';
+  return 'Recebido';
+}
+
+function getIncomeStatusBadgeClassName(status: IncomeStatusEnum) {
+  if (status === 'FATURADO') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'CANCELADO') return 'border-slate-300 bg-slate-100 text-slate-600';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
 function normalizePaidBy(
@@ -395,9 +505,14 @@ export default function PagamentosPlanilhaPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const [isAddingParcela, setIsAddingParcela] = useState(false);
-  const [newParcela, setNewParcela] = useState<{ valorRecebido: number; dataRecebimento: string }>({
+  const [newParcela, setNewParcela] = useState<{
+    valorRecebido: number;
+    dataRecebimento: string;
+    status: IncomeStatusEnum;
+  }>({
     valorRecebido: 0,
     dataRecebimento: '',
+    status: 'RECEBIDO',
   });
   const [editingParcelaId, setEditingParcelaId] = useState<ID | null>(null);
   const [editParcelaForm, setEditParcelaForm] = useState<Parcela | null>(null);
@@ -415,6 +530,7 @@ export default function PagamentosPlanilhaPage() {
   const [subitemModalForm, setSubitemModalForm] =
     useState<NewSubitemFormState>(DEFAULT_NEW_SUBITEM_FORM);
   const [subitemModalError, setSubitemModalError] = useState<string | null>(null);
+  const [subitemModalFieldErrors, setSubitemModalFieldErrors] = useState<PaymentFieldErrors>({});
   const [isCreatePersonModalOpen, setIsCreatePersonModalOpen] = useState(false);
   const [isCreateCompanyModalOpen, setIsCreateCompanyModalOpen] = useState(false);
   const [isLinkExistingPersonModalOpen, setIsLinkExistingPersonModalOpen] = useState(false);
@@ -447,7 +563,30 @@ export default function PagamentosPlanilhaPage() {
     subitemNome: string;
     lancamento: Lancamento;
   } | null>(null);
+  const [reclassifyModalState, setReclassifyModalState] = useState<{
+    expenseId: number;
+    currentItemId: ID;
+    currentItemLabel: string;
+  } | null>(null);
+  const [reclassifyTargetItemId, setReclassifyTargetItemId] = useState<ID | null>(null);
+  const [reclassifyReason, setReclassifyReason] = useState('');
+  const [reclassifyFieldErrors, setReclassifyFieldErrors] = useState<{
+    targetBudgetItemId?: string;
+    reason?: string;
+  }>({});
   const pageErrorRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedSubitemItem = useMemo(() => {
+    if (!subitemModalItemId) return null;
+
+    for (const rubrica of rubricas) {
+      const item = rubrica.itens.find((entry) => entry.id === subitemModalItemId);
+      if (item) return item;
+    }
+
+    return null;
+  }, [subitemModalItemId, rubricas]);
+  const isBeneficiaryLockedByRubrica = Boolean(selectedSubitemItem?.beneficiaryType);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -460,6 +599,13 @@ export default function PagamentosPlanilhaPage() {
 
   const closeDeleteSubitemModal = () => {
     setSubitemPendingDeletion(null);
+  };
+
+  const closeReclassifyModal = () => {
+    setReclassifyModalState(null);
+    setReclassifyTargetItemId(null);
+    setReclassifyReason('');
+    setReclassifyFieldErrors({});
   };
 
   const closeRubricaPaymentSelectionModal = () => {
@@ -510,10 +656,59 @@ export default function PagamentosPlanilhaPage() {
     () => new Map(projectPeople.map((person) => [person.personId, person])),
     [projectPeople]
   );
+  const projectPeopleByLinkId = useMemo(
+    () => new Map(projectPeople.map((person) => [person.projectLinkId, person])),
+    [projectPeople]
+  );
   const projectCompaniesById = useMemo(
     () => new Map(projectCompanies.map((company) => [company.companyId, company])),
     [projectCompanies]
   );
+  const projectCompaniesByLinkId = useMemo(
+    () => new Map(projectCompanies.map((company) => [company.projectLinkId, company])),
+    [projectCompanies]
+  );
+  const resolveProjectCompanyLinkId = useCallback(
+    (companyId: string | undefined) =>
+      companyId ? parsePersistedId(projectCompaniesById.get(companyId)?.projectLinkId) : null,
+    [projectCompaniesById]
+  );
+  const lockedBeneficiaryConfig = useMemo(() => {
+    if (!selectedSubitemItem?.beneficiaryType) return null;
+
+    if (selectedSubitemItem.beneficiaryType === 'person' && selectedSubitemItem.projectPeopleId) {
+      const linkedPerson = projectPeopleByLinkId.get(selectedSubitemItem.projectPeopleId);
+      if (!linkedPerson) return null;
+      return {
+        vinculoTipo: 'person' as SubitemLinkType,
+        personId: linkedPerson.personId,
+        organizationId: '',
+      };
+    }
+
+    if (selectedSubitemItem.beneficiaryType === 'company' && selectedSubitemItem.projectCompanyId) {
+      const linkedCompany = projectCompaniesByLinkId.get(selectedSubitemItem.projectCompanyId);
+      if (!linkedCompany) return null;
+      return {
+        vinculoTipo: 'company' as SubitemLinkType,
+        personId: '',
+        organizationId: linkedCompany.companyId,
+      };
+    }
+
+    return null;
+  }, [projectCompaniesByLinkId, projectPeopleByLinkId, selectedSubitemItem]);
+
+  useEffect(() => {
+    if (!isSubitemModalOpen || subitemModalEditingContext || !lockedBeneficiaryConfig) return;
+
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: lockedBeneficiaryConfig.vinculoTipo,
+      personId: lockedBeneficiaryConfig.personId,
+      organizationId: lockedBeneficiaryConfig.organizationId,
+    }));
+  }, [isSubitemModalOpen, lockedBeneficiaryConfig, subitemModalEditingContext]);
   const linkableBasePeople = useMemo(
     () =>
       basePeople
@@ -531,6 +726,37 @@ export default function PagamentosPlanilhaPage() {
           return nameA.localeCompare(nameB, 'pt-BR');
         }),
     [baseCompanies, projectCompaniesById]
+  );
+
+  const getDefaultSubitemFormForItem = useCallback(
+    (item: ItemRubrica): NewSubitemFormState => {
+      if (item.beneficiaryType === 'person' && item.projectPeopleId) {
+        const linkedPerson = projectPeopleByLinkId.get(item.projectPeopleId);
+        if (linkedPerson) {
+          return {
+            nome: linkedPerson.fullName,
+            vinculoTipo: 'person',
+            personId: linkedPerson.personId,
+            organizationId: '',
+          };
+        }
+      }
+
+      if (item.beneficiaryType === 'company' && item.projectCompanyId) {
+        const linkedCompany = projectCompaniesByLinkId.get(item.projectCompanyId);
+        if (linkedCompany) {
+          return {
+            nome: linkedCompany.name,
+            vinculoTipo: 'company',
+            personId: '',
+            organizationId: linkedCompany.companyId,
+          };
+        }
+      }
+
+      return DEFAULT_NEW_SUBITEM_FORM;
+    },
+    [projectCompaniesByLinkId, projectPeopleByLinkId]
   );
 
   const closeSubitemModal = ({
@@ -561,6 +787,7 @@ export default function PagamentosPlanilhaPage() {
     setSubitemModalEditingContext(null);
     setSubitemModalForm(DEFAULT_NEW_SUBITEM_FORM);
     setSubitemModalError(null);
+    setSubitemModalFieldErrors({});
     setIsLinkExistingPersonModalOpen(false);
     setIsLinkExistingCompanyModalOpen(false);
   };
@@ -574,9 +801,11 @@ export default function PagamentosPlanilhaPage() {
       }
 
       if (subitem.vinculoTipo === 'company') {
+        const linkedCompany = projectCompaniesById.get(subitem.organizationId ?? '');
         return `Empresa: ${
-          projectCompaniesById.get(subitem.organizationId ?? '')?.name ??
-          'Empresa vinculada ao projeto'
+          linkedCompany
+            ? buildProjectCompanyDisplayLabel(linkedCompany)
+            : 'Empresa vinculada ao projeto'
         }`;
       }
 
@@ -626,13 +855,24 @@ export default function PagamentosPlanilhaPage() {
         .map<ProjectLinkedCompany>((link) => {
           const name =
             link.companyTradeName?.trim() || link.companyName?.trim() || `Empresa ${link.companyId}`;
-          const cnpj = onlyDigits(link.companyCnpj ?? '');
+          const cnpj = formatCnpj(link.companyCnpj);
+          const statusLabel = getContractingStatusLabel(link.status ?? null);
+          const balanceLabel =
+            typeof link.availableBalance === 'number' && Number.isFinite(link.availableBalance)
+              ? `Saldo ${formatCurrency(link.availableBalance)}`
+              : null;
 
           return {
             projectLinkId: String(link.id),
             companyId: String(link.companyId),
             name,
-            label: cnpj ? `${name} • CNPJ ${cnpj}` : name,
+            cnpj: link.companyCnpj ?? null,
+            status: link.status ?? null,
+            availableBalance:
+              typeof link.availableBalance === 'number' ? link.availableBalance : null,
+            label: [name, cnpj ? `CNPJ ${cnpj}` : null, statusLabel, balanceLabel]
+              .filter(Boolean)
+              .join(' • '),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -730,6 +970,7 @@ export default function PagamentosPlanilhaPage() {
           numero: income.numero,
           valorRecebido: toMoneyValue(income.amount),
           dataRecebimento: income.receivedAt || '',
+          status: income.status ?? 'RECEBIDO',
         }));
 
       const itemsByCategory = new Map<number, ItemRubrica[]>();
@@ -760,6 +1001,10 @@ export default function PagamentosPlanilhaPage() {
           valorBaseOrcado,
           remanejamentoDebito: transferBalance.debito,
           remanejamentoCredito: transferBalance.credito,
+          beneficiaryType: item.beneficiaryType ?? null,
+          projectPeopleId: item.projectPeopleId != null ? String(item.projectPeopleId) : undefined,
+          projectCompanyId:
+            item.projectCompanyId != null ? String(item.projectCompanyId) : undefined,
         };
 
         if (!itemsByCategory.has(item.categoryId)) {
@@ -777,9 +1022,17 @@ export default function PagamentosPlanilhaPage() {
       })) {
         const item = itemById.get(expense.budgetItemId);
         if (!item) continue;
+        const projectLinkedCompanyId =
+          expense.projectCompanyId != null ? String(expense.projectCompanyId) : undefined;
+        const mappedCompanyId =
+          projectLinkedCompanyId != null
+            ? projectCompaniesByLinkId.get(projectLinkedCompanyId)?.companyId
+            : undefined;
+        const organizationIdForUi =
+          mappedCompanyId ?? (expense.organizationId != null ? String(expense.organizationId) : undefined);
 
         const description = expense.description?.trim() || `Lançamento ${expense.id}`;
-        const baseKey = `${expense.personId ?? '0'}|${expense.organizationId ?? '0'}|${description.toLowerCase()}`;
+        const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${description.toLowerCase()}`;
 
         if (!subitemsByItem.has(expense.budgetItemId)) {
           subitemsByItem.set(expense.budgetItemId, new Map());
@@ -793,13 +1046,13 @@ export default function PagamentosPlanilhaPage() {
             empresaRh: description,
             lancamentos: [],
             vinculoTipo: expense.organizationId
+              || expense.projectCompanyId
               ? 'company'
               : expense.personId
                 ? 'person'
                 : 'none',
             personId: expense.personId != null ? String(expense.personId) : undefined,
-            organizationId:
-              expense.organizationId != null ? String(expense.organizationId) : undefined,
+            organizationId: organizationIdForUi,
           };
           subitemMap.set(baseKey, subitem);
           item.subitens = [...(item.subitens ?? []), subitem];
@@ -861,7 +1114,7 @@ export default function PagamentosPlanilhaPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectCompaniesByLinkId, projectId]);
 
   useEffect(() => {
     void loadData();
@@ -908,6 +1161,13 @@ export default function PagamentosPlanilhaPage() {
       0
     );
 
+  const calcularTotalPagamentoRecebidoSubitem = (subitem: Subitem) =>
+    (subitem.lancamentos ?? []).reduce(
+      (acc, lancamento) =>
+        lancamento.paymentStatus === 'PAGAMENTO_RECEBIDO' ? acc + safeNumber(lancamento.valor) : acc,
+      0
+    );
+
   const calcularTotalComprometidoSubitem = (subitem: Subitem) =>
     Number((calcularTotalPagoSubitem(subitem) + calcularTotalReservadoSubitem(subitem)).toFixed(2));
 
@@ -930,6 +1190,7 @@ export default function PagamentosPlanilhaPage() {
       quantidade: lancamentosOrdenados.length,
       totalPago: calcularTotalPagoSubitem(subitem),
       totalReservado: calcularTotalReservadoSubitem(subitem),
+      totalPagamentoRecebido: calcularTotalPagamentoRecebidoSubitem(subitem),
       totalComprometido: calcularTotalComprometidoSubitem(subitem),
       ultimaDataLancamento,
       ultimaDataPagamentoPago,
@@ -961,7 +1222,22 @@ export default function PagamentosPlanilhaPage() {
     Number((calcularTotalPagoRubrica(rubrica) + calcularTotalReservadoRubrica(rubrica)).toFixed(2));
 
   const totalRecebido = useMemo(
-    () => parcelas.reduce((acc, parcela) => acc + safeNumber(parcela.valorRecebido), 0),
+    () =>
+      parcelas.reduce(
+        (acc, parcela) =>
+          parcela.status === 'RECEBIDO' ? acc + safeNumber(parcela.valorRecebido) : acc,
+        0
+      ),
+    [parcelas]
+  );
+
+  const totalRecebimentoAguardo = useMemo(
+    () =>
+      parcelas.reduce(
+        (acc, parcela) =>
+          parcela.status === 'FATURADO' ? acc + safeNumber(parcela.valorRecebido) : acc,
+        0
+      ),
     [parcelas]
   );
 
@@ -1125,6 +1401,27 @@ export default function PagamentosPlanilhaPage() {
       }
 
       return { item, subitem };
+    }
+
+    return null;
+  };
+
+  const reclassifyTargetOptions = useMemo(() => {
+    const currentItemId = reclassifyModalState?.currentItemId;
+    return rubricas.flatMap((rubrica) =>
+      rubrica.itens
+        .filter((item) => item.id !== currentItemId)
+        .map((item) => ({
+          value: item.id,
+          label: `[${rubrica.codigo}] ${item.descricao}`,
+        }))
+    );
+  }, [reclassifyModalState?.currentItemId, rubricas]);
+
+  const findItemById = (itemId: ID) => {
+    for (const rubrica of rubricas) {
+      const item = rubrica.itens.find((entry) => entry.id === itemId);
+      if (item) return item;
     }
 
     return null;
@@ -1322,8 +1619,9 @@ export default function PagamentosPlanilhaPage() {
         numero: nextNumero,
         amount: toMoneyValue(newParcela.valorRecebido),
         receivedAt: newParcela.dataRecebimento,
+        status: newParcela.status,
       });
-      setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
+      setNewParcela({ valorRecebido: 0, dataRecebimento: '', status: 'RECEBIDO' });
       setIsAddingParcela(false);
       await loadData();
       showSavedMessage('Parcela criada com sucesso.');
@@ -1362,6 +1660,7 @@ export default function PagamentosPlanilhaPage() {
         numero: editParcelaForm.numero,
         amount: toMoneyValue(editParcelaForm.valorRecebido),
         receivedAt: editParcelaForm.dataRecebimento,
+        status: editParcelaForm.status,
       });
       setEditingParcelaId(null);
       setEditParcelaForm(null);
@@ -1434,12 +1733,25 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'person' && !subitemModalForm.personId) {
+    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
+      setSubitemModalError(
+        projectLinksError ??
+          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
+      );
+      return;
+    }
+
+    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
+    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
+    const effectiveOrganizationId =
+      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+
+    if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'company' && !subitemModalForm.organizationId) {
+    if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
       return;
     }
@@ -1448,13 +1760,9 @@ export default function PagamentosPlanilhaPage() {
       id: createDraftId('sub'),
       empresaRh: nome,
       lancamentos: [],
-      vinculoTipo: subitemModalForm.vinculoTipo,
-      personId:
-        subitemModalForm.vinculoTipo === 'person' ? subitemModalForm.personId : undefined,
-      organizationId:
-        subitemModalForm.vinculoTipo === 'company'
-          ? subitemModalForm.organizationId
-          : undefined,
+      vinculoTipo: effectiveVinculoTipo,
+      personId: effectiveVinculoTipo === 'person' ? effectivePersonId : undefined,
+      organizationId: effectiveVinculoTipo === 'company' ? effectiveOrganizationId : undefined,
     };
 
     setRubricas((previous) =>
@@ -1484,12 +1792,47 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    const selectedItem = findItemById(itemId);
+    if (!selectedItem) {
+      setActionError('Item inválido para criar pagamento.');
+      return;
+    }
+
     setActionError(null);
     setSubitemModalEditingContext(null);
-    setSubitemModalForm(DEFAULT_NEW_SUBITEM_FORM);
+    setSubitemModalForm(getDefaultSubitemFormForItem(selectedItem));
     setSubitemModalError(null);
+    setSubitemModalFieldErrors({});
     setSubitemModalItemId(itemId);
     setIsSubitemModalOpen(true);
+  };
+
+  const handleConfirmarRecebimentoParcela = async (parcela: Parcela) => {
+    if (!ensureCanManageChildren()) return;
+    if (!isPersistedId(parcela.id)) {
+      setActionError('Parcela inválida para confirmação de recebimento.');
+      return;
+    }
+    if (parcela.status === 'RECEBIDO') {
+      return;
+    }
+
+    setIsPersisting(true);
+    setActionError(null);
+    try {
+      await updateIncome(Number.parseInt(parcela.id, 10), {
+        numero: parcela.numero,
+        amount: toMoneyValue(parcela.valorRecebido),
+        receivedAt: parcela.dataRecebimento,
+        status: 'RECEBIDO',
+      });
+      await loadData();
+      showSavedMessage('Recebimento confirmado com sucesso.');
+    } catch (error) {
+      setActionError(toErrorMessage(error, 'Não foi possível confirmar o recebimento da parcela.'));
+    } finally {
+      setIsPersisting(false);
+    }
   };
 
   const handleStartEditSubitem = (itemId: ID, subitemId: ID) => {
@@ -1515,6 +1858,7 @@ export default function PagamentosPlanilhaPage() {
 
     setActionError(null);
     setSubitemModalError(null);
+    setSubitemModalFieldErrors({});
     setSubitemModalItemId(itemId);
     setSubitemModalEditingContext({ itemId, subitemId });
     setSubitemModalForm({
@@ -1669,6 +2013,7 @@ export default function PagamentosPlanilhaPage() {
   };
 
   const handleSaveSubitemModal = async () => {
+    setSubitemModalFieldErrors({});
     const itemId = subitemModalItemId;
     if (!itemId) {
       setSubitemModalError('Item inválido para salvar o pagamento.');
@@ -1681,12 +2026,25 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'person' && !subitemModalForm.personId) {
+    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
+      setSubitemModalError(
+        projectLinksError ??
+          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
+      );
+      return;
+    }
+
+    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
+    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
+    const effectiveOrganizationId =
+      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+
+    if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
       return;
     }
 
-    if (subitemModalForm.vinculoTipo === 'company' && !subitemModalForm.organizationId) {
+    if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
       return;
     }
@@ -1703,16 +2061,17 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    const nextPersonId =
-      subitemModalForm.vinculoTipo === 'person' ? subitemModalForm.personId || undefined : undefined;
+    const nextPersonId = effectiveVinculoTipo === 'person' ? effectivePersonId || undefined : undefined;
     const nextOrganizationId =
-      subitemModalForm.vinculoTipo === 'company'
-        ? subitemModalForm.organizationId || undefined
-        : undefined;
+      effectiveVinculoTipo === 'company' ? effectiveOrganizationId || undefined : undefined;
+    const nextProjectCompanyId =
+      effectiveVinculoTipo === 'company'
+        ? resolveProjectCompanyLinkId(nextOrganizationId)
+        : null;
 
     updateSubitemDraftState(itemId, subitemId, {
       empresaRh: nome,
-      vinculoTipo: subitemModalForm.vinculoTipo,
+      vinculoTipo: effectiveVinculoTipo,
       personId: nextPersonId,
       organizationId: nextOrganizationId,
     });
@@ -1724,6 +2083,10 @@ export default function PagamentosPlanilhaPage() {
     if (expenseIds.length === 0) {
       closeSubitemModal({ discardTransientDraft: false });
       showSavedMessage('Pagamento atualizado com sucesso.');
+      return;
+    }
+    if (effectiveVinculoTipo === 'company' && !nextProjectCompanyId) {
+      setSubitemModalError('Não foi possível resolver o vínculo da empresa no projeto.');
       return;
     }
 
@@ -1753,7 +2116,12 @@ export default function PagamentosPlanilhaPage() {
           amount: toMoneyValue(currentExpense.amount),
           paymentStatus: currentExpense.paymentStatus ?? 'PAGO',
           personId: nextPersonId ? Number.parseInt(nextPersonId, 10) : undefined,
-          organizationId: nextOrganizationId ? Number.parseInt(nextOrganizationId, 10) : undefined,
+          organizationId: effectiveVinculoTipo === 'company'
+            ? undefined
+            : nextOrganizationId
+              ? Number.parseInt(nextOrganizationId, 10)
+              : undefined,
+          projectCompanyId: nextProjectCompanyId ?? undefined,
           description: nome,
           invoiceNumber: currentExpense.invoiceNumber ?? undefined,
           invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -1765,7 +2133,13 @@ export default function PagamentosPlanilhaPage() {
       closeSubitemModal({ discardTransientDraft: false });
       showSavedMessage('Pagamento atualizado com sucesso.');
     } catch (error) {
-      setSubitemModalError(toErrorMessage(error, 'Não foi possível atualizar o pagamento.'));
+      const mappedFieldErrors = mapPaymentFieldErrors(error);
+      if (Object.keys(mappedFieldErrors).length > 0) {
+        setSubitemModalFieldErrors(mappedFieldErrors);
+        setSubitemModalError(null);
+      } else {
+        setSubitemModalError(toErrorMessage(error, 'Não foi possível atualizar o pagamento.'));
+      }
     } finally {
       setIsPersisting(false);
     }
@@ -2017,6 +2391,10 @@ export default function PagamentosPlanilhaPage() {
     const personId = subitem.vinculoTipo === 'person' ? parsePersistedId(subitem.personId) : null;
     const organizationId =
       subitem.vinculoTipo === 'company' ? parsePersistedId(subitem.organizationId) : null;
+    const projectCompanyId =
+      subitem.vinculoTipo === 'company'
+        ? resolveProjectCompanyLinkId(subitem.organizationId)
+        : null;
 
     const payload: ExpenseUpdateDTO = {
       projectId,
@@ -2028,7 +2406,9 @@ export default function PagamentosPlanilhaPage() {
       paymentStatus: 'PAGO',
       paidBy: normalizePaidBy(lancamento.paidBy ?? currentExpense.paidBy),
       personId: personId ?? undefined,
-      organizationId: organizationId ?? undefined,
+      organizationId:
+        subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
+      projectCompanyId: projectCompanyId ?? undefined,
       description: description || currentExpense.description || undefined,
       invoiceNumber: currentExpense.invoiceNumber ?? undefined,
       invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2044,6 +2424,71 @@ export default function PagamentosPlanilhaPage() {
       showSavedMessage('Lançamento reservado marcado como pago.');
     } catch (error) {
       setActionError(toErrorMessage(error, 'Não foi possível marcar o lançamento como pago.'));
+    } finally {
+      setIsPersisting(false);
+    }
+  };
+
+  const handleStartReclassifyLaunch = (itemId: ID, launch: Lancamento) => {
+    if (!ensureCanManageChildren() || isPersisting) return;
+
+    const expenseId = parsePersistedId(launch.expenseId);
+    if (!expenseId) {
+      setActionError('Somente lançamentos já salvos podem ser reclassificados.');
+      return;
+    }
+
+    const currentItem = findItemById(itemId);
+    setReclassifyModalState({
+      expenseId,
+      currentItemId: itemId,
+      currentItemLabel: currentItem?.descricao ?? `Item #${itemId}`,
+    });
+    setReclassifyTargetItemId(null);
+    setReclassifyReason('');
+    setReclassifyFieldErrors({});
+    setActionError(null);
+  };
+
+  const handleConfirmReclassify = async () => {
+    if (!reclassifyModalState) return;
+
+    const targetBudgetItemId = parsePersistedId(reclassifyTargetItemId);
+    const reason = reclassifyReason.trim();
+    const nextErrors: { targetBudgetItemId?: string; reason?: string } = {};
+
+    if (!targetBudgetItemId) {
+      nextErrors.targetBudgetItemId = 'Selecione o item de destino.';
+    }
+    if (!reason) {
+      nextErrors.reason = 'Informe o motivo da reclassificação.';
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setReclassifyFieldErrors(nextErrors);
+      return;
+    }
+    const safeTargetBudgetItemId = targetBudgetItemId as number;
+
+    setIsPersisting(true);
+    setActionError(null);
+    setReclassifyFieldErrors({});
+
+    try {
+      await reclassifyExpense(reclassifyModalState.expenseId, {
+        targetBudgetItemId: safeTargetBudgetItemId,
+        reason,
+      });
+      await loadData();
+      closeReclassifyModal();
+      showSavedMessage('Despesa reclassificada com sucesso.');
+    } catch (error) {
+      if (error instanceof HttpError && error.fieldErrors) {
+        setReclassifyFieldErrors({
+          targetBudgetItemId: error.fieldErrors.targetBudgetItemId,
+          reason: error.fieldErrors.reason,
+        });
+      }
+      setActionError(toErrorMessage(error, 'Não foi possível reclassificar a despesa.'));
     } finally {
       setIsPersisting(false);
     }
@@ -2099,6 +2544,10 @@ export default function PagamentosPlanilhaPage() {
     const personId = subitem.vinculoTipo === 'person' ? parsePersistedId(subitem.personId) : null;
     const organizationId =
       subitem.vinculoTipo === 'company' ? parsePersistedId(subitem.organizationId) : null;
+    const projectCompanyId =
+      subitem.vinculoTipo === 'company'
+        ? resolveProjectCompanyLinkId(subitem.organizationId)
+        : null;
 
     const currentExpenseById = new Map(backendExpenses.map((expense) => [expense.id, expense]));
     const keepExpenseIds = new Set<number>();
@@ -2139,6 +2588,12 @@ export default function PagamentosPlanilhaPage() {
         setActionError(`Selecione uma empresa vinculada ao projeto para o subitem "${description}".`);
         return;
       }
+      if (subitem.vinculoTipo === 'company' && !projectCompanyId) {
+        setActionError(
+          `Não foi possível resolver o vínculo da empresa no projeto para o subitem "${description}".`
+        );
+        return;
+      }
 
       if (expenseId != null) {
         keepExpenseIds.add(expenseId);
@@ -2155,7 +2610,9 @@ export default function PagamentosPlanilhaPage() {
             paymentStatus,
             paidBy,
             personId: personId ?? undefined,
-            organizationId: organizationId ?? undefined,
+            organizationId:
+              subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
+            projectCompanyId: projectCompanyId ?? undefined,
             description,
           });
           continue;
@@ -2172,7 +2629,9 @@ export default function PagamentosPlanilhaPage() {
             paymentStatus,
             paidBy,
             personId: personId ?? undefined,
-            organizationId: organizationId ?? undefined,
+            organizationId:
+              subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
+            projectCompanyId: projectCompanyId ?? undefined,
             description,
             invoiceNumber: currentExpense.invoiceNumber ?? undefined,
             invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2190,6 +2649,7 @@ export default function PagamentosPlanilhaPage() {
             normalizePaidBy(currentExpense.paidBy) !== payload.paidBy ||
             (currentExpense.personId ?? null) !== (payload.personId ?? null) ||
             (currentExpense.organizationId ?? null) !== (payload.organizationId ?? null) ||
+            (currentExpense.projectCompanyId ?? null) !== (payload.projectCompanyId ?? null) ||
             (currentExpense.description || '') !== (payload.description || '');
 
           if (shouldUpdate) {
@@ -2207,7 +2667,9 @@ export default function PagamentosPlanilhaPage() {
           paymentStatus,
           paidBy,
           personId: personId ?? undefined,
-          organizationId: organizationId ?? undefined,
+          organizationId:
+            subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
+          projectCompanyId: projectCompanyId ?? undefined,
           description,
         });
       }
@@ -2455,6 +2917,14 @@ export default function PagamentosPlanilhaPage() {
     */
   };
 
+  if (isLoading) {
+    return (
+      <div ref={pageErrorRef} className="space-y-6 scroll-mt-24">
+        <ContractPagamentosLoadingSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div ref={pageErrorRef} className="space-y-6 scroll-mt-24">
       {isLoading && (
@@ -2492,6 +2962,7 @@ export default function PagamentosPlanilhaPage() {
         totalRecebido={totalRecebido}
         totalPago={totalPago}
         totalReservado={totalReservado}
+        totalRecebimentoAguardo={totalRecebimentoAguardo}
         saldoRealContrato={saldoRealContrato}
         saldoProjetoContrato={saldoProjetoContrato}
       />
@@ -2518,7 +2989,7 @@ export default function PagamentosPlanilhaPage() {
 
         {canManageChildren && isAddingParcela && (
           <div className="border-t border-gray-200 bg-emerald-50 p-4">
-            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="mb-3 grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-700">
                   Valor recebido <span className="text-red-500">*</span>
@@ -2546,6 +3017,23 @@ export default function PagamentosPlanilhaPage() {
                   className="rounded-lg border-emerald-300 focus-within:border-emerald-500 focus-within:ring-emerald-500/20"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">
+                  Status <span className="text-red-500">*</span>
+                </label>
+                <Dropdown
+                  value={newParcela.status}
+                  onChange={(value) =>
+                    setNewParcela((current) => ({
+                      ...current,
+                      status: (value as IncomeStatusEnum | undefined) ?? 'RECEBIDO',
+                    }))
+                  }
+                  disabled={isPersisting}
+                  options={INCOME_STATUS_OPTIONS}
+                  className="h-11 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -2560,7 +3048,7 @@ export default function PagamentosPlanilhaPage() {
               <button
                 onClick={() => {
                   setIsAddingParcela(false);
-                  setNewParcela({ valorRecebido: 0, dataRecebimento: '' });
+                  setNewParcela({ valorRecebido: 0, dataRecebimento: '', status: 'RECEBIDO' });
                 }}
                 disabled={isPersisting}
                 className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -2579,13 +3067,14 @@ export default function PagamentosPlanilhaPage() {
                 <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Parcela</th>
                 <th className="w-48 px-3 py-2 text-center font-medium text-gray-600">Valor Recebido</th>
                 <th className="w-44 px-3 py-2 text-center font-medium text-gray-600">Data Receb.</th>
+                <th className="w-52 px-3 py-2 text-center font-medium text-gray-600">Status</th>
                 <th className="w-28 px-3 py-2 text-center font-medium text-gray-600">Ações</th>
               </tr>
             </thead>
             <tbody>
               {parcelasOrdenadas.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-gray-500">
+                  <td colSpan={5} className="py-6 text-center text-gray-500">
                     <div className="inline-flex items-center gap-2">
                       <AlertCircle className="h-5 w-5" />
                       Nenhuma parcela cadastrada
@@ -2629,6 +3118,26 @@ export default function PagamentosPlanilhaPage() {
                           </div>
                         </td>
                         <td className="px-3 py-2">
+                          <div className="flex justify-center">
+                            <Dropdown
+                              value={editParcelaForm.status}
+                              onChange={(value) =>
+                                setEditParcelaForm((current) =>
+                                  current
+                                    ? {
+                                      ...current,
+                                      status: (value as IncomeStatusEnum | undefined) ?? 'RECEBIDO',
+                                    }
+                                    : current
+                                )
+                              }
+                              disabled={isPersisting}
+                              options={INCOME_STATUS_OPTIONS}
+                              className="h-9 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={handleSaveEditParcela}
@@ -2660,9 +3169,30 @@ export default function PagamentosPlanilhaPage() {
                         <td className="px-3 py-2 text-center text-gray-700">
                           {formatDate(parcela.dataRecebimento)}
                         </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getIncomeStatusBadgeClassName(parcela.status)}`}>
+                            {getIncomeStatusLabel(parcela.status)}
+                          </span>
+                        </td>
                         <td className="px-3 py-2">
                           {canManageChildren ? (
                             <div className="flex items-center justify-center gap-1">
+                              {parcela.status === 'FATURADO' ? (
+                                <button
+                                  onClick={() => {
+                                    void handleConfirmarRecebimentoParcela(parcela);
+                                  }}
+                                  disabled={isPersisting}
+                                  className="rounded p-1 text-emerald-700 hover:bg-emerald-50"
+                                  title="Confirmar recebimento"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <span className="rounded p-1 opacity-0" aria-hidden>
+                                  <Check className="h-4 w-4" />
+                                </span>
+                              )}
                               <button
                                 onClick={() => handleStartEditParcela(parcela)}
                                 disabled={isPersisting}
@@ -2718,6 +3248,7 @@ export default function PagamentosPlanilhaPage() {
         onUpdateLaunch={updateLancamentoCampo}
         onRemoveLaunch={handleRemoveLancamento}
         onMarkLaunchPaid={handleMarkLancamentoAsPaid}
+        onStartReclassifyLaunch={handleStartReclassifyLaunch}
       />
 
       <BudgetItemPickerModal
@@ -2727,6 +3258,23 @@ export default function PagamentosPlanilhaPage() {
         onClose={closeRubricaPaymentSelectionModal}
         onSelectItem={handleSelectItemForRubricaPayment}
       />
+
+      <ExpenseReclassifyModal
+        isOpen={Boolean(reclassifyModalState)}
+        isPersisting={isPersisting}
+        currentItemLabel={reclassifyModalState?.currentItemLabel ?? null}
+        targetOptions={reclassifyTargetOptions}
+        targetItemId={reclassifyTargetItemId}
+        reason={reclassifyReason}
+        fieldErrors={reclassifyFieldErrors}
+        onClose={closeReclassifyModal}
+        onChangeTargetItemId={setReclassifyTargetItemId}
+        onChangeReason={setReclassifyReason}
+        onConfirm={() => {
+          void handleConfirmReclassify();
+        }}
+      />
+
       <AppModalShell
         isOpen={Boolean(parcelaPendingDeletion)}
         title="Excluir parcela"
@@ -2940,18 +3488,22 @@ export default function PagamentosPlanilhaPage() {
         submitLabel={subitemModalEditingContext ? 'Salvar pagamento' : 'Adicionar pagamento'}
         form={subitemModalForm}
         error={subitemModalError}
+        fieldErrors={subitemModalFieldErrors}
         linksError={projectLinksError}
         isLoadingLinks={isLoadingProjectLinks}
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
+        lockBeneficiary={isBeneficiaryLockedByRubrica}
         isPersisting={isPersisting}
         onChange={(patch) => {
           setSubitemModalError(null);
+          setSubitemModalFieldErrors({});
           setSubitemModalForm((current) => ({ ...current, ...patch }));
         }}
         onClose={closeSubitemModal}
         onOpenCreatePerson={() => {
           setSubitemModalError(null);
+          setSubitemModalFieldErrors({});
           setSubitemModalForm((current) => ({
             ...current,
             vinculoTipo: 'person',
@@ -2961,6 +3513,7 @@ export default function PagamentosPlanilhaPage() {
         }}
         onOpenCreateCompany={() => {
           setSubitemModalError(null);
+          setSubitemModalFieldErrors({});
           setSubitemModalForm((current) => ({
             ...current,
             vinculoTipo: 'company',
@@ -2975,6 +3528,7 @@ export default function PagamentosPlanilhaPage() {
           void handleOpenLinkExistingCompanyModal();
         }}
         onSubmit={() => {
+          setSubitemModalFieldErrors({});
           if (!subitemModalItemId) {
             setSubitemModalError('Item inválido para criar pagamento.');
             return;
@@ -3033,7 +3587,14 @@ type SharedPaymentPresentationHandlers = {
   onUpdateLaunch: (itemId: ID, paymentId: ID, launchId: ID, patch: LaunchUpdatePatch) => void;
   onRemoveLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
   onMarkLaunchPaid: (itemId: ID, paymentId: ID, launchId: ID) => Promise<void>;
+  onStartReclassifyLaunch: (itemId: ID, launch: Lancamento) => void;
 };
+
+const INCOME_STATUS_OPTIONS: Array<{ value: IncomeStatusEnum; label: string }> = [
+  { value: 'RECEBIDO', label: 'Recebido' },
+  { value: 'FATURADO', label: 'Faturado (NF emitida)' },
+  { value: 'CANCELADO', label: 'Cancelado' },
+];
 
 type RubricasHierarchySectionProps = SharedPaymentPresentationHandlers & {
   rubricaViews: RubricaViewModel[];
@@ -3059,14 +3620,14 @@ type PaymentCardProps = Omit<SharedPaymentPresentationHandlers, 'onStartAddPayme
 
 type PaymentLaunchListProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
 > & {
   view: PaymentViewModel;
 };
 
 type LaunchRowProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid'
+  'canManageChildren' | 'isPersisting' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
 > & {
   itemId: ID;
   paymentId: ID;
@@ -3086,7 +3647,7 @@ function SummaryMetricCard({
   value: string;
   description: string;
   tooltip: string;
-  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+  tone?: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
 }) {
   const toneStyles = {
     emerald: {
@@ -3133,6 +3694,15 @@ function SummaryMetricCard({
       dot: 'bg-blue-500',
       tooltipButton:
         'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-300 hover:text-blue-800',
+    },
+    danger: {
+      surface: 'border-red-200/90 bg-gradient-to-br from-red-50 via-white to-rose-50/80',
+      accent: 'from-red-500 to-rose-500',
+      eyebrow: 'text-red-900/85',
+      value: 'text-red-700',
+      dot: 'bg-red-500',
+      tooltipButton:
+        'border-red-200 bg-white/85 text-red-700 hover:border-red-300 hover:text-red-800',
     },
   }[tone];
 
@@ -3192,6 +3762,9 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
   const lancamentos = view.payment.lancamentos ?? [];
   const hasPaid = lancamentos.some((lancamento) => lancamento.paymentStatus === 'PAGO');
   const hasReserved = lancamentos.some((lancamento) => lancamento.paymentStatus === 'RESERVADO');
+  const hasPaymentReceived = lancamentos.some(
+    (lancamento) => lancamento.paymentStatus === 'PAGAMENTO_RECEBIDO'
+  );
 
   if (lancamentos.length === 0) {
     return {
@@ -3200,7 +3773,7 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
     };
   }
 
-  if (hasPaid && hasReserved) {
+  if ((hasPaid && hasReserved) || (hasPaid && hasPaymentReceived) || (hasReserved && hasPaymentReceived)) {
     return {
       label: 'Misto',
       className: 'border-blue-200 bg-blue-50 text-blue-700',
@@ -3214,6 +3787,13 @@ function getPaymentRollupStatus(view: PaymentViewModel) {
     };
   }
 
+  if (hasPaymentReceived) {
+    return {
+      label: 'Pagamento recebido',
+      className: 'border-blue-200 bg-blue-50 text-blue-700',
+    };
+  }
+
   return {
     label: 'Pago',
     className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -3224,12 +3804,14 @@ function PaymentsFinancialSummarySection({
   totalRecebido,
   totalPago,
   totalReservado,
+  totalRecebimentoAguardo,
   saldoRealContrato,
   saldoProjetoContrato,
 }: {
   totalRecebido: number;
   totalPago: number;
   totalReservado: number;
+  totalRecebimentoAguardo: number;
   saldoRealContrato: number;
   saldoProjetoContrato: number;
 }) {
@@ -3238,42 +3820,49 @@ function PaymentsFinancialSummarySection({
     value: string;
     description: string;
     tooltip: string;
-    tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue';
+    tone: 'emerald' | 'slate' | 'amber' | 'green' | 'blue' | 'danger';
   }> = [
     {
-      label: 'Receitas recebidas',
+      label: 'Entradas',
       value: formatCurrency(totalRecebido),
-      description: 'Entradas financeiras confirmadas',
-      tooltip: 'Soma de todas as entradas já recebidas no projeto.',
+      description: 'Recebido em caixa',
+      tooltip: 'Soma das parcelas já recebidas, com entrada efetiva no caixa.',
       tone: 'emerald' as const,
     },
     {
-      label: 'Pagamentos efetivados',
+      label: 'Em aguardo',
+      value: formatCurrency(totalRecebimentoAguardo),
+      description: 'Faturado e ainda não recebido',
+      tooltip: 'Soma das parcelas faturadas (NF emitida) que ainda não entraram no caixa.',
+      tone: 'blue' as const,
+    },
+    {
+      label: 'Pagamentos',
       value: formatCurrency(totalPago),
-      description: 'Saídas já realizadas',
-      tooltip: 'Considera apenas lançamentos marcados como pagos.',
+      description: 'Pagamentos já realizados',
+      tooltip: 'Soma de todos os pagamentos já realizados.',
       tone: 'slate' as const,
     },
     {
-      label: 'Reservas pendentes',
+      label: 'Reservas',
       value: formatCurrency(totalReservado),
-      description: 'Valores separados para pagamentos futuros',
-      tooltip: 'Valores reservados para pagamentos futuros, ainda não efetivados.',
+      description: 'Valores reservados para pagar',
+      tooltip: 'Soma de valores reservados para pagamentos futuros que ainda não foram realizados.',
       tone: 'amber' as const,
     },
     {
-      label: 'Caixa disponível',
-      value: formatCurrency(saldoRealContrato),
-      description: 'Disponível antes das reservas',
-      tooltip: 'Receitas recebidas menos pagamentos efetivados.',
-      tone: saldoRealContrato < 0 ? 'amber' : 'green',
+      label: 'Caixa',
+      value: formatSignedCurrency(saldoRealContrato),
+      description: saldoRealContrato < 0 ? 'Déficit antes das reservas' : 'Disponível antes das reservas',
+      tooltip: 'Valor em caixa considerando o que já entrou menos o que já foi pago.',
+      tone: saldoRealContrato < 0 ? 'danger' : 'green',
     },
     {
-      label: 'Disponível após reservas',
-      value: formatCurrency(saldoProjetoContrato),
-      description: 'Saldo realmente livre do projeto',
-      tooltip: 'Caixa disponível menos os valores reservados para pagamentos futuros.',
-      tone: saldoProjetoContrato < 0 ? 'amber' : 'blue',
+      label: 'Livre após reservas',
+      value: formatSignedCurrency(saldoProjetoContrato),
+      description: saldoProjetoContrato < 0 ? 'Déficit após reservas' : 'Saldo realmente livre do projeto',
+      tooltip: 'Saldo livre após descontar do caixa os valores já reservados para pagamentos futuros.',
+      tone: saldoProjetoContrato < 0 ? 'danger' : 'blue',
     },
   ];
 
@@ -3286,7 +3875,7 @@ function PaymentsFinancialSummarySection({
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {metrics.map((metric) => (
           <SummaryMetricCard
             key={metric.label}
@@ -3633,6 +4222,7 @@ function PaymentCard({
             onUpdateLaunch={handlers.onUpdateLaunch}
             onRemoveLaunch={handlers.onRemoveLaunch}
             onMarkLaunchPaid={handlers.onMarkLaunchPaid}
+            onStartReclassifyLaunch={handlers.onStartReclassifyLaunch}
           />
         ) : null}
       </div>
@@ -3648,6 +4238,7 @@ function PaymentLaunchList({
   onUpdateLaunch,
   onRemoveLaunch,
   onMarkLaunchPaid,
+  onStartReclassifyLaunch,
 }: PaymentLaunchListProps) {
   return (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -3696,6 +4287,7 @@ function PaymentLaunchList({
               onUpdateLaunch={onUpdateLaunch}
               onRemoveLaunch={onRemoveLaunch}
               onMarkLaunchPaid={onMarkLaunchPaid}
+              onStartReclassifyLaunch={onStartReclassifyLaunch}
             />
           ))
         )}
@@ -3715,11 +4307,12 @@ function LaunchRow({
   onUpdateLaunch,
   onRemoveLaunch,
   onMarkLaunchPaid,
+  onStartReclassifyLaunch,
 }: LaunchRowProps) {
   if (canManageChildren && isEditing) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lançamento {index + 1}</div>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_180px_180px_220px_auto]">
           <MoneyInput
             valueCents={Math.round(launch.valor * 100)}
@@ -3730,33 +4323,33 @@ function LaunchRow({
             }
             disabled={isPersisting}
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-sm"
-          />
-          <select
+          />          <Dropdown
             value={launch.paymentStatus}
-            onChange={(event) =>
+            onChange={(value) =>
               onUpdateLaunch(itemId, paymentId, launch.id, {
-                paymentStatus: event.target.value as ExpensePaymentStatusEnum,
+                paymentStatus: (value as ExpensePaymentStatusEnum | undefined) ?? 'PAGO',
               })
             }
             disabled={isPersisting}
+            options={[
+              { value: 'PAGO', label: 'Pago' },
+              { value: 'RESERVADO', label: 'Reservado' },
+            ]}
             className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-          >
-            <option value="PAGO">Pago</option>
-            <option value="RESERVADO">Reservado</option>
-          </select>
-          <select
+          />          <Dropdown
             value={launch.paidBy}
-            onChange={(event) =>
+            onChange={(value) =>
               onUpdateLaunch(itemId, paymentId, launch.id, {
-                paidBy: event.target.value as ExpensePaidByEnum,
+                paidBy: (value as ExpensePaidByEnum | undefined) ?? 'INNOVATIS',
               })
             }
             disabled={isPersisting}
+            options={[
+              { value: 'INNOVATIS', label: 'Innovatis' },
+              { value: 'EXECUCAO', label: 'Execução' },
+            ]}
             className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-          >
-            <option value="INNOVATIS">Innovatis</option>
-            <option value="EXECUCAO">Execução</option>
-          </select>
+          />
           <DatePicker
             value={launch.dataPag || ''}
             onChange={(value) =>
@@ -3787,7 +4380,7 @@ function LaunchRow({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lancamento {index + 1}</div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Lançamento {index + 1}</div>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-base font-semibold text-slate-900">{formatCurrency(launch.valor)}</span>
@@ -3817,6 +4410,15 @@ function LaunchRow({
                 Tornar pago
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => onStartReclassifyLaunch(itemId, launch)}
+              disabled={isPersisting || !launch.expenseId}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Pencil className="h-4 w-4" />
+              Reclassificar
+            </button>
             <button
               type="button"
               onClick={() => onRemoveLaunch(itemId, paymentId, launch.id)}
@@ -3987,10 +4589,12 @@ function SubitemModal({
   submitLabel,
   form,
   error,
+  fieldErrors,
   linksError,
   isLoadingLinks,
   projectPeople,
   projectCompanies,
+  lockBeneficiary,
   isPersisting,
   onChange,
   onClose,
@@ -4006,10 +4610,12 @@ function SubitemModal({
   submitLabel: string;
   form: NewSubitemFormState;
   error: string | null;
+  fieldErrors: PaymentFieldErrors;
   linksError: string | null;
   isLoadingLinks: boolean;
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
+  lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
   onClose: () => void;
@@ -4019,6 +4625,10 @@ function SubitemModal({
   onOpenLinkExistingCompany: () => void;
   onSubmit: () => void;
 }) {
+  const personFieldRef = useRef<HTMLDivElement | null>(null);
+  const companyFieldRef = useRef<HTMLDivElement | null>(null);
+  const budgetFieldRef = useRef<HTMLDivElement | null>(null);
+  const categoryFieldRef = useRef<HTMLDivElement | null>(null);
   const hasFilledData =
     form.nome.trim().length > 0 ||
     form.vinculoTipo !== 'none' ||
@@ -4031,10 +4641,38 @@ function SubitemModal({
     onClose,
   });
 
-  if (!isOpen) return null;
-
   const showPersonSelector = form.vinculoTipo === 'person';
   const showCompanySelector = form.vinculoTipo === 'company';
+  const showLinksError = Boolean(linksError) && (lockBeneficiary || showPersonSelector || showCompanySelector);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (fieldErrors.projectCompanyId && showCompanySelector) {
+      companyFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (fieldErrors.personId && showPersonSelector) {
+      personFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (fieldErrors.budgetItemId) {
+      budgetFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (fieldErrors.categoryId) {
+      categoryFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [
+    fieldErrors.budgetItemId,
+    fieldErrors.categoryId,
+    fieldErrors.personId,
+    fieldErrors.projectCompanyId,
+    isOpen,
+    showCompanySelector,
+    showPersonSelector,
+  ]);
+
+  if (!isOpen) return null;
   return (
     <>
       <ModalShell
@@ -4060,6 +4698,11 @@ function SubitemModal({
         </div>
 
         <Field label="Vínculo do pagamento">
+          {lockBeneficiary ? (
+            <p className="mb-2 text-xs text-amber-700">
+              Vínculo bloqueado: altere o beneficiário apenas na aba de rubricas.
+            </p>
+          ) : null}
           <Dropdown
             options={[
               {
@@ -4077,6 +4720,7 @@ function SubitemModal({
             ]}
             value={form.vinculoTipo}
             onChange={(value) => {
+              if (lockBeneficiary) return;
               const nextType = (value || 'none') as SubitemLinkType;
 
               onChange({
@@ -4086,19 +4730,35 @@ function SubitemModal({
               });
             }}
             placeholder="Selecione..."
-            disabled={isPersisting}
+            disabled={isPersisting || lockBeneficiary}
             className="w-full"
           />
         </Field>
 
-        {linksError ? (
+        {(fieldErrors.budgetItemId || fieldErrors.categoryId) ? (
+          <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {fieldErrors.budgetItemId ? (
+              <p ref={budgetFieldRef}>{fieldErrors.budgetItemId}</p>
+            ) : null}
+            {fieldErrors.categoryId ? (
+              <p ref={categoryFieldRef}>{fieldErrors.categoryId}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showLinksError ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {linksError}
           </div>
         ) : null}
 
         {showPersonSelector ? (
-          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div
+            ref={personFieldRef}
+            className={`space-y-3 rounded-lg border bg-gray-50 p-4 ${
+              fieldErrors.personId ? 'border-red-300' : 'border-gray-200'
+            }`}
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-medium text-gray-900">Pessoa vinculada</h3>
@@ -4110,7 +4770,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenLinkExistingPerson}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Check className="h-4 w-4" />
@@ -4119,7 +4779,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenCreatePerson}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="h-4 w-4" />
@@ -4144,6 +4804,7 @@ function SubitemModal({
               }))}
               value={form.personId}
               onChange={(value) => {
+                if (lockBeneficiary) return;
                 const nextPersonId = value || '';
 
                 const selectedPerson = projectPeople.find(
@@ -4159,15 +4820,23 @@ function SubitemModal({
                 });
               }}
               placeholder="Selecione uma pessoa"
-              disabled={isPersisting}
+              disabled={isPersisting || lockBeneficiary}
               className="w-full"
             />
             )}
+            {fieldErrors.personId ? (
+              <p className="text-sm text-red-700">{fieldErrors.personId}</p>
+            ) : null}
           </div>
         ) : null}
 
         {showCompanySelector ? (
-          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div
+            ref={companyFieldRef}
+            className={`space-y-3 rounded-lg border bg-gray-50 p-4 ${
+              fieldErrors.projectCompanyId ? 'border-red-300' : 'border-gray-200'
+            }`}
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-medium text-gray-900">Empresa vinculada</h3>
@@ -4179,7 +4848,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenLinkExistingCompany}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Check className="h-4 w-4" />
@@ -4188,7 +4857,7 @@ function SubitemModal({
                 <button
                   type="button"
                   onClick={onOpenCreateCompany}
-                  disabled={isPersisting}
+                  disabled={isPersisting || lockBeneficiary}
                   className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="h-4 w-4" />
@@ -4209,6 +4878,7 @@ function SubitemModal({
               <select
                 value={form.organizationId}
                 onChange={(event) => {
+                  if (lockBeneficiary) return;
                   const nextOrganizationId = event.target.value;
                   const selectedCompany = projectCompanies.find(
                     (company) => company.companyId === nextOrganizationId
@@ -4220,7 +4890,7 @@ function SubitemModal({
                     nome: form.nome.trim() ? form.nome : selectedCompany?.name ?? form.nome,
                   });
                 }}
-                disabled={isPersisting}
+                disabled={isPersisting || lockBeneficiary}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
               >
                 <option value="">Selecione uma empresa</option>
@@ -4231,6 +4901,9 @@ function SubitemModal({
                 ))}
               </select>
             )}
+            {fieldErrors.projectCompanyId ? (
+              <p className="text-sm text-red-700">{fieldErrors.projectCompanyId}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -4486,7 +5159,7 @@ function CreateLinkedCompanyModal({
     const state = form.state.trim().toUpperCase().slice(0, 2);
 
     if (!name) {
-      setError('Informe a raz?o social da empresa.');
+      setError('Informe a razão social da empresa.');
       return;
     }
 
@@ -4501,7 +5174,7 @@ function CreateLinkedCompanyModal({
     }
 
     if (!email || !phone || !address || !city || !state) {
-      setError('Preencha e-mail, telefone, endere?o, cidade e UF para cadastrar a empresa.');
+      setError('Preencha e-mail, telefone, endereço, cidade e UF para cadastrar a empresa.');
       return;
     }
 
@@ -4943,3 +5616,4 @@ function Field({
     </div>
   );
 }
+

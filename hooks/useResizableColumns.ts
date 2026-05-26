@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
@@ -21,19 +21,49 @@ export function useResizableColumns({
   minColumnWidth = 50,
   tableRef,
 }: UseResizableColumnsOptions) {
+  const getColumnConstraints = useCallback(
+    (index: number) => {
+      const config = defaultWidths[index];
+
+      if (typeof config === "object" && config !== null) {
+        return {
+          min: config.minWidth ?? minColumnWidth,
+          max: config.maxWidth ?? Number.POSITIVE_INFINITY,
+        };
+      }
+
+      return {
+        min: minColumnWidth,
+        max: Number.POSITIVE_INFINITY,
+      };
+    },
+    [defaultWidths, minColumnWidth]
+  );
+
   const [columnWidths, setColumnWidths] = useState<number[]>(() => {
-    // Inicializar larguras das colunas
     const widths: number[] = [];
+
     for (let i = 0; i < columnCount; i++) {
-      const defaultWidth = defaultWidths[i];
-      if (typeof defaultWidth === "number") {
-        widths.push(defaultWidth);
-      } else if (defaultWidth && typeof defaultWidth === "object") {
-        widths.push(defaultWidth.defaultWidth || 150);
+      const config = defaultWidths[i];
+      const { min, max } =
+        typeof config === "object" && config !== null
+          ? {
+              min: config.minWidth ?? minColumnWidth,
+              max: config.maxWidth ?? Number.POSITIVE_INFINITY,
+            }
+          : { min: minColumnWidth, max: Number.POSITIVE_INFINITY };
+
+      const clampWidth = (width: number) => Math.min(max, Math.max(min, width));
+
+      if (typeof config === "number") {
+        widths.push(clampWidth(config));
+      } else if (config && typeof config === "object") {
+        widths.push(clampWidth(config.defaultWidth || 150));
       } else {
-        widths.push(150); // Largura padrão
+        widths.push(clampWidth(150));
       }
     }
+
     return widths;
   });
 
@@ -43,22 +73,25 @@ export function useResizableColumns({
     startWidth: number;
   } | null>(null);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!resizingRef.current) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!resizingRef.current) return;
 
-    const { columnIndex, startX, startWidth } = resizingRef.current;
-    const diff = e.clientX - startX;
-    const newWidth = Math.max(minColumnWidth, startWidth + diff);
+      const { columnIndex, startX, startWidth } = resizingRef.current;
+      const diff = e.clientX - startX;
+      const { min, max } = getColumnConstraints(columnIndex);
+      const newWidth = Math.min(max, Math.max(min, startWidth + diff));
 
-    setColumnWidths((prev) => {
-      const newWidths = [...prev];
-      newWidths[columnIndex] = newWidth;
-      return newWidths;
-    });
+      setColumnWidths((prev) => {
+        const newWidths = [...prev];
+        newWidths[columnIndex] = newWidth;
+        return newWidths;
+      });
 
-    // Prevenir seleção de texto durante o redimensionamento
-    e.preventDefault();
-  }, [minColumnWidth]);
+      e.preventDefault();
+    },
+    [getColumnConstraints]
+  );
 
   const handleMouseUp = useCallback(() => {
     resizingRef.current = null;
@@ -94,7 +127,6 @@ export function useResizableColumns({
     [handleMouseMove, handleMouseUp]
   );
 
-  // Cleanup ao desmontar
   useEffect(() => {
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
@@ -109,4 +141,3 @@ export function useResizableColumns({
     handleMouseDown,
   };
 }
-

@@ -233,7 +233,6 @@ export function CompanyResponsiblePersonSection({
 
     const nextResponsavel = mapPersonToResponsavel(createdPerson);
     onChange(String(createdPerson.id), nextResponsavel);
-    setIsCreateModalOpen(false);
   };
 
   return (
@@ -394,6 +393,8 @@ function CreateResponsiblePersonModal({
         city,
         state,
       });
+      resetFormState();
+      onClose();
     } catch (saveError) {
       setError(getUserErrorMessage(saveError, "Nao foi possivel cadastrar a pessoa."));
     } finally {

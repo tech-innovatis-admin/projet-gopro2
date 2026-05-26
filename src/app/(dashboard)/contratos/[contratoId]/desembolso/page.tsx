@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle,
   Edit,
+  Info,
   Plus,
   Save,
   Trash2,
@@ -15,15 +16,17 @@ import { ResizableTable } from "@/components/ui/resizable-table";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { MoneyInput } from "./_components/MoneyImput";
+import { ContractDisbursementLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
   createDisbursementSchedule,
   deleteDisbursementSchedule,
+  getProjectDisbursementSummary,
   getProjectById,
   listDisbursementSchedules,
   updateDisbursementSchedule,
 } from "@/src/lib/api/endpoints";
 import { canManageContractChildren, fetchCurrentUser } from "@/src/lib/auth/session";
-import { type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
+import { type ProjectDisbursementSummaryDTO, type StatusDisbursementScheduleEnum } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 
 type ParcelaPrevista = {
@@ -199,6 +202,7 @@ export default function DesembolsoPage() {
   const [projectCode, setProjectCode] = useState("");
   const [valorTotalContrato, setValorTotalContrato] = useState(0);
   const [parcelas, setParcelas] = useState<ParcelaPrevista[]>([]);
+  const [disbursementSummary, setDisbursementSummary] = useState<ProjectDisbursementSummaryDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -259,9 +263,10 @@ export default function DesembolsoPage() {
     }
 
     try {
-      const [project, allSchedules] = await Promise.all([
+      const [project, allSchedules, summary] = await Promise.all([
         getProjectById(projectId).catch(() => null),
         fetchAllDisbursementSchedules(projectId),
+        getProjectDisbursementSummary(projectId).catch(() => null),
       ]);
 
       const projectSchedules = allSchedules.map<ParcelaPrevista>((schedule) => ({
@@ -275,11 +280,13 @@ export default function DesembolsoPage() {
 
       const normalized = sortAndRenumber(projectSchedules);
       setParcelas(normalized);
+      setDisbursementSummary(summary);
       setProjectCode(project?.code || `PROJ-${projectId}`);
       setValorTotalContrato(normalizeCurrencyNumber(project?.contractValue));
     } catch (error) {
       setLoadError(toErrorMessage(error, "Não foi possível carregar os desembolsos."));
       setParcelas([]);
+      setDisbursementSummary(null);
     } finally {
       setIsLoading(false);
     }
@@ -531,41 +538,79 @@ export default function DesembolsoPage() {
         </div>
       )}
 
-      {isLoading && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Carregando desembolsos...
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {isLoading ? (
+        <ContractDisbursementLoadingSkeleton />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-gray-500">Valor Total do Projeto</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">Valor do contrato</p>
+            <span title="Valor total aprovado para o contrato." className="inline-flex cursor-help text-gray-400">
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
           <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
             {formatCurrency(valorTotalContrato)}
           </p>
-          <p className="mt-1 min-w-0 truncate text-xs text-gray-400">
-            Contrato: {projectCode || "-"}
-          </p>
+          <p className="mt-1 min-w-0 truncate text-xs text-gray-500">Referência total do planejamento</p>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-gray-500">Desembolsos</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">Parcelas de desembolso</p>
+            <span title="Quantidade de parcelas previstas no cronograma de recebimento." className="inline-flex cursor-help text-gray-400">
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
           <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
             {parcelas.length}
           </p>
-          <p className="mt-1 text-xs text-gray-400">Quantidade prevista</p>
+          <p className="mt-1 text-xs text-gray-500">Quantidade planejada no contrato</p>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-gray-500">Total Previsto</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">Total previsto em desembolsos</p>
+            <span title="Soma de todas as parcelas previstas no cronograma." className="inline-flex cursor-help text-gray-400">
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
           <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
             {formatCurrency(totalPrevisto)}
           </p>
-          <p className="mt-1 text-xs text-gray-400">Somatório do cronograma</p>
+          <p className="mt-1 text-xs text-gray-500">Compromisso financeiro programado</p>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-gray-500">{excedente > 0 ? "Excedente" : "Restante"}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">Total recebido</p>
+            <span title="Soma de todos os recebimentos já confirmados para este contrato." className="inline-flex cursor-help text-gray-400">
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight text-gray-900">
+            {formatCurrency(disbursementSummary?.totalReceived ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            Recebimento sem vínculo: {formatCurrency(disbursementSummary?.unlinkedReceivedAmount ?? 0)}
+          </p>
+        </div>
+
+        <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">{excedente > 0 ? "Valor acima do contrato" : "Saldo disponível no contrato"}</p>
+            <span
+              title={
+                excedente > 0
+                  ? "Diferença que excede o valor total do contrato."
+                  : "Diferença entre o valor do contrato e o total previsto em desembolsos."
+              }
+              className="inline-flex cursor-help text-gray-400"
+            >
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
           <p
             className={`mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight ${
               excedente > 0 ? "text-red-600" : "text-[#004225]"
@@ -573,13 +618,18 @@ export default function DesembolsoPage() {
           >
             {formatCurrency(excedente > 0 ? excedente : restante)}
           </p>
-          <p className="mt-1 text-xs text-gray-400">
-            {excedente > 0 ? "Ultrapassa o total" : "Falta para fechar"}
+          <p className="mt-1 text-xs text-gray-500">
+            {excedente > 0 ? "Planejamento acima do limite" : "Ainda pode ser distribuído"}
           </p>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-gray-500">% Previsto</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-500">% do contrato planejado</p>
+            <span title="Cálculo: (total previsto em desembolsos / valor do contrato) x 100." className="inline-flex cursor-help text-gray-400">
+              <Info className="h-4 w-4" />
+            </span>
+          </div>
           <p
             className={`mt-1 whitespace-nowrap pr-1 text-[clamp(0.95rem,1.2vw,1.35rem)] font-bold leading-tight tracking-tight ${
               excedente > 0 ? "text-red-600" : "text-[#004225]"
@@ -587,7 +637,7 @@ export default function DesembolsoPage() {
           >
             {percentualPrevisto.toFixed(1)}%
           </p>
-          <div className="mt-2 h-2 w-full rounded-full bg-gray-200">
+          <div className="mt-2 h-2 w-full rounded-full bg-gray-200" title="Barra de progresso do planejamento de desembolso">
             <div
               className={`h-2 rounded-full transition-all ${
                 excedente > 0 ? "bg-red-600" : "bg-[#004225]"
@@ -595,10 +645,11 @@ export default function DesembolsoPage() {
               style={{ width: `${Math.min(percentualPrevisto, 100)}%` }}
             />
           </div>
+          <p className="mt-1 text-xs text-gray-500">Indicador de consumo do orçamento</p>
         </div>
-      </div>
+          </div>
 
-      {parcelas.length === 0 ? (
+          {parcelas.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-gray-50 py-12 text-center">
           <Calendar className="mx-auto mb-4 h-12 w-12 text-gray-400" />
           <p className="font-medium text-gray-700">Nenhuma parcela cadastrada</p>
@@ -617,8 +668,8 @@ export default function DesembolsoPage() {
             </button>
           )}
         </div>
-      ) : (
-        <ResizableTable
+          ) : (
+            <ResizableTable
           columnCount={canManageChildren ? 7 : 6}
           defaultWidths={[110, 160, 180, 140, 140, 320, ...(canManageChildren ? [120] : [])]}
           minColumnWidth={90}
@@ -719,7 +770,9 @@ export default function DesembolsoPage() {
               {canManageChildren && <td />}
             </tr>
           </tfoot>
-        </ResizableTable>
+            </ResizableTable>
+          )}
+        </>
       )}
 
       <AppModalShell

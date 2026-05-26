@@ -229,8 +229,11 @@ export default function ContratoLayout({
   const contratoId = params.contratoId as string;
   const autoEditRequested = searchParams.get("edit") === "true";
   const autoEditAppliedRef = useRef(false);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [isDescricaoExpanded, setIsDescricaoExpanded] = useState(false);
   const [isInfoComplementarExpanded, setIsInfoComplementarExpanded] = useState(false);
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
+  const [hasTitleOverflow, setHasTitleOverflow] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [contratoBase, setContratoBase] = useState<ContratoView>({
     ...EMPTY_CONTRATO,
@@ -286,6 +289,8 @@ export default function ContratoLayout({
 
   useEffect(() => {
     autoEditAppliedRef.current = false;
+    setIsTitleExpanded(false);
+    setHasTitleOverflow(false);
   }, [contratoId]);
 
   const loadSelectOptions = useCallback(async () => {
@@ -527,10 +532,12 @@ export default function ContratoLayout({
   };
 
   const currentContrato = isEditing ? editContrato : contrato;
+  const contractDisplayTitle = `${contrato.codigo} - ${contrato.titulo}`;
   const editPopupUrl = useMemo(
     () => `/contratos/novo-contrato?popup=1&editContractId=${contratoId}`,
     [contratoId]
   );
+  const shouldCheckLongTitle = contractDisplayTitle.trim().length > 120;
   const currentProjectStatus = (
     isEditing ? editContrato.status : contratoBase.status
   ) as ProjectStatusEnum;
@@ -567,6 +574,29 @@ export default function ContratoLayout({
       autoEditAppliedRef.current = true;
     }
   }, [autoEditRequested, canEditContrato, isEditing, handleEdit]);
+
+  useEffect(() => {
+    if (isEditing) {
+      setHasTitleOverflow(false);
+      return;
+    }
+
+    const measureTitleOverflow = () => {
+      const element = titleRef.current;
+      if (!element || isTitleExpanded) {
+        return;
+      }
+
+      setHasTitleOverflow(element.scrollHeight > element.clientHeight + 1);
+    };
+
+    measureTitleOverflow();
+    window.addEventListener("resize", measureTitleOverflow);
+
+    return () => {
+      window.removeEventListener("resize", measureTitleOverflow);
+    };
+  }, [contractDisplayTitle, isEditing, isTitleExpanded]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -741,7 +771,10 @@ export default function ContratoLayout({
             Contratos
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="min-w-0 flex-1 text-gray-900 font-medium break-words [overflow-wrap:anywhere]">
+          <span
+            className="min-w-0 flex-1 truncate text-gray-900 font-medium"
+            title={`${(isEditing ? editContrato : contrato).codigo} - ${(isEditing ? editContrato : contrato).titulo}`}
+          >
             {(isEditing ? editContrato : contrato).codigo} – {(isEditing ? editContrato : contrato).titulo}
           </span>
         </nav>
@@ -808,25 +841,41 @@ export default function ContratoLayout({
                     </select>
                   </div>
                 ) : (
-                  <div className="flex min-w-0 items-start gap-3 flex-wrap">
-                    <h1 className="text-2xl font-bold text-[#003319]">
+                  <div className="min-w-0 flex-1">
+                    <h1
+                      ref={titleRef}
+                      className={`min-w-0 text-2xl font-bold text-[#003319] break-words [overflow-wrap:anywhere] ${
+                        (hasTitleOverflow || shouldCheckLongTitle) && !isTitleExpanded ? "line-clamp-2" : ""
+                      }`}
+                    >
                       {contrato.codigo} – {contrato.titulo}
                     </h1>
-                    {currentContrato.unidade && (
-                      <span
-                        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${String(currentContrato.unidade).toUpperCase() === "GOV"
-                            ? "border-sky-200 bg-sky-50 text-sky-700"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          }`}
+                    {(hasTitleOverflow || isTitleExpanded) && (
+                      <button
+                        type="button"
+                        onClick={() => setIsTitleExpanded((current) => !current)}
+                        className="mt-2 text-sm font-medium text-[#004225] transition-colors hover:text-[#003319]"
                       >
-                        {String(currentContrato.unidade).toUpperCase()}
-                      </span>
+                        {isTitleExpanded ? "Ver menos" : "Ver mais"}
+                      </button>
                     )}
-                    {!isLoadingContrato && !loadContratoError && (
-                      <ExecutionModeBadge
-                        executedByInnovatis={currentContrato.executedByInnovatis === true}
-                      />
-                    )}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      {currentContrato.unidade && (
+                        <span
+                          className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${String(currentContrato.unidade).toUpperCase() === "GOV"
+                              ? "border-sky-200 bg-sky-50 text-sky-700"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            }`}
+                        >
+                          {String(currentContrato.unidade).toUpperCase()}
+                        </span>
+                      )}
+                      {!isLoadingContrato && !loadContratoError && (
+                        <ExecutionModeBadge
+                          executedByInnovatis={currentContrato.executedByInnovatis === true}
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
                 {/* Temporarily hidden:

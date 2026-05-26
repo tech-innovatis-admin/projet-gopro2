@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ContractAuditLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import { AuditLogCard } from "@/src/components/audit/AuditLogCard";
 import { BudgetTransferSummary } from "@/src/components/audit/BudgetTransferSummary";
 import { getProjectById } from "@/src/lib/api/endpoints";
@@ -31,7 +32,7 @@ import {
   resolveBudgetReferenceEntityLabel,
 } from "@/src/lib/audit/budget-reference-presentation";
 import { resolveUserNamesById } from "@/src/lib/audit/userLookup";
-import { fetchCurrentUser } from "@/src/lib/auth/session";
+import { canViewContractAudit, fetchCurrentUser } from "@/src/lib/auth/session";
 
 const PAGE_SIZE = 5;
 
@@ -286,7 +287,7 @@ export default function ContractAuditPage() {
       try {
         const user = await fetchCurrentUser();
         if (!cancelled) {
-          setCanView(Boolean(user));
+          setCanView(canViewContractAudit(user));
         }
       } finally {
         if (!cancelled) {
@@ -527,6 +528,18 @@ export default function ContractAuditPage() {
     return `Contrato ${contractId}`;
   }, [contractId, contractName, loadingContractName]);
 
+  if (loadingAccess || loading) {
+    return (
+      <div className="space-y-6">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold text-zinc-900">Auditoria</h2>
+          <p className="text-sm text-zinc-600">Ações realizadas no contrato.</p>
+        </header>
+        <ContractAuditLoadingSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <header className="space-y-1">
@@ -542,7 +555,9 @@ export default function ContractAuditPage() {
 
       {!loadingAccess && !canView && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm text-amber-800">Não foi possível validar o acesso a auditoria deste contrato.</p>
+          <p className="text-sm text-amber-800">
+            A auditoria deste contrato é restrita a admin, superadmin e owner.
+          </p>
         </section>
       )}
 

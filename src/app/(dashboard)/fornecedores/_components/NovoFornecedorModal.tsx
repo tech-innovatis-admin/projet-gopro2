@@ -288,6 +288,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
         observacoes: formData.observacoes.trim() || undefined,
         status: "ATIVO",
       });
+      resetFormState();
       onClose();
     } catch (error) {
       const fallback = getUserErrorMessage(error, "Nao foi possivel cadastrar o fornecedor.");

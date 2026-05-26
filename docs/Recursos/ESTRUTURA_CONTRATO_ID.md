@@ -132,9 +132,19 @@ O módulo `[contratoId]` está localizado em `src/app/(dashboard)/contratos/[con
 - Remoção de rubricas e itens
 - Cálculo automático de totais por rubrica e total geral
 - Resumo por rubrica no final da página
+- Vínculo opcional do item de rubrica com pessoa ou empresa já vinculada ao projeto
+- Cadastro de nova pessoa e nova empresa diretamente no fluxo de criação do item de rubrica
+- Reaproveitamento dos modais oficiais de cadastro usados em `/contratos/[contratoId]/equipe-tecnica` e `/contratos/[contratoId]/empresas`
+- Preenchimento automático do beneficiário do item após cadastrar ou vincular pessoa/empresa ao projeto
+- Modal de empresa em rubricas e empresas expõe seleção de status contratual (`EM_CADASTRO`, `EM_CONTRATACAO`, `CONTRATADA`, `EM_EXECUCAO`, `CONCLUIDA`, `CANCELADA`)
+- No fluxo de rubricas, se o status não for informado, o fallback é `CONTRATADA` para permitir lançamento financeiro imediato do item
+- Ao criar novo item de rubrica com beneficiário empresa no mesmo contrato, o vínculo da empresa no projeto acumula `totalValue` com o valor total do item
+- Ao criar novo item de rubrica com beneficiário pessoa no mesmo contrato, o vínculo da pessoa no projeto acumula `baseAmount` com o valor total do item
+- O sistema bloqueia o desvinculamento de empresa ou pessoa do contrato quando existir item de rubrica ativo vinculado ao respectivo vínculo no projeto
 
 **Componentes:**
-- `_components/`: (pasta vazia no momento, preparada para componentes futuros)
+- `_components/CompanyFormModal.tsx`: modal compartilhado de cadastro/edição de empresa do projeto
+- `_components/MemberFormModal.tsx`: modal compartilhado de cadastro/edição de pessoa do projeto
 
 **Ordem de Exibição para o Usuário:** 4ª aba
 
@@ -171,6 +181,7 @@ O módulo `[contratoId]` está localizado em `src/app/(dashboard)/contratos/[con
   - Outras informações relevantes
 - Edição e remoção de membros
 - Visualização de papéis e responsabilidades
+- O formulário de cadastro/edição de pessoa fica centralizado em `_components/MemberFormModal.tsx` e também é usado pelo fluxo de rubricas
 
 **Ordem de Exibição para o Usuário:** 6ª aba
 
@@ -207,6 +218,7 @@ O módulo `[contratoId]` está localizado em `src/app/(dashboard)/contratos/[con
 - Acompanhamento de status de pagamento
 - Histórico de desembolsos realizados
 - Previsão de desembolsos futuros
+- Para pagamentos vinculados a empresa de rubrica, o payload financeiro usa `projectCompanyId` (vínculo da empresa no projeto); `organizationId` permanece apenas legado/compatibilidade
 
 **Ordem de Exibição para o Usuário:** 8ª aba
 

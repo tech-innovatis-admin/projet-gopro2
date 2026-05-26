@@ -34,6 +34,7 @@ import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
 import { Dropdown } from "@/components/ui/dropdown";
+import { ContractFilesLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 
 export type ContractDocumentCategory =
   | "CONTRATO"
@@ -488,10 +489,7 @@ export default function ArquivosPage() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#004225]" />
-          <p className="mt-2 text-sm text-gray-500">Carregando arquivos...</p>
-        </div>
+        <ContractFilesLoadingSkeleton />
       ) : filteredDocuments.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
           <UploadCloud className="mx-auto h-10 w-10 text-gray-300" />
