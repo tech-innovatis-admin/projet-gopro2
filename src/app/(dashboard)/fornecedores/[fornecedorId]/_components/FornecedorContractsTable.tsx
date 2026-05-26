@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import Link from "next/link";
 import { FileText, ExternalLink, ChevronDown, ChevronRight, Tag, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -137,9 +137,8 @@ export function FornecedorContractsTable({
               const avaliacaoNota = contrato.avaliacao?.nota || 0;
 
               return (
-                <>
+                <Fragment key={contrato.id}>
                   <tr
-                    key={contrato.id}
                     className={cn(
                       "hover:bg-gray-50 transition-colors",
                       hasRubricas && "cursor-pointer"
@@ -227,7 +226,7 @@ export function FornecedorContractsTable({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

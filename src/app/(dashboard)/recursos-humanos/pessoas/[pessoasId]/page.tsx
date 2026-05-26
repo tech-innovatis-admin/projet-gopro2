@@ -113,17 +113,7 @@ export default function PessoaDetalhesPage() {
   }, [router]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
-        <NavBar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-            <p className="mt-4 text-sm">Carregando pessoa...</p>
-          </div>
-        </main>
-      </div>
-    );
+    return <PessoaDetalhesLoadingSkeleton />;
   }
   if (!person) {
     return (
@@ -343,6 +333,58 @@ export default function PessoaDetalhesPage() {
               <p className="text-sm text-gray-700">{person.notes}</p>
             </div>
           )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function PessoaDetalhesLoadingSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+      <NavBar />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="animate-pulse space-y-6">
+          <div className="h-4 w-48 rounded bg-gray-200" />
+
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="h-20 w-20 rounded-full bg-gray-200" />
+                <div className="space-y-2">
+                  <div className="h-8 w-72 rounded bg-gray-200" />
+                  <div className="h-4 w-40 rounded bg-gray-200" />
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="h-4 w-56 rounded bg-gray-200" />
+                    <div className="h-4 w-40 rounded bg-gray-200" />
+                    <div className="h-4 w-44 rounded bg-gray-200" />
+                    <div className="h-4 w-36 rounded bg-gray-200" />
+                  </div>
+                </div>
+              </div>
+              <div className="h-10 w-36 rounded bg-gray-200" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={`pessoa-resumo-skeleton-${index}`} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="h-4 w-24 rounded bg-gray-200" />
+                <div className="mt-2 h-8 w-16 rounded bg-gray-200" />
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <div className="h-6 w-52 rounded bg-gray-200" />
+            </div>
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={`pessoa-projetos-skeleton-${index}`} className="h-12 rounded bg-gray-200" />
+              ))}
+            </div>
+          </div>
         </div>
       </main>
     </div>

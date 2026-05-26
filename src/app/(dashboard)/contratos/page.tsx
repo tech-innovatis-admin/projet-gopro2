@@ -1134,14 +1134,7 @@ export default function ContratosPage() {
             </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {loading ? (
-                  <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#004225]" />
-                        <span className="text-sm text-gray-500">Carregando contratos...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  <TableLoadingSkeleton />
                 ) : error ? (
                   <tr>
                     <td colSpan={10} className="px-6 py-12 text-center">
@@ -1374,6 +1367,22 @@ function Th({
 
 function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-4 py-3 ${className}`}>{children}</td>;
+}
+
+function TableLoadingSkeleton({ rows = 8, columns = 10 }: { rows?: number; columns?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <tr key={`contracts-loading-row-${rowIndex}`} className="animate-pulse">
+          {Array.from({ length: columns }).map((__, colIndex) => (
+            <td key={`contracts-loading-cell-${rowIndex}-${colIndex}`} className="px-4 py-3">
+              <div className="h-4 w-full rounded bg-gray-200" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
 }
 
 function SortIcon({ column, sortConfig }: { column: string; sortConfig: SortConfig }) {

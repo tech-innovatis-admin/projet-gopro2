@@ -546,19 +546,7 @@ export default function PerfilPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
-        <NavBar />
-        <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-13 lg:px-8">
-          <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white p-10 shadow-sm">
-            <div className="text-center">
-              <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-[#004225]" />
-              <p className="text-gray-600">Carregando perfil...</p>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
+    return <PerfilLoadingSkeleton />;
   }
 
   if (!currentUser) {
@@ -945,6 +933,62 @@ export default function PerfilPage() {
               </div>
             </div>
           ) : null}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function PerfilLoadingSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-zinc-100">
+      <NavBar />
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-13 lg:px-8">
+        <div className="animate-pulse space-y-6">
+          <header className="space-y-2">
+            <div className="h-9 w-56 rounded bg-gray-200" />
+            <div className="h-4 w-96 rounded bg-gray-200" />
+          </header>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="h-20 w-20 rounded-2xl bg-gray-200" />
+              <div className="flex-1 space-y-2">
+                <div className="h-6 w-64 rounded bg-gray-200" />
+                <div className="h-4 w-40 rounded bg-gray-200" />
+                <div className="h-4 w-80 rounded bg-gray-200" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="h-10 rounded bg-gray-200" />
+              <div className="h-10 rounded bg-gray-200" />
+            </div>
+          </div>
+
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-2">
+              <div className="h-6 w-44 rounded bg-gray-200" />
+              <div className="mt-2 h-4 w-80 rounded bg-gray-200" />
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={`perfil-action-skeleton-${index}`} className="h-32 rounded-xl bg-gray-200" />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="h-6 w-36 rounded bg-gray-200" />
+              <div className="mt-2 h-4 w-48 rounded bg-gray-200" />
+              <div className="mt-5 h-2 w-full rounded bg-gray-200" />
+              <div className="mt-5 space-y-3">
+                <div className="h-16 rounded-lg bg-gray-200" />
+                <div className="h-16 rounded-lg bg-gray-200" />
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>

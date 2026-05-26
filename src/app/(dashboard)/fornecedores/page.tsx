@@ -135,9 +135,7 @@ export default function FornecedoresPage() {
 
           <div className="h-[calc(100vh-300px)] min-h-[800px]">
             {isLoading ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">
-                Carregando fornecedores...
-              </div>
+              <FornecedoresLoadingSkeleton viewMode={viewMode} />
             ) : viewMode === "table" ? (
               <FornecedoresTable
                 fornecedores={filteredFornecedores}
@@ -162,6 +160,50 @@ export default function FornecedoresPage() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={(data) => void handleNovoFornecedor(data)}
       />
+    </div>
+  );
+}
+
+function FornecedoresLoadingSkeleton({ viewMode }: { viewMode: "table" | "grid" }) {
+  if (viewMode === "grid") {
+    return (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={`fornecedores-grid-loading-${index}`}
+            className="animate-pulse rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+          >
+            <div className="h-5 w-2/3 rounded bg-gray-200" />
+            <div className="mt-3 h-4 w-1/2 rounded bg-gray-200" />
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="h-12 rounded bg-gray-200" />
+              <div className="h-12 rounded bg-gray-200" />
+            </div>
+            <div className="mt-4 h-4 w-full rounded bg-gray-200" />
+            <div className="mt-2 h-4 w-5/6 rounded bg-gray-200" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+        <div className="h-4 w-72 animate-pulse rounded bg-gray-200" />
+      </div>
+      <div className="divide-y divide-gray-200">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <div key={`fornecedores-table-loading-${index}`} className="grid animate-pulse grid-cols-6 gap-4 px-4 py-4">
+            <div className="h-4 rounded bg-gray-200" />
+            <div className="h-4 rounded bg-gray-200" />
+            <div className="h-4 rounded bg-gray-200" />
+            <div className="h-4 rounded bg-gray-200" />
+            <div className="h-4 rounded bg-gray-200" />
+            <div className="h-4 rounded bg-gray-200" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
