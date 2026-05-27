@@ -1,17 +1,27 @@
+ "use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 export default function NotFound() {
+  const [frameReady, setFrameReady] = useState(false);
+
   return (
     <main className="relative min-h-screen overflow-hidden">
       <iframe
         src="/ceo-easteregg.html"
         title="Easter egg"
         className="absolute inset-0 h-full w-full border-0"
+        onLoad={() => setFrameReady(true)}
       />
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-black/45" />
 
-      <section className="relative z-10 flex min-h-screen items-end justify-center px-4 pb-16 md:pb-24">
+      <section
+        className={`relative z-10 flex min-h-screen items-end justify-center px-4 pb-16 transition-opacity duration-500 md:pb-24 ${
+          frameReady ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
         <div className="floating-card w-full max-w-3xl rounded-2xl border border-white/25 bg-black/35 p-5 text-white shadow-2xl backdrop-blur-lg md:p-6">
           <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
