@@ -111,6 +111,7 @@ const EMPTY_CONTRATO: ContratoView = {
   orgaoFinanciador: NO_INFO_LABEL,
   segmentos: [],
   localidade: NO_INFO_LABEL,
+  contaBancariaProjeto: NO_INFO_LABEL,
   executedByInnovatis: null,
   dataInicio: "",
   dataFim: "",
@@ -167,6 +168,7 @@ function mapProjectToContrato(
     orgaoFinanciador: names.secondaryClient,
     segmentos: normalizeSegments(project.areaSegmento),
     localidade: normalizeLocation(project.city, project.state, project.executionLocation),
+    contaBancariaProjeto: project.projectBankAccount || NO_INFO_LABEL,
     dataInicio: project.startDate ?? project.openingDate ?? "",
     dataFim: project.endDate ?? project.closingDate ?? "",
     dataRealInicio: project.openingDate ?? undefined,
@@ -682,6 +684,10 @@ export default function ContratoLayout({
         editContrato.localidade === NO_INFO_LABEL
           ? undefined
           : toOptionalText(editContrato.localidade),
+      projectBankAccount:
+        editContrato.contaBancariaProjeto === NO_INFO_LABEL
+          ? undefined
+          : toOptionalText(editContrato.contaBancariaProjeto),
     };
 
     try {
@@ -1332,6 +1338,35 @@ export default function ContratoLayout({
                           />
                         ) : (
                           <p className="text-sm font-medium text-gray-900">{contrato.localidade}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 group">
+                      <DollarSign className="h-5 w-5 text-gray-400 mt-0.5 group-hover:text-[#003319] transition-colors" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wide group-hover:text-[#003319] transition-colors cursor-default">
+                          Conta Bancária do Projeto
+                        </p>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={
+                              editContrato.contaBancariaProjeto === NO_INFO_LABEL
+                                ? ""
+                                : editContrato.contaBancariaProjeto || ""
+                            }
+                            onChange={(e) =>
+                              handleChange({
+                                contaBancariaProjeto: e.target.value.replace(/\D/g, "").slice(0, 30),
+                              })
+                            }
+                            placeholder="Somente números"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225] focus:border-[#004225]"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900">
+                            {contrato.contaBancariaProjeto || NO_INFO_LABEL}
+                          </p>
                         )}
                       </div>
                     </div>

@@ -11,6 +11,7 @@ export type Contrato = {
   orgaoFinanciador: string;
   segmentos: string[];
   localidade: string;
+  contaBancariaProjeto?: string;
   unidade?: string; // Unidade / IFES
   executedByInnovatis?: boolean | null;
   dataInicio: string;
