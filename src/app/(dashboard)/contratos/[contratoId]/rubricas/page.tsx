@@ -88,6 +88,7 @@ import {
   type ProjectCompanyDetailedResponseDTO,
   type ProjectBudgetSummaryDTO,
   type RoleProjectPeopleEnum,
+  type StatusProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -1229,7 +1230,7 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkPerson = async () => {
     if (!hasRequiredMemberFields(newPersonForm)) {
-      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa antes de salvar.');
+      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
       return;
     }
 
@@ -1263,8 +1264,8 @@ export default function RubricasPage() {
         phone: toOptional(phone),
         birthDate: toOptional(newPersonForm.birthDate),
         address: toOptional(newPersonForm.endereco),
-        city: newPersonForm.city.trim(),
-        state: newPersonForm.state.trim().toUpperCase(),
+        city: toOptional(newPersonForm.city),
+        state: toOptional(newPersonForm.state)?.toUpperCase(),
         notes: toOptional(newPersonForm.notes),
       };
 
@@ -1278,7 +1279,7 @@ export default function RubricasPage() {
         contractType: newPersonForm.contractType || undefined,
         startDate: toOptional(newPersonForm.startDate),
         endDate: toOptional(newPersonForm.endDate),
-        status: newPersonForm.status || undefined,
+        status: newPersonForm.status as StatusProjectPeopleEnum,
         baseAmount:
           typeof newPersonForm.baseAmount === 'number'
             ? newPersonForm.baseAmount
@@ -1331,7 +1332,7 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkCompany = async () => {
     if (!hasRequiredCompanyFields(newCompanyForm)) {
-      setCreateCompanyModalError('Preencha todos os campos obrigatórios da empresa antes de salvar.');
+      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
       return;
     }
     const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
@@ -1354,11 +1355,11 @@ export default function RubricasPage() {
         name: newCompanyForm.razaoSocial!.trim(),
         tradeName: newCompanyForm.nomeFantasia!.trim(),
         cnpj: cnpjDigits,
-        email: newCompanyForm.email!.trim(),
-        phone: onlyDigits(newCompanyForm.telefone),
-        address: newCompanyForm.endereco!.trim(),
-        city: newCompanyForm.cidade!.trim(),
-        state: newCompanyForm.uf!.trim().toUpperCase(),
+        email: toOptional(newCompanyForm.email),
+        phone: toOptional(onlyDigits(newCompanyForm.telefone)),
+        address: toOptional(newCompanyForm.endereco),
+        city: toOptional(newCompanyForm.cidade),
+        state: toOptional(newCompanyForm.uf)?.toUpperCase(),
         responsiblePersonId: newCompanyForm.responsavelPersonId
           ? Number(newCompanyForm.responsavelPersonId)
           : undefined,
@@ -1373,7 +1374,7 @@ export default function RubricasPage() {
         endDate: toOptional(newCompanyForm.dataFim),
         notes: toOptional(newCompanyForm.observacao),
         isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
-        status: newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS,
+        status: newCompanyForm.status as ContractingStatusEnum,
         createdBy: actorUserId,
       });
       const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();

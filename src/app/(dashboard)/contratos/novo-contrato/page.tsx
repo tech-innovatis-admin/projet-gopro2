@@ -161,6 +161,7 @@ type NovoContratoForm = {
   dataFimEfetivo: string;
   uf: string;
   cidade: string;
+  contaBancariaProjeto: string;
   scope: string;
   contract_value: string;
   metas: Meta[];
@@ -309,6 +310,7 @@ const initialFormState: NovoContratoForm = {
   dataFimEfetivo: "",
   uf: "",
   cidade: "",
+  contaBancariaProjeto: "",
   scope: "",
   contract_value: "",
   metas: [],
@@ -490,6 +492,7 @@ function mapProjectToForm(project: ProjectResponseDTO): NovoContratoForm {
     dataFimEfetivo: project.closingDate ?? "",
     uf: (project.state ?? fallbackLocation.state ?? "").toUpperCase(),
     cidade: project.city ?? fallbackLocation.city ?? "",
+    contaBancariaProjeto: project.projectBankAccount ?? "",
     scope: project.object ?? "",
     contract_value: formatCurrencyInputValue(project.contractValue),
   };
@@ -635,6 +638,7 @@ function NovoContratoPageContent() {
       projectGovIf: "govIf",
       projectType: "tipo",
       contractValue: "contract_value",
+      projectBankAccount: "contaBancariaProjeto",
       endDate: "dataFim",
       startDate: "dataInicio",
       state: "uf",
@@ -1129,6 +1133,11 @@ function NovoContratoPageContent() {
         return "";
       case "cidade":
         if (typeof value !== "string" || !value.trim()) return "Selecione ou informe a cidade";
+        return "";
+      case "contaBancariaProjeto":
+        if (typeof value !== "string" || !value.trim()) return "";
+        if (!/^\d+$/.test(value.trim())) return "Informe apenas numeros da conta";
+        if (value.trim().length > 30) return "Numero da conta deve ter no maximo 30 digitos";
         return "";
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
@@ -2146,6 +2155,7 @@ function NovoContratoPageContent() {
       city,
       state,
       executionLocation,
+      projectBankAccount: normalizeOptionalText(formData.contaBancariaProjeto),
       executedByInnovatis: formData.executedByInnovatis,
     };
   };
@@ -3055,6 +3065,29 @@ function NovoContratoPageContent() {
                   ) : null}
                 </FormField>
               </div>
+
+              <FormField
+                label="Numero da conta do projeto"
+                error={errors.contaBancariaProjeto}
+                icon={<Building2 className="h-4 w-4" />}
+              >
+                <input
+                  type="text"
+                  value={form.contaBancariaProjeto}
+                  onChange={(e) =>
+                    handleChange("contaBancariaProjeto", e.target.value.replace(/\D/g, ""))
+                  }
+                  onBlur={() => handleBlur("contaBancariaProjeto")}
+                  inputMode="numeric"
+                  maxLength={30}
+                  placeholder="Ex.: 1234567890"
+                  className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                    errors.contaBancariaProjeto
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
+                />
+              </FormField>
 
               {/* Objeto do Contrato (Scope) */}
               <FormField

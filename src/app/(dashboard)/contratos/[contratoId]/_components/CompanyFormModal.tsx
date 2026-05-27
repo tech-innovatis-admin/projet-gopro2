@@ -43,11 +43,7 @@ export function hasRequiredCompanyFields(formData: Partial<CompanyFormData>) {
     !isBlank(formData.razaoSocial) &&
     !isBlank(formData.nomeFantasia) &&
     !isBlank(formData.cnpj) &&
-    !isBlank(formData.email) &&
-    !isBlank(formData.telefone) &&
-    !isBlank(formData.endereco) &&
-    !isBlank(formData.cidade) &&
-    !isBlank(formData.uf)
+    !isBlank(formData.status)
   );
 }
 
@@ -208,10 +204,10 @@ export function CompanyFormModal({
             <Field label="CNPJ" required>
               <input type="text" value={formData.cnpj || ''} onChange={(event) => setFormData({ ...formData, cnpj: formatCnpj(event.target.value) })} maxLength={18} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="00.000.000/0000-00" />
             </Field>
-            <Field label="E-mail" required>
+            <Field label="E-mail">
               <input type="email" value={formData.email || ''} onChange={(event) => setFormData({ ...formData, email: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="email@empresa.com.br" />
             </Field>
-            <Field label="Telefone" required>
+            <Field label="Telefone">
               <input type="text" value={formData.telefone || ''} onChange={(event) => setFormData({ ...formData, telefone: formatPhone(event.target.value) })} maxLength={15} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="(00) 00000-0000" />
             </Field>
             <Field label="CEP">
@@ -225,13 +221,13 @@ export function CompanyFormModal({
                 {zipCodeLookupError ? <p className="text-xs text-red-600">{zipCodeLookupError}</p> : null}
               </div>
             </Field>
-            <Field label="Endereco" required className="md:col-span-2">
+            <Field label="Endereco" className="md:col-span-2">
               <input type="text" value={formData.endereco || ''} onChange={(event) => setFormData({ ...formData, endereco: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Rua, numero e bairro" />
             </Field>
-            <Field label="Cidade" required>
+            <Field label="Cidade">
               <input type="text" value={formData.cidade || ''} onChange={(event) => setFormData({ ...formData, cidade: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Cidade" />
             </Field>
-            <Field label="UF" required>
+            <Field label="UF">
               <input type="text" value={formData.uf || ''} onChange={(event) => setFormData({ ...formData, uf: event.target.value.toUpperCase().slice(0, 2) })} maxLength={2} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="UF" />
             </Field>
             <div className="md:col-span-2">
@@ -266,7 +262,7 @@ export function CompanyFormModal({
             <Field label="Observacoes" className="md:col-span-2">
               <textarea value={formData.observacao || ''} onChange={(event) => setFormData({ ...formData, observacao: event.target.value })} rows={3} className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Observacoes adicionais" />
             </Field>
-            <Field label="Status do Contrato">
+            <Field label="Status do Contrato" required>
               <Dropdown
                 options={[
                   { value: 'EM_CADASTRO', label: 'Em cadastro' },

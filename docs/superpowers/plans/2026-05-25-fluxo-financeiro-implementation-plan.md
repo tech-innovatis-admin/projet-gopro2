@@ -96,6 +96,16 @@
   - se uma pessoa já recebe no projeto como `project_people`, ela não pode receber via empresa da qual é responsável no mesmo projeto.
   - se uma empresa está vinculada ao projeto com responsável, esse responsável não pode receber como pessoa no mesmo projeto.
   - validação aplicada nos fluxos de item de rubrica/beneficiário e criação/edição de despesas.
+- [x] Regra de obrigatoriedade de cadastro ajustada ponta a ponta:
+  - Pessoa: obrigatórios apenas `nome completo` e `CPF`.
+  - Empresa: obrigatórios apenas `razão social` (`name`), `nome fantasia` (`tradeName`) e `CNPJ`.
+  - Campos de contato/endereço de empresa passaram a opcionais no backend e banco (`companies.email/phone/address/city/state` sem `NOT NULL`).
+- [x] Conta bancária do projeto adicionada ponta a ponta como campo opcional:
+  - Banco/API: coluna `projects.project_bank_account` com migrações:
+    - `db/migration/core/V145__add_project_bank_account.sql`
+    - `db/migration/prod/V057__add_project_bank_account.sql`
+  - Backend: DTOs de projeto (create/update/response) atualizados.
+  - Frontend: formulário de contrato exibe e persiste o campo em informações complementares.
 - [x] Renderizar card com `contractValue`, `totalBudgetItems`, `difference`, `remainingAmount`, `exceededAmount`, `plannedPercentage`.
 - [x] Exibir alerta visual para `isExceeded = true`.
 - [x] Revalidar summary após criar/editar/excluir rubrica e após remanejamentos que afetem total.

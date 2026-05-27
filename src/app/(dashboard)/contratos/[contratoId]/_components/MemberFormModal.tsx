@@ -67,9 +67,7 @@ function isBlank(value?: string) {
 export function hasRequiredMemberFields(formData: MembroFormData) {
   return (
     !isBlank(formData.nome) &&
-    !isBlank(formData.papel) &&
-    !isBlank(formData.city) &&
-    !isBlank(formData.state)
+    !isBlank(formData.status)
   );
 }
 
@@ -320,7 +318,7 @@ export function MemberFormModal({
               />
             </Field>
 
-            <Field label="Papel" required>
+            <Field label="Papel">
               <Dropdown
                 options={Object.entries(papelLabels).map(([value, label]) => ({
                   value,
@@ -429,7 +427,7 @@ export function MemberFormModal({
               />
             </Field>
 
-            <Field label="UF" required>
+            <Field label="UF">
               <Dropdown
                 options={ufOptions}
                 value={formData.state || undefined}
@@ -454,7 +452,7 @@ export function MemberFormModal({
               ) : null}
             </Field>
 
-            <Field label="Cidade" required>
+            <Field label="Cidade">
               {allowManualCityEntry && formData.state ? (
                 <input
                   type="text"
@@ -531,7 +529,7 @@ export function MemberFormModal({
                 disabled={isSaving}
                 className="w-full"
               />
-            </Field>            <Field label="Status">
+            </Field>            <Field label="Status" required>
               <Dropdown
                 options={[
                   { value: "", label: "Não informado" },

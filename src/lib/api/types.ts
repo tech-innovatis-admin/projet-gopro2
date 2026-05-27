@@ -411,11 +411,11 @@ export interface CompanyRequestDTO {
   name: string;
   tradeName: string;
   cnpj: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
   responsiblePersonId?: number | null;
   createdBy?: number;
 }
@@ -478,6 +478,7 @@ export interface ProjectResponseDTO {
   city: string | null;
   state: string | null;
   executionLocation: string | null;
+  projectBankAccount: string | null;
   executedByInnovatis: boolean | null;
   isActive: boolean;
   totalReceived: number | null;
@@ -512,6 +513,7 @@ export interface ProjectRequestDTO {
   city?: string;
   state?: string;
   executionLocation?: string;
+  projectBankAccount?: string;
   executedByInnovatis: boolean;
   createdBy?: number;
 }
