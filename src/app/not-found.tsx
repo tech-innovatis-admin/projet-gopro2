@@ -1,10 +1,15 @@
  "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function NotFound() {
   const [frameReady, setFrameReady] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFrameReady(true), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden">
