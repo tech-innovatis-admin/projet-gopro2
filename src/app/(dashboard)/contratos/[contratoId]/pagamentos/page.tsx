@@ -107,7 +107,7 @@ type ItemRubrica = {
   valorBaseOrcado: number;
   remanejamentoDebito: number;
   remanejamentoCredito: number;
-  beneficiaryType?: 'person' | 'company' | null;
+  beneficiaryType?: 'person' | 'company' | 'partner' | null;
   projectPeopleId?: ID;
   projectCompanyId?: ID;
 };

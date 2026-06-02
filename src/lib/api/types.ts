@@ -1121,7 +1121,8 @@ export interface BudgetItemResponseDTO {
   goalId: number | null;
   projectPeopleId: number | null;
   projectCompanyId: number | null;
-  beneficiaryType: 'person' | 'company' | null;
+  projectPartnerId: number | null;
+  beneficiaryType: 'person' | 'company' | 'partner' | null;
   contractedAmount: number | null;
   notes: string | null;
   webs: string | null;
@@ -1145,7 +1146,8 @@ export interface BudgetItemRequestDTO {
   goalId?: number | null;
   projectPeopleId?: number | null;
   projectCompanyId?: number | null;
-  beneficiaryType?: 'person' | 'company' | null;
+  projectPartnerId?: number | null;
+  beneficiaryType?: 'person' | 'company' | 'partner' | null;
   contractedAmount?: number | null;
   notes?: string;
   webs?: string;
@@ -1159,7 +1161,7 @@ export interface BudgetItemUpdateDTO extends Partial<BudgetItemRequestDTO> {
 }
 
 export interface BudgetItemBeneficiaryAssignRequestDTO {
-  beneficiaryType: 'person' | 'company';
+  beneficiaryType: 'person' | 'company' | 'partner';
   referenceId: number;
   contractedAmount: number;
 }

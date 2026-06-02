@@ -111,7 +111,7 @@ type Lancamento = {
   valor: number;
   dataPag: string;
 };
-type BeneficiaryType = 'person' | 'company';
+type BeneficiaryType = 'person' | 'company' | 'partner';
 
 function toOptional(value?: string) {
   const trimmed = value?.trim();
@@ -150,6 +150,7 @@ interface ItemRubrica {
   valorFinal?: number;
   projectPeopleId?: string;
   projectCompanyId?: string;
+  projectPartnerId?: string;
   beneficiaryType?: BeneficiaryType;
   beneficiaryReferenceId?: string;
   unlinkedItem?: boolean;
@@ -168,6 +169,19 @@ interface ProjectCompanyOption {
   availableBalance?: number | null;
   totalValue?: number | null;
 }
+
+interface ProjectPartnerOption {
+  id: string;
+  label: string;
+  partnerType: 'IF' | 'FUNDACAO';
+}
+
+type ProjectPartnerData = {
+  id: number;
+  partnerName: string;
+  partnerTradeName: string | null;
+  partnerType: 'IF' | 'FUNDACAO';
+};
 
 interface Rubrica {
   id: string;
@@ -623,6 +637,7 @@ export default function RubricasPage() {
   const [metas, setMetas] = useState<MetaOption[]>([]);
   const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
   const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
+  const [projectPartnerOptions, setProjectPartnerOptions] = useState<ProjectPartnerOption[]>([]);
   const [budgetSummary, setBudgetSummary] = useState<ProjectBudgetSummaryDTO | null>(null);
   const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
   const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
@@ -789,6 +804,7 @@ export default function RubricasPage() {
       setMetas([]);
       setProjectPeopleOptions([]);
       setProjectCompanyOptions([]);
+      setProjectPartnerOptions([]);
       setAvailablePeople([]);
       setAvailableCompanies([]);
       setRemanejamentos([]);
@@ -808,6 +824,7 @@ export default function RubricasPage() {
         allPeople,
         allCompanies,
         summary,
+        allProjectPartners,
       ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
@@ -820,6 +837,10 @@ export default function RubricasPage() {
         fetchAllPages((query) => listPeople(query)),
         fetchAllPages((query) => listCompanies(query)),
         getProjectBudgetSummary(projectId),
+        fetch(`/api/backend/contracts/${projectId}/parceiros?size=200`)
+          .then((r) => r.ok ? (r.json() as Promise<{ content: ProjectPartnerData[] }>) : { content: [] })
+          .then((d) => d.content)
+          .catch(() => [] as ProjectPartnerData[]),
       ]);
       setBudgetSummary(summary);
 
@@ -853,6 +874,18 @@ export default function RubricasPage() {
         .map(buildProjectCompanyOption)
         .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
       setProjectCompanyOptions(projectCompanies);
+
+      setProjectPartnerOptions(
+        allProjectPartners
+          .map((pp) => ({
+            id: String(pp.id),
+            label: pp.partnerTradeName?.trim()
+              ? `${pp.partnerTradeName.trim()} — ${pp.partnerName}`
+              : pp.partnerName,
+            partnerType: pp.partnerType,
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+      );
 
       const projectPeopleIds = new Set(
         allProjectPeople.filter((item) => item.projectId === projectId).map((item) => item.personId)
@@ -914,12 +947,15 @@ export default function RubricasPage() {
           protocol: item.protocol ?? undefined,
           projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
           projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
+          projectPartnerId: item.projectPartnerId ? String(item.projectPartnerId) : undefined,
           beneficiaryType: item.beneficiaryType ?? undefined,
           beneficiaryReferenceId: item.projectPeopleId
             ? String(item.projectPeopleId)
             : item.projectCompanyId
               ? String(item.projectCompanyId)
-              : undefined,
+              : item.projectPartnerId
+                ? String(item.projectPartnerId)
+                : undefined,
           subitens: [],
         };
 
@@ -1065,6 +1101,13 @@ export default function RubricasPage() {
         return `Pessoa: ${personLabel}`;
       }
 
+      if (item.beneficiaryType === 'partner') {
+        const partnerLabel =
+          projectPartnerOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
+          `Parceiro #${item.beneficiaryReferenceId}`;
+        return `Parceiro: ${partnerLabel}`;
+      }
+
       const company = projectCompanyOptions.find(
         (option) => option.id === item.beneficiaryReferenceId
       );
@@ -1075,7 +1118,7 @@ export default function RubricasPage() {
       const cnpj = formatCnpjCompact(company.cnpj);
       return `Empresa: ${company.name}${cnpj ? ` (${cnpj})` : ''}`;
     },
-    [projectCompanyOptions, projectPeopleOptions]
+    [projectCompanyOptions, projectPartnerOptions, projectPeopleOptions]
   );
 
   const resolveProjectCompanyLabel = useCallback(
@@ -1149,6 +1192,7 @@ export default function RubricasPage() {
       ...current,
       projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
       projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
+      projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
       beneficiaryType: type,
       beneficiaryReferenceId: referenceId,
       unlinkedItem: false,
@@ -1162,6 +1206,7 @@ export default function RubricasPage() {
             ...current,
             projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
             projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
+            projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
             beneficiaryType: type,
             beneficiaryReferenceId: referenceId,
             unlinkedItem: false,
@@ -1823,6 +1868,10 @@ export default function RubricasPage() {
           !newItem.unlinkedItem && newItem.projectCompanyId
             ? toPersistedId(newItem.projectCompanyId)
             : null,
+        projectPartnerId:
+          !newItem.unlinkedItem && newItem.beneficiaryType === 'partner' && newItem.projectPartnerId
+            ? toPersistedId(newItem.projectPartnerId)
+            : null,
         notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
         webs: toOptional(newItem.webs),
         serviceOrder: toOptional(newItem.serviceOrder),
@@ -1975,6 +2024,10 @@ export default function RubricasPage() {
         projectCompanyId:
           !editForm.unlinkedItem && editForm.projectCompanyId
             ? toPersistedId(editForm.projectCompanyId)
+            : null,
+        projectPartnerId:
+          !editForm.unlinkedItem && editForm.beneficiaryType === 'partner' && editForm.projectPartnerId
+            ? toPersistedId(editForm.projectPartnerId)
             : null,
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
         webs: toOptional(editForm.webs),
@@ -3203,6 +3256,7 @@ export default function RubricasPage() {
                     options={[
                       { value: 'person', label: 'Pessoa do projeto' },
                       { value: 'company', label: 'Empresa do projeto' },
+                      { value: 'partner', label: 'IF / Fundação' },
                     ]}
                     value={newItem.beneficiaryType}
                     placeholder="Selecione"
@@ -3213,6 +3267,7 @@ export default function RubricasPage() {
                         beneficiaryReferenceId: undefined,
                         projectPeopleId: undefined,
                         projectCompanyId: undefined,
+                        projectPartnerId: undefined,
                       }))
                     }
                     disabled={isSubmitting}
@@ -3236,7 +3291,9 @@ export default function RubricasPage() {
                       ? projectPeopleOptions
                       : newItem.beneficiaryType === 'company'
                         ? projectCompanyOptions
-                        : []
+                        : newItem.beneficiaryType === 'partner'
+                          ? projectPartnerOptions
+                          : []
                     ).map((option) => ({ value: option.id, label: option.label }))}
                     value={newItem.beneficiaryReferenceId}
                     placeholder={
@@ -3244,7 +3301,9 @@ export default function RubricasPage() {
                         ? 'Selecione primeiro o tipo de vínculo'
                         : newItem.beneficiaryType === 'company'
                           ? 'Selecione a empresa do projeto'
-                          : 'Selecione a pessoa do projeto'
+                          : newItem.beneficiaryType === 'partner'
+                            ? 'Selecione o IF / Fundação'
+                            : 'Selecione a pessoa do projeto'
                     }
                     onChange={(value) =>
                       setNewItem((current) => ({
@@ -3254,6 +3313,8 @@ export default function RubricasPage() {
                           current.beneficiaryType === 'person' ? value ?? undefined : current.projectPeopleId,
                         projectCompanyId:
                           current.beneficiaryType === 'company' ? value ?? undefined : current.projectCompanyId,
+                        projectPartnerId:
+                          current.beneficiaryType === 'partner' ? value ?? undefined : current.projectPartnerId,
                       }))
                     }
                     disabled={isSubmitting || !newItem.beneficiaryType}
@@ -3645,6 +3706,7 @@ export default function RubricasPage() {
                     options={[
                       { value: 'person', label: 'Pessoa do projeto' },
                       { value: 'company', label: 'Empresa do projeto' },
+                      { value: 'partner', label: 'IF / Fundação' },
                     ]}
                     value={editForm.beneficiaryType}
                     placeholder="Selecione"
@@ -3657,6 +3719,7 @@ export default function RubricasPage() {
                               beneficiaryReferenceId: undefined,
                               projectPeopleId: undefined,
                               projectCompanyId: undefined,
+                              projectPartnerId: undefined,
                             }
                           : current
                       )
@@ -3682,7 +3745,9 @@ export default function RubricasPage() {
                       ? projectPeopleOptions
                       : editForm.beneficiaryType === 'company'
                         ? projectCompanyOptions
-                        : []
+                        : editForm.beneficiaryType === 'partner'
+                          ? projectPartnerOptions
+                          : []
                     ).map((option) => ({ value: option.id, label: option.label }))}
                     value={editForm.beneficiaryReferenceId}
                     placeholder={
@@ -3690,7 +3755,9 @@ export default function RubricasPage() {
                         ? 'Selecione primeiro o tipo de vínculo'
                         : editForm.beneficiaryType === 'company'
                           ? 'Selecione a empresa do projeto'
-                          : 'Selecione a pessoa do projeto'
+                          : editForm.beneficiaryType === 'partner'
+                            ? 'Selecione o IF / Fundação'
+                            : 'Selecione a pessoa do projeto'
                     }
                     onChange={(value) =>
                       setEditForm((current) =>
@@ -3706,6 +3773,10 @@ export default function RubricasPage() {
                                 current.beneficiaryType === 'company'
                                   ? value ?? undefined
                                   : current.projectCompanyId,
+                              projectPartnerId:
+                                current.beneficiaryType === 'partner'
+                                  ? value ?? undefined
+                                  : current.projectPartnerId,
                             }
                           : current
                       )
