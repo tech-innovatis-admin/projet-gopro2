@@ -82,7 +82,7 @@ isAuthenticated = false
 ```
 
 **Comportamento Correto**: ✅
-- APIs retornam `401 Unauthorized` (não redirecionam)
+- APIs protegidas retornam `401 Unauthorized` (não redirecionam)
 - Páginas redirecionam para `/login`
 
 ---
@@ -115,7 +115,7 @@ const isAuthApi = pathname.startsWith('/api/auth');
 - `POST /api/auth/logout` - Logout
 - `GET /api/auth/me` - Verificar autenticação atual
 
-⚠️ **ATENÇÃO**: `/api/auth/me` é público, mas retorna informações do usuário se autenticado. Isso é aceitável pois não expõe dados sensíveis sem autenticação.
+⚠️ **ATENÇÃO**: `/api/auth/me` não é barrado pelo proxy, mas responde `401` quando não há sessão válida e só retorna dados do usuário quando autenticado.
 
 ### Matcher do Middleware
 
@@ -179,7 +179,7 @@ Todas as páginas dentro de `src/app/(dashboard)/` são **protegidas por padrão
 |----------|--------|-----------|--------------|
 | `/api/auth/login` | POST | Login do usuário | ❌ Não requer |
 | `/api/auth/logout` | POST | Logout do usuário | ⚠️ Não requer (mas deveria) |
-| `/api/auth/me` | GET | Verificar autenticação atual | ⚠️ Não requer (mas retorna dados se autenticado) |
+| `/api/auth/me` | GET | Verificar autenticação atual | ✅ Requer sessão válida para retornar 200 |
 
 ### Endpoints Protegidos (`/api/backend/*`)
 
@@ -336,9 +336,9 @@ Todas as páginas dentro de `src/app/(dashboard)/` são **protegidas por padrão
 
 **Status**: ✅ **Protegido por verificação de ambiente**, mas requer atenção
 
-#### 5. Endpoint `/api/auth/me` Expõe Informações sem Validação Rigorosa
+#### 5. Endpoint `/api/auth/me` Depende Exclusivamente do Token
 
-**Problema**: O endpoint `/api/auth/me` é público, mas retorna informações do usuário se um token válido estiver presente. Não há validação adicional além do token.
+**Comportamento atual**: O endpoint `/api/auth/me` responde `401` quando não há sessão válida e retorna dados do usuário apenas quando o token é aceito pelo backend. A validação continua concentrada no token apresentado.
 
 **Localização**: `src/app/api/auth/me/route.ts`
 
@@ -371,7 +371,7 @@ Todas as páginas dentro de `src/app/(dashboard)/` são **protegidas por padrão
 | Endpoint | Método | Problema | Severidade |
 |----------|--------|----------|------------|
 | `/api/auth/logout` | POST | Não requer autenticação | 🟡 Baixa |
-| `/api/auth/me` | GET | Público mas retorna dados se autenticado | 🟢 Aceitável |
+| `/api/auth/me` | GET | Retorna `401` sem sessão válida | 🟢 Aceitável |
 
 **Conclusão**: ✅ **Nenhum endpoint crítico está exposto indevidamente.**
 

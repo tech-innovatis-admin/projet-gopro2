@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listMyNotifications } from "@/src/lib/api/endpoints";
+import { fetchCurrentUser } from "@/src/lib/auth/session";
 import { type AuthNotificationResponseDTO } from "@/src/lib/api/types";
 import {
   loadReadNotificationIds,
@@ -228,21 +229,9 @@ export function NavBar() {
 
     async function loadCurrentUser() {
       try {
-        const response = await fetch("/api/auth/me", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          if (!cancelled) {
-            setCurrentUser(null);
-          }
-          return;
-        }
-
-        const data = await response.json();
-        if (!cancelled && data?.isAuthenticated && data?.user) {
-          setCurrentUser(data.user as SessionUser);
+        const user = await fetchCurrentUser();
+        if (!cancelled) {
+          setCurrentUser(user);
         }
       } catch {
         if (!cancelled) {
