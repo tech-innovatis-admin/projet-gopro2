@@ -511,6 +511,11 @@ export default function ContratoLayout({
       href: `/contratos/${contratoId}/empresas`,
       description: "Empresas vinculadas",
     },
+    {
+      label: "Parceiros",
+      href: `/contratos/${contratoId}/parceiros`,
+      description: "Parceiros vinculados",
+    },
     ...(canViewAuditTab
       ? [
           {

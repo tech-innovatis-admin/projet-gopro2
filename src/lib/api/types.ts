@@ -709,13 +709,13 @@ export interface DisbursementScheduleRequestDTO {
   numero: number;
   expectedMonth: string;
   expectedAmount: number;
-  status: StatusDisbursementScheduleEnum;
+  status?: StatusDisbursementScheduleEnum;
   notes?: string;
   createdBy?: number;
 }
 
 export interface DisbursementScheduleUpdateDTO
-  extends Partial<DisbursementScheduleRequestDTO> {
+  extends Omit<Partial<DisbursementScheduleRequestDTO>, "status"> {
   updatedBy?: number;
 }
 
