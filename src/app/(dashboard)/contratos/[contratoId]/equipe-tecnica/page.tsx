@@ -171,9 +171,7 @@ function isBlank(value?: string) {
 function hasRequiredMemberFields(formData: MembroFormData) {
   return (
     !isBlank(formData.nome) &&
-    !isBlank(formData.papel) &&
-    !isBlank(formData.city) &&
-    !isBlank(formData.state)
+    !isBlank(formData.status)
   );
 }
 
@@ -272,6 +270,7 @@ export default function EquipeTecnicaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -355,6 +354,7 @@ export default function EquipeTecnicaPage() {
     setAvatarFile(null);
     setCpfError("");
     setPhoneError("");
+    setModalError(null);
   };
 
   const closeMemberFormModal = () => {
@@ -667,9 +667,7 @@ export default function EquipeTecnicaPage() {
       return;
     }
     if (!hasRequiredMemberFields(formData)) {
-      setActionError(
-        "Preencha os campos obrigatórios: nome, papel, cidade e estado.",
-      );
+      setModalError("Preencha os campos obrigatórios: nome completo e status.");
       return;
     }
 
@@ -697,6 +695,7 @@ export default function EquipeTecnicaPage() {
     try {
       setIsSaving(true);
       setActionError(null);
+      setModalError(null);
       const actorUserId = await requireCurrentUserId();
 
       let personId = editingMembro?.personId;
@@ -750,8 +749,6 @@ export default function EquipeTecnicaPage() {
           startDate: toOptional(formData.startDate),
           endDate: toOptional(formData.endDate),
           status: formData.status || undefined,
-          baseAmount:
-            typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
           notes: toOptional(formData.notes),
           updatedBy: actorUserId,
         });
@@ -773,8 +770,6 @@ export default function EquipeTecnicaPage() {
               startDate: toOptional(formData.startDate),
               endDate: toOptional(formData.endDate),
               status: formData.status || undefined,
-              baseAmount:
-                typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
               notes: toOptional(formData.notes),
               createdBy: actorUserId,
             },
@@ -821,7 +816,7 @@ export default function EquipeTecnicaPage() {
         setActionError(warnings.join(" "));
       }
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível salvar o membro."));
+      setModalError(getErrorMessage(error, "Não foi possível salvar o membro."));
     } finally {
       setIsSaving(false);
     }
@@ -1188,6 +1183,7 @@ export default function EquipeTecnicaPage() {
           setCpfError={setCpfError}
           phoneError={phoneError}
           setPhoneError={setPhoneError}
+          errorMessage={modalError}
         />
       )}
 

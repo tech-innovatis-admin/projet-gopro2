@@ -5,7 +5,6 @@ import { Trash2, UserCircle, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
-import { MoneyInput } from "../desembolso/_components/MoneyImput";
 import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
 import {
   formatCPF,
@@ -57,7 +56,6 @@ export type MembroFormData = {
   status: StatusProjectPeopleEnum | "";
   startDate: string;
   endDate: string;
-  baseAmount: number | "";
 };
 
 function isBlank(value?: string) {
@@ -89,7 +87,6 @@ export function defaultMemberFormData(): MembroFormData {
     status: "",
     startDate: "",
     endDate: "",
-    baseAmount: "",
   };
 }
 export function MemberFormModal({
@@ -164,7 +161,6 @@ export function MemberFormModal({
     formData.status !== "" ||
     formData.startDate.trim().length > 0 ||
     formData.endDate.trim().length > 0 ||
-    (typeof formData.baseAmount === "number" && formData.baseAmount > 0) ||
     formData.endereco.trim().length > 0 ||
     formData.notes.trim().length > 0 ||
     Boolean(avatarFile);
@@ -232,8 +228,8 @@ export function MemberFormModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#004225] to-[#00563A] text-white flex-shrink-0">
           <div className="flex items-center gap-3">
             <UserCircle className="h-6 w-6" />
             <h2 className="text-lg font-bold">
@@ -249,12 +245,7 @@ export function MemberFormModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-          {errorMessage ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {errorMessage}
-            </div>
-          ) : null}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
@@ -320,6 +311,32 @@ export function MemberFormModal({
               />
               {hasAttemptedSave && !formData.nome.trim() ? (
                 <p className="text-xs text-red-600">{fieldErrors?.nome || 'Informe o nome da pessoa.'}</p>
+              ) : null}
+            </Field>
+
+            <Field label="Status" required>
+              <Dropdown
+                options={[
+                  { value: "", label: "Não informado" },
+                  { value: "PENDENTE", label: "Pendente" },
+                  { value: "ATIVO", label: "Ativo" },
+                  { value: "ENCERRADO", label: "Encerrado" },
+                ]}
+                value={formData.status || ""}
+                onChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    status: (value || "") as StatusProjectPeopleEnum | "",
+                  }))
+                }
+                placeholder="Não informado"
+                disabled={isSaving}
+                className={`w-full ${
+                  hasAttemptedSave && !formData.status ? 'border border-red-300' : ''
+                }`}
+              />
+              {hasAttemptedSave && !formData.status ? (
+                <p className="text-xs text-red-600">{fieldErrors?.status || 'Informe o status da pessoa.'}</p>
               ) : null}
             </Field>
 
@@ -535,31 +552,6 @@ export function MemberFormModal({
                 className="w-full"
               />
             </Field>
-            <Field label="Status" required>
-              <Dropdown
-                options={[
-                  { value: "", label: "Não informado" },
-                  { value: "PENDENTE", label: "Pendente" },
-                  { value: "ATIVO", label: "Ativo" },
-                  { value: "ENCERRADO", label: "Encerrado" },
-                ]}
-                value={formData.status || ""}
-                onChange={(value) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    status: (value || "") as StatusProjectPeopleEnum | "",
-                  }))
-                }
-                placeholder="Não informado"
-                disabled={isSaving}
-                className={`w-full ${
-                  hasAttemptedSave && !formData.status ? 'border border-red-300' : ''
-                }`}
-              />
-              {hasAttemptedSave && !formData.status ? (
-                <p className="text-xs text-red-600">{fieldErrors?.status || 'Informe o status da pessoa.'}</p>
-              ) : null}
-            </Field>
 
             <Field label="Data iní­cio">
               <DatePicker
@@ -572,24 +564,6 @@ export function MemberFormModal({
               <DatePicker
                 value={formData.endDate}
                 onChange={(value) => setFormData((prev) => ({ ...prev, endDate: value }))}
-              />
-            </Field>
-
-            <Field label="Valor base (R$)">
-              <MoneyInput
-                valueCents={
-                  typeof formData.baseAmount === "number" && Number.isFinite(formData.baseAmount)
-                    ? Math.round(formData.baseAmount * 100)
-                    : 0
-                }
-                onValueChange={(valueCents) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    baseAmount: valueCents > 0 ? valueCents / 100 : "",
-                  }))
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#004225]"
-                placeholder="R$ 0,00"
               />
             </Field>
 
@@ -615,7 +589,15 @@ export function MemberFormModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+        <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50">
+          {errorMessage ? (
+            <div className="px-6 pt-3">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between px-6 py-4">
           <div>
             {isEditingItem && onDelete && (
               <button
@@ -653,6 +635,7 @@ export function MemberFormModal({
                   ? "Salvar alterações"
                   : "Adicionar pessoa"}
             </button>
+          </div>
           </div>
         </div>
       </div>
