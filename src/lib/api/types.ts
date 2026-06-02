@@ -285,9 +285,9 @@ export interface PartnerResponseDTO {
 export interface PartnerRequestDTO {
   acronym?: string;
   name: string;
-  tradeName: string;
+  tradeName?: string;
   partnersType: PartnersTypeEnum;
-  cnpj: string;
+  cnpj?: string;
   email?: string;
   phone?: string;
   address?: string;
