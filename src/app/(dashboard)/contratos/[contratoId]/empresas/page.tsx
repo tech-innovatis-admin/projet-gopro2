@@ -602,6 +602,7 @@ export default function EmpresasPage() {
       await createProjectCompany({
         projectId,
         companyId: selectedCompanyId,
+        status: "EM_CADASTRO",
         isIncubated: false,
         createdBy: actorUserId,
       });
