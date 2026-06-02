@@ -1,10 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertCircle, ArrowRight, FileText } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertCircle, ArrowRight, FileText, UploadCloud } from 'lucide-react';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { MoneyInput } from '../../desembolso/_components/MoneyImput';
+import {
+  DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatFileSize,
+  validateUploadFile,
+} from '@/src/lib/upload';
 
 interface ItemRubrica {
   id: string;
@@ -27,23 +33,26 @@ interface Rubrica {
   expanded: boolean;
 }
 
-interface RemanejamentoForm {
+export interface RemanejamentoForm {
   itemOrigemId: string;
   itemDestinoId: string;
   valor: number;
   data: string;
   motivo: string;
+  arquivo?: File | null;
 }
 
 interface RemanejamentoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (remanejamento: RemanejamentoForm) => void;
+  onConfirm: (remanejamento: RemanejamentoForm) => Promise<void> | void;
   itemOrigem: ItemRubrica;
   rubricas: Rubrica[];
+  isSubmitting?: boolean;
 }
 
 const REMANEJAMENTO_FORM_ID = 'rubrica-remanejamento-form';
+const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg';
 
 function createInitialForm(itemOrigemId: string): RemanejamentoForm {
   return {
@@ -52,6 +61,7 @@ function createInitialForm(itemOrigemId: string): RemanejamentoForm {
     valor: 0,
     data: new Date().toISOString().split('T')[0],
     motivo: '',
+    arquivo: null,
   };
 }
 
@@ -61,14 +71,18 @@ export function RemanejamentoModal({
   onConfirm,
   itemOrigem,
   rubricas,
+  isSubmitting = false,
 }: RemanejamentoModalProps) {
   const [form, setForm] = useState<RemanejamentoForm>(() => createInitialForm(itemOrigem.id));
   const [errors, setErrors] = useState<Record<string, string>>({});
+
   const hasFilledData =
     form.itemDestinoId.length > 0 ||
     form.valor > 0 ||
     form.motivo.trim().length > 0 ||
-    form.data !== createInitialForm(itemOrigem.id).data;
+    form.data !== createInitialForm(itemOrigem.id).data ||
+    Boolean(form.arquivo);
+
   const resetForm = () => {
     setForm(createInitialForm(itemOrigem.id));
     setErrors({});
@@ -119,20 +133,41 @@ export function RemanejamentoModal({
       nextErrors.motivo = 'O motivo deve ter pelo menos 10 caracteres.';
     }
 
+    if (form.arquivo) {
+      const fileValidationError = validateUploadFile({
+        file: form.arquivo,
+        maxBytes: UPLOAD_MAX_FILE_SIZE_BYTES,
+        allowedMimeTypes: DOCUMENT_UPLOAD_ALLOWED_MIME_TYPES,
+        allowedTypesLabel: 'PDF, DOC, DOCX, XLS, XLSX, PNG, JPG e JPEG',
+      });
+
+      if (fileValidationError) {
+        nextErrors.arquivo = fileValidationError;
+      }
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (validateForm()) {
-      onConfirm(form);
-      onClose();
+    if (!validateForm()) {
+      return;
     }
+
+    await onConfirm(form);
   };
 
   const itemDestinoSelecionado = todosItens.find((item) => item.id === form.itemDestinoId);
+  const arquivoSelecionadoLabel = useMemo(() => {
+    if (!form.arquivo) {
+      return null;
+    }
+
+    return `${form.arquivo.name} (${formatFileSize(form.arquivo.size)})`;
+  }, [form.arquivo]);
 
   if (!isOpen) {
     return null;
@@ -149,21 +184,24 @@ export function RemanejamentoModal({
       maxWidthClassName="max-w-3xl"
       isDirty={hasFilledData}
       onDiscardConfirm={resetForm}
+      closeDisabled={isSubmitting}
       footer={({ requestClose }) => (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={requestClose}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            disabled={isSubmitting}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             type="submit"
             form={REMANEJAMENTO_FORM_ID}
-            className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319]"
+            disabled={isSubmitting}
+            className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Confirmar remanejamento
+            {isSubmitting ? 'Salvando...' : 'Confirmar remanejamento'}
           </button>
         </div>
       )}
@@ -201,6 +239,7 @@ export function RemanejamentoModal({
           <select
             value={form.itemDestinoId}
             onChange={(event) => setForm({ ...form, itemDestinoId: event.target.value })}
+            disabled={isSubmitting}
             className={`w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
               errors.itemDestinoId ? 'border-red-500' : 'border-slate-300 focus:border-[#004225]'
             }`}
@@ -242,6 +281,7 @@ export function RemanejamentoModal({
               onValueChange={(cents) => {
                 setForm({ ...form, valor: cents / 100 });
               }}
+              disabled={isSubmitting}
               maxCents={Math.round(saldoDisponivel * 100)}
               className={`w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
                 errors.valor ? 'border-red-500' : 'border-slate-300 focus:border-[#004225]'
@@ -261,6 +301,7 @@ export function RemanejamentoModal({
               placeholder="Selecione a data"
               error={Boolean(errors.data)}
               className="w-full"
+              disabled={isSubmitting}
             />
             {errors.data && <p className="mt-1 text-sm text-red-600">{errors.data}</p>}
           </div>
@@ -275,6 +316,7 @@ export function RemanejamentoModal({
             <textarea
               value={form.motivo}
               onChange={(event) => setForm({ ...form, motivo: event.target.value })}
+              disabled={isSubmitting}
               rows={4}
               className={`w-full rounded-xl border py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
                 errors.motivo ? 'border-red-500' : 'border-slate-300 focus:border-[#004225]'
@@ -284,6 +326,45 @@ export function RemanejamentoModal({
           </div>
           {errors.motivo && <p className="mt-1 text-sm text-red-600">{errors.motivo}</p>}
           <p className="mt-1 text-xs text-slate-500">{form.motivo.length} / 10 caracteres mínimos</p>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700">
+            Termo de remanejamento <span className="text-slate-400">(opcional)</span>
+          </label>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start gap-3">
+              <UploadCloud className="mt-0.5 h-4 w-4 text-slate-500" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <input
+                  type="file"
+                  accept={ACCEPTED_FILE_TYPES}
+                  disabled={isSubmitting}
+                  onChange={(event) => {
+                    const nextFile = event.target.files?.[0] ?? null;
+                    setForm((current) => ({ ...current, arquivo: nextFile }));
+                    setErrors((current) => {
+                      const nextErrors = { ...current };
+                      delete nextErrors.arquivo;
+                      return nextErrors;
+                    });
+                  }}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-[#004225] file:px-3 file:py-1.5 file:text-white hover:file:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <p className="text-xs text-slate-500">
+                  Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG e JPEG. Tamanho máximo:{' '}
+                  {formatFileSize(UPLOAD_MAX_FILE_SIZE_BYTES)}.
+                </p>
+                {arquivoSelecionadoLabel && (
+                  <div className="inline-flex items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs text-slate-700">
+                    <FileText className="h-3.5 w-3.5" />
+                    {arquivoSelecionadoLabel}
+                  </div>
+                )}
+              </div>
+            </div>
+            {errors.arquivo && <p className="mt-2 text-sm text-red-600">{errors.arquivo}</p>}
+          </div>
         </div>
 
         {form.valor > 0 && form.itemDestinoId && (

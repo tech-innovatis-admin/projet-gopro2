@@ -16,7 +16,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { Dropdown } from '@/components/ui/dropdown';
-import { RemanejamentoModal } from './_components/RemanejamentoModal';
+import { RemanejamentoModal, type RemanejamentoForm } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
@@ -50,6 +50,7 @@ import {
   createPeople,
   createProjectCompany,
   createProjectPeople,
+  deleteDocument,
   deleteBudgetCategory,
   deleteBudgetItem,
   listBudgetCategories,
@@ -104,6 +105,7 @@ interface Remanejamento {
   valor: number;
   data: string;
   motivo: string;
+  documentId?: string | null;
   createdBy: string;
   createdAt: string;
   status?: 'PENDENTE' | 'APROVADO';
@@ -1023,6 +1025,7 @@ export default function RubricasPage() {
           valor: toSafeNumber(transfer.amount),
           data: transfer.transferDate || '',
           motivo: transfer.reason || '',
+          documentId: transfer.documentId,
           createdBy: transfer.createdBy
             ? (transferCreatorNames[transfer.createdBy] ?? `ID ${transfer.createdBy}`)
             : '-',
@@ -2381,13 +2384,7 @@ export default function RubricasPage() {
     setRemanejamentoModalOpen(true);
   };
 
-  const handleConfirmarRemanejamento = async (form: {
-    itemOrigemId: string;
-    itemDestinoId: string;
-    valor: number;
-    data: string;
-    motivo: string;
-  }) => {
+  const handleConfirmarRemanejamento = async (form: RemanejamentoForm) => {
     if (!ensureCanManageChildren()) return;
     if (!Number.isFinite(projectId)) {
       setActionError('ID do contrato inválido para remanejamento.');
@@ -2413,9 +2410,23 @@ export default function RubricasPage() {
     setIsSubmitting(true);
     setActionError(null);
     setSavedMessage(null);
+    let uploadedDocumentId: string | null = null;
+    let transferCreated = false;
 
     try {
       const actorUserId = await requireCurrentUserId();
+
+      if (form.arquivo) {
+        const uploadedDocument = await uploadDocument({
+          file: form.arquivo,
+          ownerType: 'PROJECT',
+          ownerId: projectId,
+          category: 'TERMO_REMANEJAMENTO',
+        });
+
+        uploadedDocumentId = uploadedDocument.id;
+      }
+
       const payload: BudgetTransferRequestDTO = {
         projectId,
         fromItemId: toPersistedId(form.itemOrigemId),
@@ -2424,15 +2435,24 @@ export default function RubricasPage() {
         transferDate: form.data,
         status: 'APROVADO',
         reason: form.motivo.trim(),
+        documentId: uploadedDocumentId ?? undefined,
         createdBy: actorUserId,
       };
 
       await createBudgetTransfer(payload);
+      transferCreated = true;
       await loadData();
       setRemanejamentoModalOpen(false);
       setItemParaRemanejamento(null);
       showSavedMessage('Remanejamento registrado com sucesso.');
     } catch (error) {
+      if (uploadedDocumentId && !transferCreated) {
+        try {
+          await deleteDocument(uploadedDocumentId);
+        } catch {
+          // Ignora falha de limpeza compensatória.
+        }
+      }
       setActionError(toErrorMessage(error, 'Não foi possível registrar o remanejamento.'));
     } finally {
       setIsSubmitting(false);

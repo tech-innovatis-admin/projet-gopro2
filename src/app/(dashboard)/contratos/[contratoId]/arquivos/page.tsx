@@ -20,6 +20,9 @@ import {
   UploadCloud,
 } from "lucide-react";
 import {
+  listBudgetCategories,
+  listBudgetItems,
+  listBudgetTransfers,
   deleteDocument,
   generateDocumentDownloadUrl,
   listDocumentsByOwner,
@@ -29,7 +32,13 @@ import {
   canManageContractChildren,
   fetchCurrentUser,
 } from "@/src/lib/auth/session";
-import { type DocumentResponseDTO } from "@/src/lib/api/types";
+import {
+  type BudgetCategoryResponseDTO,
+  type BudgetItemResponseDTO,
+  type BudgetTransferResponseDTO,
+  type DocumentResponseDTO,
+  type PageResponseDTO,
+} from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { NovoArquivoModal } from "./_components/NovoArquivoModal";
 import { EditarArquivoModal } from "./_components/EditarArquivoModal";
@@ -50,6 +59,7 @@ export type ContractDocumentCategory =
   | "NOTA_FISCAL"
   | "TED"
   | "COMPROVANTES"
+  | "TERMO_REMANEJAMENTO"
   | "OUTRO";
 
 type FilterCategory = ContractDocumentCategory | "ALL";
@@ -62,6 +72,12 @@ export type ContractDocument = {
   sizeBytes: number;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+type TransferDocumentContext = {
+  transferId: number;
+  originLabel: string;
+  destinationLabel: string;
 };
 
 const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
@@ -78,6 +94,7 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
   NOTA_FISCAL: "Nota Fiscal",
   TED: "TED",
   COMPROVANTES: "Comprovantes",
+  TERMO_REMANEJAMENTO: "Termo de Remanejamento",
   OUTRO: "Outros",
 };
 
@@ -95,8 +112,12 @@ const CATEGORY_OPTIONS: ContractDocumentCategory[] = [
   "NOTA_FISCAL",
   "TED",
   "COMPROVANTES",
+  "TERMO_REMANEJAMENTO",
   "OUTRO",
 ];
+
+const PAGE_SIZE = 50;
+const MAX_PAGE_REQUESTS = 200;
 
 function normalizeCategory(value: string | null): ContractDocumentCategory {
   if (!value) return "OUTRO";
@@ -170,6 +191,42 @@ type ReplacePayload = {
   file: File;
 };
 
+async function fetchAllPages<T>(
+  fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let page = 0;
+
+  for (let attempt = 0; attempt < MAX_PAGE_REQUESTS; attempt += 1) {
+    const response = await fetchPage({ page, size: PAGE_SIZE });
+    allItems.push(...response.content);
+    if (response.last) {
+      break;
+    }
+    page += 1;
+  }
+
+  return allItems;
+}
+
+function buildRubricaItemLabel(
+  itemId: number,
+  items: Map<number, BudgetItemResponseDTO>,
+  categories: Map<number, BudgetCategoryResponseDTO>
+): string {
+  const item = items.get(itemId);
+  if (!item) {
+    return `Item #${itemId}`;
+  }
+
+  const category = categories.get(item.categoryId);
+  const rubricaLabel = category
+    ? `[${category.code || `RUB-${category.id}`}] ${category.name}`
+    : `Rubrica #${item.categoryId}`;
+
+  return `${rubricaLabel} • ${item.description}`;
+}
+
 export default function ArquivosPage() {
   const params = useParams();
   const contratoId = params.contratoId as string;
@@ -185,6 +242,9 @@ export default function ArquivosPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [transferContextsByDocumentId, setTransferContextsByDocumentId] = useState<
+    Record<string, TransferDocumentContext>
+  >({});
 
   const [filterCategory, setFilterCategory] = useState<FilterCategory>("ALL");
   const [expandedCategories, setExpandedCategories] = useState<
@@ -232,6 +292,7 @@ export default function ArquivosPage() {
     if (!hasValidOwner) {
       setError("ID de contrato inválido para buscar documentos.");
       setDocuments([]);
+      setTransferContextsByDocumentId({});
       return;
     }
 
@@ -239,13 +300,35 @@ export default function ArquivosPage() {
     setError(null);
 
     try {
-      const response = await listDocumentsByOwner({
-        ownerType: "PROJECT",
-        ownerId,
-      });
+      const [response, transfers, budgetItems, budgetCategories] = await Promise.all([
+        listDocumentsByOwner({
+          ownerType: "PROJECT",
+          ownerId,
+        }),
+        fetchAllPages((query) => listBudgetTransfers({ ...query, projectId: ownerId })),
+        fetchAllPages((query) => listBudgetItems({ ...query, projectId: ownerId })),
+        fetchAllPages((query) => listBudgetCategories({ ...query, projectId: ownerId })),
+      ]);
 
       const mapped = response.map(mapDocument);
+      const itemMap = new Map(budgetItems.map((item) => [item.id, item]));
+      const categoryMap = new Map(budgetCategories.map((category) => [category.id, category]));
+      const nextTransferContextsByDocumentId: Record<string, TransferDocumentContext> = {};
+
+      transfers.forEach((transfer: BudgetTransferResponseDTO) => {
+        if (!transfer.documentId) {
+          return;
+        }
+
+        nextTransferContextsByDocumentId[transfer.documentId] = {
+          transferId: transfer.id,
+          originLabel: buildRubricaItemLabel(transfer.fromItemId, itemMap, categoryMap),
+          destinationLabel: buildRubricaItemLabel(transfer.toItemId, itemMap, categoryMap),
+        };
+      });
+
       setDocuments(mapped);
+      setTransferContextsByDocumentId(nextTransferContextsByDocumentId);
       setExpandedCategories((previous) => {
         const next = { ...previous };
         mapped.forEach((item) => {
@@ -260,6 +343,7 @@ export default function ArquivosPage() {
         getErrorMessage(loadError, "Não foi possível carregar os documentos.")
       );
       setDocuments([]);
+      setTransferContextsByDocumentId({});
     } finally {
       setLoading(false);
     }
@@ -537,6 +621,7 @@ export default function ArquivosPage() {
                   <div className="divide-y divide-gray-100">
                     {items.map((item) => {
                       const isBusy = busyDocumentId === item.id;
+                      const transferContext = transferContextsByDocumentId[item.id];
                       return (
                         <div
                           key={item.id}
@@ -554,6 +639,19 @@ export default function ArquivosPage() {
                               {formatFileSize(item.sizeBytes)} •{" "}
                               {formatDate(item.createdAt)}
                             </p>
+                            {transferContext && (
+                              <div className="mt-1 space-y-1">
+                                <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                  Remanejamento #{transferContext.transferId}
+                                </span>
+                                <p className="text-xs text-gray-500">
+                                  Débito: {transferContext.originLabel}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Crédito: {transferContext.destinationLabel}
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1">
