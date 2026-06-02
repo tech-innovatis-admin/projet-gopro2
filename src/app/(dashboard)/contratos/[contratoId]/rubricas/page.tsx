@@ -63,8 +63,6 @@ import {
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
   updatePeople,
-  updateProjectPeople,
-  updateProjectCompany,
   updateBudgetCategory,
   updateBudgetItem,
   uploadDocument,
@@ -1240,7 +1238,7 @@ export default function RubricasPage() {
       const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), createdBy: actorUserId }),
+        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'EM_CADASTRO', createdBy: actorUserId }),
       });
       if (!res.ok) {
         const err = (await res.json()) as { message?: string };
@@ -1281,7 +1279,7 @@ export default function RubricasPage() {
       const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), createdBy: actorUserId }),
+        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'EM_CADASTRO', createdBy: actorUserId }),
       });
       if (!res.ok) {
         const err = (await res.json()) as { message?: string };
@@ -1315,7 +1313,7 @@ export default function RubricasPage() {
     const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, partnerId: created.id, createdBy: actorUserId }),
+      body: JSON.stringify({ projectId, partnerId: created.id, status: 'EM_CADASTRO', createdBy: actorUserId }),
     });
     if (!res.ok) {
       const err = (await res.json()) as { message?: string };
@@ -1620,12 +1618,6 @@ export default function RubricasPage() {
         startDate: toOptional(newPersonForm.startDate),
         endDate: toOptional(newPersonForm.endDate),
         status: newPersonForm.status as StatusProjectPeopleEnum,
-        baseAmount:
-          typeof newPersonForm.baseAmount === 'number'
-            ? newPersonForm.baseAmount
-            : draftItemTotal > 0
-              ? draftItemTotal
-              : undefined,
         notes: toOptional(newPersonForm.notes),
         createdBy: actorUserId,
       });
@@ -1647,12 +1639,7 @@ export default function RubricasPage() {
       appendProjectPersonOption({
         id: String(linked.id),
         label: newPersonForm.nome.trim(),
-        baseAmount:
-          typeof newPersonForm.baseAmount === 'number'
-            ? newPersonForm.baseAmount
-            : draftItemTotal > 0
-              ? draftItemTotal
-              : undefined,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
       });
       applyBeneficiarySelection('person', String(linked.id));
       setShowCreatePersonModal(false);
@@ -1728,12 +1715,6 @@ export default function RubricasPage() {
         startDate: toOptional(newPersonForm.startDate),
         endDate: toOptional(newPersonForm.endDate),
         status: newPersonForm.status as StatusProjectPeopleEnum,
-        baseAmount:
-          typeof newPersonForm.baseAmount === 'number'
-            ? newPersonForm.baseAmount
-            : draftItemTotal > 0
-              ? draftItemTotal
-              : undefined,
         notes: toOptional(newPersonForm.notes),
         createdBy: actorUserId,
       });
@@ -1755,12 +1736,7 @@ export default function RubricasPage() {
       appendProjectPersonOption({
         id: String(linked.id),
         label: newPersonForm.nome.trim(),
-        baseAmount:
-          typeof newPersonForm.baseAmount === 'number'
-            ? newPersonForm.baseAmount
-            : draftItemTotal > 0
-              ? draftItemTotal
-              : undefined,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
       });
       applyBeneficiarySelectionToEditForm('person', String(linked.id));
       setShowCreatePersonModal(false);
@@ -2032,37 +2008,6 @@ export default function RubricasPage() {
         protocol: toOptional(newItem.protocol),
         createdBy: actorUserId,
       };
-
-      const selectedProjectPeopleId =
-        !newItem.unlinkedItem && newItem.beneficiaryType === 'person'
-          ? (newItem.projectPeopleId ?? newItem.beneficiaryReferenceId)
-          : undefined;
-      const selectedPerson =
-        selectedProjectPeopleId
-          ? projectPeopleOptions.find((option) => option.id === selectedProjectPeopleId)
-          : null;
-
-      if (selectedPerson && selectedProjectPeopleId && isPersistedId(selectedProjectPeopleId)) {
-        const currentBaseAmount =
-          typeof selectedPerson.baseAmount === 'number' ? selectedPerson.baseAmount : 0;
-        const nextBaseAmount = Number((Math.max(0, currentBaseAmount) + valorTotal).toFixed(2));
-        await updateProjectPeople(toPersistedId(selectedProjectPeopleId), {
-          baseAmount: nextBaseAmount,
-          updatedBy: actorUserId,
-        });
-      }
-
-      if (selectedProjectCompanyId && isPersistedId(selectedProjectCompanyId)) {
-        const currentTotalValue =
-          selectedCompany && typeof selectedCompany.totalValue === 'number'
-            ? selectedCompany.totalValue
-            : 0;
-        const nextTotalValue = Number((Math.max(0, currentTotalValue) + valorTotal).toFixed(2));
-        await updateProjectCompany(toPersistedId(selectedProjectCompanyId), {
-          totalValue: nextTotalValue,
-          updatedBy: actorUserId,
-        });
-      }
 
       const createdItem = await createBudgetItem(basePayload);
       if (
@@ -4459,6 +4404,7 @@ export default function RubricasPage() {
             ? handleCreateAndLinkPartnerForEdit(data)
             : handleCreateAndLinkPartner(data)
         }
+        zIndexClassName="z-[200]"
       />
 
       {showCreatePersonModal ? (
