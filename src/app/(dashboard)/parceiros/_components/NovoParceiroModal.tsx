@@ -291,15 +291,6 @@ export function NovoParceiroModal({
     if (!form.tipo) {
       newErrors.tipo = "Selecione o tipo";
     }
-    if (!form.uf) {
-      newErrors.uf = "Selecione o UF";
-    }
-    if (!form.municipio.trim()) {
-      newErrors.municipio = "Município é obrigatório";
-    }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "E-mail inválido";
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -317,18 +308,18 @@ export function NovoParceiroModal({
     try {
       await onSubmit({
         nome: form.nome.trim(),
-        sigla: form.sigla.trim() || undefined,
+        sigla: form.sigla.trim(),
         tipo: form.tipo as ParceiroTipo,
-        cnpj: form.cnpj.trim() || undefined,
-        email: form.email.trim() || undefined,
-        telefone: form.telefone.trim() || undefined,
-        site: form.site.trim() || undefined,
-        cep: onlyDigits(form.cep) || undefined,
+        cnpj: form.cnpj.trim(),
+        email: form.email.trim(),
+        telefone: form.telefone.trim(),
+        site: form.site.trim(),
+        cep: onlyDigits(form.cep),
         uf: form.uf,
         municipio: form.municipio.trim(),
-        endereco: form.endereco.trim() || undefined,
+        endereco: form.endereco.trim(),
         status: form.status,
-        observacoes: form.observacoes.trim() || undefined,
+        observacoes: form.observacoes.trim(),
       });
 
       resetFormState();
@@ -501,7 +492,7 @@ export function NovoParceiroModal({
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <MapPin className="h-4 w-4 text-gray-400" />
-                    UF <span className="text-red-500">*</span>
+                    UF <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <Dropdown
                     options={UF_LIST.map((uf) => ({ label: uf, value: uf }))}
@@ -527,7 +518,7 @@ export function NovoParceiroModal({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Município <span className="text-red-500">*</span>
+                    Município <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   {allowManualMunicipioEntry && form.uf ? (
                     <input

@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
@@ -41,8 +41,6 @@ export function onlyDigits(value?: string) {
 export function hasRequiredCompanyFields(formData: Partial<CompanyFormData>) {
   return (
     !isBlank(formData.razaoSocial) &&
-    !isBlank(formData.nomeFantasia) &&
-    !isBlank(formData.cnpj) &&
     !isBlank(formData.status)
   );
 }
@@ -116,6 +114,7 @@ type CompanyFormModalProps = {
   onClose: () => void;
   onDelete?: () => void;
   errorMessage?: string | null;
+  fieldErrors?: Partial<Record<'razaoSocial' | 'cnpj' | 'status', string>>;
 };
 
 export function CompanyFormModal({
@@ -128,9 +127,11 @@ export function CompanyFormModal({
   onClose,
   onDelete,
   errorMessage,
+  fieldErrors,
 }: CompanyFormModalProps) {
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
   const hasFilledData = Object.values(formData).some((value) => {
     if (typeof value === 'string') return value.trim().length > 0;
     if (typeof value === 'number') return value > 0;
@@ -142,6 +143,12 @@ export function CompanyFormModal({
     closeDisabled: isSaving,
     onClose,
   });
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHasAttemptedSave(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -196,13 +203,15 @@ export function CompanyFormModal({
           ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Razao Social" required>
-              <input type="text" value={formData.razaoSocial || ''} onChange={(event) => setFormData({ ...formData, razaoSocial: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Razao social da empresa" />
+              <input type="text" value={formData.razaoSocial || ''} onChange={(event) => setFormData({ ...formData, razaoSocial: event.target.value })} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${hasAttemptedSave && !formData.razaoSocial?.trim() ? 'border-red-300' : 'border-gray-300'}`} placeholder="Razao social da empresa" />
+              {hasAttemptedSave && !formData.razaoSocial?.trim() ? <p className="text-xs text-red-600">{fieldErrors?.razaoSocial || 'Informe a razão social.'}</p> : null}
             </Field>
-            <Field label="Nome Fantasia" required>
+            <Field label="Nome Fantasia">
               <input type="text" value={formData.nomeFantasia || ''} onChange={(event) => setFormData({ ...formData, nomeFantasia: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="Nome fantasia" />
             </Field>
-            <Field label="CNPJ" required>
-              <input type="text" value={formData.cnpj || ''} onChange={(event) => setFormData({ ...formData, cnpj: formatCnpj(event.target.value) })} maxLength={18} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="00.000.000/0000-00" />
+            <Field label="CNPJ">
+              <input type="text" value={formData.cnpj || ''} onChange={(event) => setFormData({ ...formData, cnpj: formatCnpj(event.target.value) })} maxLength={18} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${hasAttemptedSave && (!formData.cnpj || onlyDigits(formData.cnpj).length !== 14) ? 'border-red-300' : 'border-gray-300'}`} placeholder="00.000.000/0000-00" />
+              {hasAttemptedSave && (!formData.cnpj || onlyDigits(formData.cnpj).length !== 14) ? <p className="text-xs text-red-600">{fieldErrors?.cnpj || 'Informe um CNPJ válido.'}</p> : null}
             </Field>
             <Field label="E-mail">
               <input type="email" value={formData.email || ''} onChange={(event) => setFormData({ ...formData, email: event.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" placeholder="email@empresa.com.br" />
@@ -279,8 +288,9 @@ export function CompanyFormModal({
                     status: (value || 'EM_CADASTRO') as ContractingStatusEnum,
                   })
                 }
-                className="w-full"
+                className={`w-full ${hasAttemptedSave && !formData.status ? 'border border-red-300' : ''}`}
               />
+              {hasAttemptedSave && !formData.status ? <p className="text-xs text-red-600">{fieldErrors?.status || 'Informe o status do contrato.'}</p> : null}
             </Field>
           </div>
         </div>
@@ -295,7 +305,7 @@ export function CompanyFormModal({
           </div>
           <div className="flex items-center gap-3">
             <button onClick={requestClose} disabled={isSaving} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700">Cancelar</button>
-            <button onClick={onSave} disabled={isSaving || !hasRequiredCompanyFields(formData) || onlyDigits(formData.cnpj).length !== 14} className="rounded-lg bg-[#004225] px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+            <button onClick={() => { setHasAttemptedSave(true); onSave(); }} disabled={isSaving} className="rounded-lg bg-[#004225] px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50">
               {isSaving ? 'Salvando...' : isEditingItem ? 'Salvar Alteracoes' : 'Adicionar Empresa'}
             </button>
           </div>

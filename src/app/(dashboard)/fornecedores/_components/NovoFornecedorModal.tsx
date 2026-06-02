@@ -106,14 +106,7 @@ async function fetchViaCep(zipCode: string): Promise<ViaCepResponse | null> {
 
 function hasRequiredCompanyFields(formData: FormData) {
   return (
-    formData.nome.trim().length > 0 &&
-    formData.razaoSocial.trim().length > 0 &&
-    formData.cnpj.trim().length > 0 &&
-    formData.email.trim().length > 0 &&
-    formData.telefone.trim().length > 0 &&
-    formData.endereco.trim().length > 0 &&
-    formData.municipio.trim().length > 0 &&
-    formData.uf.trim().length > 0
+    formData.nome.trim().length > 0
   );
 }
 
@@ -259,16 +252,19 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
 
     if (!hasRequiredCompanyFields(formData)) {
       setGlobalError(
-        "Preencha os campos obrigatorios: razao social, nome fantasia, CNPJ, e-mail, telefone, endereco, cidade e UF.",
+        "Preencha os campos obrigatorios: nome e razao social.",
       );
       return;
     }
 
     const cnpjDigits = onlyDigits(formData.cnpj);
-    if (cnpjDigits.length !== 14) {
-      setFieldErrors((prev) => ({ ...prev, cnpj: "Informe um CNPJ valido com 14 digitos." }));
-      return;
-    }
+    const uf = formData.uf.trim().toUpperCase();
+    const municipio = formData.municipio.trim();
+    const endereco = formData.endereco.trim();
+    const email = formData.email.trim();
+    const telefone = formData.telefone.trim();
+    const razaoSocial = formData.razaoSocial.trim();
+    const observacoes = formData.observacoes.trim();
 
     setIsSaving(true);
     clearErrors();
@@ -276,16 +272,16 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
     try {
       await onSubmit({
         nome: formData.nome.trim(),
-        razaoSocial: formData.razaoSocial.trim(),
-        cnpj: cnpjDigits,
-        email: formData.email.trim(),
-        telefone: formData.telefone.trim(),
+        razaoSocial: razaoSocial || undefined,
+        cnpj: cnpjDigits || undefined,
+        email: email || undefined,
+        telefone: telefone || undefined,
         responsavelPersonId: formData.responsavelPersonId || undefined,
         cep: onlyDigits(formData.cep) || undefined,
-        uf: formData.uf.trim().toUpperCase(),
-        municipio: formData.municipio.trim(),
-        endereco: formData.endereco.trim(),
-        observacoes: formData.observacoes.trim() || undefined,
+        uf,
+        municipio,
+        endereco,
+        observacoes,
         status: "ATIVO",
       });
       resetFormState();
@@ -331,7 +327,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Nome Fantasia" required error={fieldErrors.razaoSocial}>
+            <Field label="Nome Fantasia" error={fieldErrors.razaoSocial}>
               <input
                 type="text"
                 value={formData.razaoSocial}
@@ -342,7 +338,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="CNPJ" required error={fieldErrors.cnpj}>
+            <Field label="CNPJ" error={fieldErrors.cnpj}>
               <input
                 type="text"
                 value={formData.cnpj}
@@ -354,7 +350,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="E-mail" required error={fieldErrors.email}>
+            <Field label="E-mail" error={fieldErrors.email}>
               <input
                 type="email"
                 value={formData.email}
@@ -365,7 +361,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Telefone" required error={fieldErrors.telefone}>
+            <Field label="Telefone" error={fieldErrors.telefone}>
               <input
                 type="text"
                 value={formData.telefone}
@@ -419,7 +415,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               </div>
             </Field>
 
-            <Field label="Endereco" required className="md:col-span-2" error={fieldErrors.endereco}>
+            <Field label="Endereco" className="md:col-span-2" error={fieldErrors.endereco}>
               <input
                 type="text"
                 value={formData.endereco}
@@ -430,7 +426,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               />
             </Field>
 
-            <Field label="Município" required error={fieldErrors.municipio}>
+            <Field label="Município" error={fieldErrors.municipio}>
               {allowManualMunicipioEntry && formData.uf ? (
                 <input
                   type="text"
@@ -462,7 +458,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
               ) : null}
             </Field>
 
-            <Field label="UF" required error={fieldErrors.uf}>
+            <Field label="UF" error={fieldErrors.uf}>
               <Dropdown
                 options={UF_LIST.map((uf) => ({ value: uf, label: uf }))}
                 value={formData.uf || undefined}
@@ -537,7 +533,7 @@ export function NovoFornecedorModal({ isOpen, onClose, onSubmit }: NovoFornecedo
             onClick={() => {
               void handleSubmit();
             }}
-            disabled={isSaving || !hasRequiredCompanyFields(formData) || onlyDigits(formData.cnpj).length !== 14}
+            disabled={isSaving || !hasRequiredCompanyFields(formData)}
             className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? (
