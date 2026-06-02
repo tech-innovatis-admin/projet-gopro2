@@ -38,6 +38,8 @@ import {
   unformatPhone,
   validatePhoneComplete,
 } from '../equipe-tecnica/_components/PhoneValidator';
+import { NovoParceiroModal } from '@/src/app/(dashboard)/parceiros/_components/NovoParceiroModal';
+import { mapParceiroFormToPartnerRequestDTO } from '@/src/app/(dashboard)/parceiros/mappers';
 import {
   createBudgetCategory,
   createBudgetItem,
@@ -666,10 +668,8 @@ export default function RubricasPage() {
   const [showLinkPartnerModal, setShowLinkPartnerModal] = useState(false);
   const [showCreatePartnerModal, setShowCreatePartnerModal] = useState(false);
   const [selectedPartnerToLink, setSelectedPartnerToLink] = useState<string | undefined>(undefined);
-  const [newPartnerForm, setNewPartnerForm] = useState<NewPartnerFormData>(emptyPartnerForm);
   const [linkPartnerModalError, setLinkPartnerModalError] = useState<string | null>(null);
   const [linkPartnerFieldError, setLinkPartnerFieldError] = useState<string | null>(null);
-  const [createPartnerModalError, setCreatePartnerModalError] = useState<string | null>(null);
   const [linkPartnerAttempted, setLinkPartnerAttempted] = useState(false);
   const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
   const [linkPersonFieldError, setLinkPersonFieldError] = useState<string | null>(null);
@@ -1305,86 +1305,40 @@ export default function RubricasPage() {
     }
   };
 
-  const handleCreateAndLinkPartner = async () => {
-    if (!newPartnerForm.name.trim() || !newPartnerForm.partnersType) {
-      setCreatePartnerModalError('Preencha o nome e o tipo do parceiro.');
-      return;
+  const handleCreateAndLinkPartnerInternal = async (
+    formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0],
+    applySelection: (type: BeneficiaryType, id: string) => void
+  ) => {
+    const actorUserId = await requireCurrentUserId();
+    const payload = mapParceiroFormToPartnerRequestDTO(formData);
+    const created = await createPartner({ ...payload, createdBy: actorUserId });
+    const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, partnerId: created.id, createdBy: actorUserId }),
+    });
+    if (!res.ok) {
+      const err = (await res.json()) as { message?: string };
+      throw new Error(err.message ?? 'Não foi possível vincular o parceiro ao contrato.');
     }
-    try {
-      setIsSubmitting(true);
-      setCreatePartnerModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const created = await createPartner({
-        name: newPartnerForm.name.trim(),
-        partnersType: newPartnerForm.partnersType,
-        createdBy: actorUserId,
-      });
-      const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: created.id, createdBy: actorUserId }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? 'Não foi possível vincular o parceiro ao contrato.');
-      }
-      const linked = (await res.json()) as ProjectPartnerData;
-      const partnerLabel = created.tradeName?.trim() || created.name;
-      appendProjectPartnerOption({
-        id: String(linked.id),
-        label: partnerLabel,
-        partnerType: created.partnersType,
-      });
-      applyBeneficiarySelection('partner', String(linked.id));
-      setShowCreatePartnerModal(false);
-      setNewPartnerForm(emptyPartnerForm());
-      showSavedMessage('Parceiro criado e vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreatePartnerModalError(toErrorMessage(error, 'Não foi possível criar o parceiro.'));
-    } finally {
-      setIsSubmitting(false);
-    }
+    const linked = (await res.json()) as ProjectPartnerData;
+    const partnerLabel = created.tradeName?.trim() || created.name;
+    appendProjectPartnerOption({
+      id: String(linked.id),
+      label: partnerLabel,
+      partnerType: created.partnersType,
+    });
+    applySelection('partner', String(linked.id));
+    setShowCreatePartnerModal(false);
+    showSavedMessage('Parceiro criado e vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
   };
 
-  const handleCreateAndLinkPartnerForEdit = async () => {
-    if (!newPartnerForm.name.trim() || !newPartnerForm.partnersType) {
-      setCreatePartnerModalError('Preencha o nome e o tipo do parceiro.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setCreatePartnerModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const created = await createPartner({
-        name: newPartnerForm.name.trim(),
-        partnersType: newPartnerForm.partnersType,
-        createdBy: actorUserId,
-      });
-      const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: created.id, createdBy: actorUserId }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? 'Não foi possível vincular o parceiro ao contrato.');
-      }
-      const linked = (await res.json()) as ProjectPartnerData;
-      const partnerLabel = created.tradeName?.trim() || created.name;
-      appendProjectPartnerOption({
-        id: String(linked.id),
-        label: partnerLabel,
-        partnerType: created.partnersType,
-      });
-      applyBeneficiarySelectionToEditForm('partner', String(linked.id));
-      setShowCreatePartnerModal(false);
-      setNewPartnerForm(emptyPartnerForm());
-      showSavedMessage('Parceiro criado e vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreatePartnerModalError(toErrorMessage(error, 'Não foi possível criar o parceiro.'));
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleCreateAndLinkPartner = async (formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0]) => {
+    await handleCreateAndLinkPartnerInternal(formData, applyBeneficiarySelection);
+  };
+
+  const handleCreateAndLinkPartnerForEdit = async (formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0]) => {
+    await handleCreateAndLinkPartnerInternal(formData, applyBeneficiarySelectionToEditForm);
   };
 
   const applyBeneficiarySelection = (type: BeneficiaryType, referenceId: string) => {
@@ -3627,8 +3581,6 @@ export default function RubricasPage() {
                       type="button"
                       onClick={() => {
                         setBeneficiaryModalContext('create');
-                        setNewPartnerForm(emptyPartnerForm());
-                        setCreatePartnerModalError(null);
                         setShowCreatePartnerModal(true);
                       }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
@@ -4123,8 +4075,6 @@ export default function RubricasPage() {
                       type="button"
                       onClick={() => {
                         setBeneficiaryModalContext('edit');
-                        setNewPartnerForm(emptyPartnerForm());
-                        setCreatePartnerModalError(null);
                         setShowCreatePartnerModal(true);
                       }}
                       disabled={isSubmitting}
@@ -4501,71 +4451,15 @@ export default function RubricasPage() {
         </div>
       </AppModalShell>
 
-      <AppModalShell
+      <NovoParceiroModal
         isOpen={showCreatePartnerModal}
-        title="Cadastrar novo IF / Fundação"
-        onClose={() => {
-          setShowCreatePartnerModal(false);
-          setNewPartnerForm(emptyPartnerForm());
-          setCreatePartnerModalError(null);
-        }}
-      >
-        <div className="space-y-4">
-          {createPartnerModalError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {createPartnerModalError}
-            </div>
-          ) : null}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">Nome <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={newPartnerForm.name}
-              onChange={(e) => setNewPartnerForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Nome do IF ou Fundação"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">Tipo <span className="text-red-500">*</span></label>
-            <Dropdown
-              options={[
-                { value: 'IF', label: 'Instituição Federal (IF)' },
-                { value: 'FUNDACAO', label: 'Fundação' },
-              ]}
-              value={newPartnerForm.partnersType || undefined}
-              placeholder="Selecione o tipo"
-              onChange={(value) => setNewPartnerForm((f) => ({ ...f, partnersType: (value as 'IF' | 'FUNDACAO') ?? '' }))}
-              className="w-full"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreatePartnerModal(false);
-                setNewPartnerForm(emptyPartnerForm());
-                setCreatePartnerModalError(null);
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                beneficiaryModalContext === 'edit'
-                  ? void handleCreateAndLinkPartnerForEdit()
-                  : void handleCreateAndLinkPartner()
-              }
-              disabled={isSubmitting || !newPartnerForm.name.trim() || !newPartnerForm.partnersType}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {isSubmitting ? 'Salvando...' : 'Cadastrar e vincular'}
-            </button>
-          </div>
-        </div>
-      </AppModalShell>
+        onClose={() => setShowCreatePartnerModal(false)}
+        onSubmit={(data) =>
+          beneficiaryModalContext === 'edit'
+            ? handleCreateAndLinkPartnerForEdit(data)
+            : handleCreateAndLinkPartner(data)
+        }
+      />
 
       {showCreatePersonModal ? (
         <MemberFormModal
