@@ -645,6 +645,7 @@ export default function RubricasPage() {
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ItemRubrica> | null>(null);
+  const [beneficiaryModalContext, setBeneficiaryModalContext] = useState<'create' | 'edit'>('create');
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>(createEmptyItemDraft);
   const [itemPendingDeletion, setItemPendingDeletion] = useState<{
@@ -1143,6 +1144,21 @@ export default function RubricasPage() {
     }));
   };
 
+  const applyBeneficiarySelectionToEditForm = (type: BeneficiaryType, referenceId: string) => {
+    setEditForm((current) =>
+      current
+        ? {
+            ...current,
+            projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
+            projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
+            beneficiaryType: type,
+            beneficiaryReferenceId: referenceId,
+            unlinkedItem: false,
+          }
+        : current
+    );
+  };
+
   const handleLinkExistingPerson = async () => {
     if (!selectedPersonToLink) return;
     try {
@@ -1166,6 +1182,42 @@ export default function RubricasPage() {
         baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
       });
       applyBeneficiarySelection('person', String(linked.id));
+      setAvailablePeople((current) =>
+        current.filter((person) => String(person.id) !== selectedPersonToLink)
+      );
+      setShowLinkPersonModal(false);
+      setSelectedPersonToLink(undefined);
+      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLinkExistingPersonForEdit = async () => {
+    if (!selectedPersonToLink) return;
+    try {
+      setIsSubmitting(true);
+      setLinkPersonModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
+      const selectedPerson =
+        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
+      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
+      const linked = await createProjectPeople({
+        projectId,
+        personId: Number(selectedPersonToLink),
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+        createdBy: actorUserId,
+      });
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: personLabel,
+        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
+      });
+      applyBeneficiarySelectionToEditForm('person', String(linked.id));
       setAvailablePeople((current) =>
         current.filter((person) => String(person.id) !== selectedPersonToLink)
       );
@@ -1215,6 +1267,55 @@ export default function RubricasPage() {
         totalValue: draftItemTotal > 0 ? draftItemTotal : null,
       });
       applyBeneficiarySelection('company', String(linked.id));
+      setAvailableCompanies((current) =>
+        current.filter((company) => String(company.id) !== selectedCompanyToLink)
+      );
+      setShowLinkCompanyModal(false);
+      setSelectedCompanyToLink(undefined);
+      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLinkExistingCompanyForEdit = async () => {
+    if (!selectedCompanyToLink) return;
+    try {
+      setIsSubmitting(true);
+      setLinkCompanyModalError(null);
+      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
+      const actorUserId = await requireCurrentUserId();
+      const selectedCompany =
+        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
+      const companyName =
+        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: Number(selectedCompanyToLink),
+        totalValue: draftItemTotal > 0 ? draftItemTotal : undefined,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        createdBy: actorUserId,
+      });
+
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
+          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
+          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: selectedCompany?.cnpj ?? null,
+        status: RUBRICA_DEFAULT_COMPANY_STATUS,
+        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
+        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
+      });
+      applyBeneficiarySelectionToEditForm('company', String(linked.id));
       setAvailableCompanies((current) =>
         current.filter((company) => String(company.id) !== selectedCompanyToLink)
       );
@@ -1330,6 +1431,108 @@ export default function RubricasPage() {
     }
   };
 
+  const handleCreateAndLinkPersonForEdit = async () => {
+    if (!hasRequiredMemberFields(newPersonForm)) {
+      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
+      return;
+    }
+
+    if (newPersonForm.cpf.trim()) {
+      const validation = validateCPFComplete(newPersonForm.cpf);
+      if (!validation.isValid) {
+        setNewPersonCpfError(validation.errorMessage);
+        return;
+      }
+    }
+
+    if (newPersonForm.telefone.trim()) {
+      const validation = validatePhoneComplete(newPersonForm.telefone);
+      if (!validation.isValid) {
+        setNewPersonPhoneError(validation.errorMessage);
+        return;
+      }
+    }
+
+    try {
+      setIsSubmitting(true);
+      setCreatePersonModalError(null);
+      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
+      const actorUserId = await requireCurrentUserId();
+      const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
+      const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
+      const peoplePayload = {
+        fullName: newPersonForm.nome.trim(),
+        cpf: cpf || undefined,
+        email: toOptional(newPersonForm.email),
+        phone: toOptional(phone),
+        birthDate: toOptional(newPersonForm.birthDate),
+        address: toOptional(newPersonForm.endereco),
+        city: toOptional(newPersonForm.city),
+        state: toOptional(newPersonForm.state)?.toUpperCase(),
+        notes: toOptional(newPersonForm.notes),
+      };
+
+      const person = await createPeople(peoplePayload);
+      const linked = await createProjectPeople({
+        projectId,
+        personId: person.id,
+        role: papelToRole(newPersonForm.papel),
+        workloadHours: newPersonForm.cargaHoraria,
+        institutionalLink: toOptional(newPersonForm.vinculo),
+        contractType: newPersonForm.contractType || undefined,
+        startDate: toOptional(newPersonForm.startDate),
+        endDate: toOptional(newPersonForm.endDate),
+        status: newPersonForm.status as StatusProjectPeopleEnum,
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+        notes: toOptional(newPersonForm.notes),
+        createdBy: actorUserId,
+      });
+
+      if (newPersonAvatarFile) {
+        const uploaded = await uploadDocument({
+          file: newPersonAvatarFile,
+          ownerType: 'PEOPLE',
+          ownerId: person.id,
+          category: 'FOTO_PERFIL',
+        });
+
+        await updatePeople(person.id, {
+          ...peoplePayload,
+          avatarUrl: uploaded.id,
+        });
+      }
+
+      appendProjectPersonOption({
+        id: String(linked.id),
+        label: newPersonForm.nome.trim(),
+        baseAmount:
+          typeof newPersonForm.baseAmount === 'number'
+            ? newPersonForm.baseAmount
+            : draftItemTotal > 0
+              ? draftItemTotal
+              : undefined,
+      });
+      applyBeneficiarySelectionToEditForm('person', String(linked.id));
+      setShowCreatePersonModal(false);
+      setNewPersonForm(defaultMemberFormData());
+      setNewPersonAvatarFile(null);
+      setNewPersonCpfError('');
+      setNewPersonPhoneError('');
+      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setCreatePersonModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateAndLinkCompany = async () => {
     if (!hasRequiredCompanyFields(newCompanyForm)) {
       setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
@@ -1397,6 +1600,85 @@ export default function RubricasPage() {
         totalValue: totalValueForProjectCompany ?? null,
       });
       applyBeneficiarySelection('company', String(linked.id));
+      setShowCreateCompanyModal(false);
+      setNewCompanyForm(createEmptyCompanyForm());
+      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
+    } catch (error) {
+      setCreateCompanyModalError(
+        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateAndLinkCompanyForEdit = async () => {
+    if (!hasRequiredCompanyFields(newCompanyForm)) {
+      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
+      return;
+    }
+    const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
+    if (cnpjDigits.length !== 14) {
+      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
+      return;
+    }
+    const draftItemTotal = buildDraftItemTotal(editForm ?? {});
+    const totalValueForProjectCompany =
+      typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
+        ? newCompanyForm.valorContrato
+        : draftItemTotal > 0
+          ? draftItemTotal
+          : undefined;
+    try {
+      setIsSubmitting(true);
+      setCreateCompanyModalError(null);
+      const actorUserId = await requireCurrentUserId();
+      const company = await createCompany({
+        name: newCompanyForm.razaoSocial!.trim(),
+        tradeName: newCompanyForm.nomeFantasia!.trim(),
+        cnpj: cnpjDigits,
+        email: toOptional(newCompanyForm.email),
+        phone: toOptional(onlyDigits(newCompanyForm.telefone)),
+        address: toOptional(newCompanyForm.endereco),
+        city: toOptional(newCompanyForm.cidade),
+        state: toOptional(newCompanyForm.uf)?.toUpperCase(),
+        responsiblePersonId: newCompanyForm.responsavelPersonId
+          ? Number(newCompanyForm.responsavelPersonId)
+          : undefined,
+        createdBy: actorUserId,
+      });
+      const linked = await createProjectCompany({
+        projectId,
+        companyId: company.id,
+        serviceType: toOptional(newCompanyForm.tipoServico),
+        totalValue: totalValueForProjectCompany,
+        startDate: toOptional(newCompanyForm.dataInicio),
+        endDate: toOptional(newCompanyForm.dataFim),
+        notes: toOptional(newCompanyForm.observacao),
+        isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
+        status: newCompanyForm.status as ContractingStatusEnum,
+        createdBy: actorUserId,
+      });
+      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
+      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
+      const formattedCnpj = formatCnpjCompact(cnpjDigits);
+      appendProjectCompanyOption({
+        id: String(linked.id),
+        label: [
+          companyName,
+          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
+          formatContractingStatus(companyStatus),
+          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+        name: companyName,
+        cnpj: formattedCnpj,
+        status: companyStatus,
+        availableBalance: totalValueForProjectCompany ?? null,
+        totalValue: totalValueForProjectCompany ?? null,
+      });
+      applyBeneficiarySelectionToEditForm('company', String(linked.id));
       setShowCreateCompanyModal(false);
       setNewCompanyForm(createEmptyCompanyForm());
       showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
@@ -2849,7 +3131,7 @@ export default function RubricasPage() {
                 />
                   {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
                     <p className="mt-1 text-xs text-gray-500">
-                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                      Opcional. Use "sem vínculo" quando o item ainda não tiver responsável definido.
                     </p>
                   ) : null}
                   {itemFieldErrors.projectPeopleId ? (
@@ -2869,6 +3151,7 @@ export default function RubricasPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setBeneficiaryModalContext('create');
                         setLinkPersonModalError(null);
                         setShowLinkPersonModal(true);
                       }}
@@ -2879,6 +3162,7 @@ export default function RubricasPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setBeneficiaryModalContext('create');
                         setNewPersonForm(defaultMemberFormData());
                         setNewPersonAvatarFile(null);
                         setNewPersonCpfError('');
@@ -2898,6 +3182,7 @@ export default function RubricasPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setBeneficiaryModalContext('create');
                         setLinkCompanyModalError(null);
                         setShowLinkCompanyModal(true);
                       }}
@@ -2908,6 +3193,7 @@ export default function RubricasPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setBeneficiaryModalContext('create');
                         setCreateCompanyModalError(null);
                         setShowCreateCompanyModal(true);
                       }}
@@ -3269,7 +3555,7 @@ export default function RubricasPage() {
                   />
                   {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
                     <p className="mt-1 text-xs text-gray-500">
-                      Opcional. Use “sem vínculo” quando o item ainda não tiver responsável definido.
+                      Opcional. Use "sem vínculo" quando o item ainda não tiver responsável definido.
                     </p>
                   ) : null}
                   {itemFieldErrors.projectPeopleId ? (
@@ -3279,6 +3565,69 @@ export default function RubricasPage() {
                     <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
                   ) : null}
                 </div>
+
+                {editForm.beneficiaryType === 'person' && !editForm.unlinkedItem ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryModalContext('edit');
+                        setLinkPersonModalError(null);
+                        setShowLinkPersonModal(true);
+                      }}
+                      disabled={isSubmitting}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      Vincular pessoa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryModalContext('edit');
+                        setNewPersonForm(defaultMemberFormData());
+                        setNewPersonAvatarFile(null);
+                        setNewPersonCpfError('');
+                        setNewPersonPhoneError('');
+                        setCreatePersonModalError(null);
+                        setShowCreatePersonModal(true);
+                      }}
+                      disabled={isSubmitting}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#003319] disabled:opacity-50"
+                    >
+                      Cadastrar nova pessoa
+                    </button>
+                  </div>
+                ) : null}
+
+                {editForm.beneficiaryType === 'company' && !editForm.unlinkedItem ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryModalContext('edit');
+                        setLinkCompanyModalError(null);
+                        setShowLinkCompanyModal(true);
+                      }}
+                      disabled={isSubmitting}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      Vincular empresa existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeneficiaryModalContext('edit');
+                        setNewCompanyForm(createEmptyCompanyForm());
+                        setCreateCompanyModalError(null);
+                        setShowCreateCompanyModal(true);
+                      }}
+                      disabled={isSubmitting}
+                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#003319] disabled:opacity-50"
+                    >
+                      Cadastrar nova empresa
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -3495,7 +3844,7 @@ export default function RubricasPage() {
             </button>
             <button
               type="button"
-              onClick={() => void handleLinkExistingPerson()}
+              onClick={() => beneficiaryModalContext === 'edit' ? void handleLinkExistingPersonForEdit() : void handleLinkExistingPerson()}
               className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
             >
               Vincular
@@ -3541,7 +3890,7 @@ export default function RubricasPage() {
             </button>
             <button
               type="button"
-              onClick={() => void handleLinkExistingCompany()}
+              onClick={() => beneficiaryModalContext === 'edit' ? void handleLinkExistingCompanyForEdit() : void handleLinkExistingCompany()}
               className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
             >
               Vincular
@@ -3567,7 +3916,7 @@ export default function RubricasPage() {
             setNewPersonPhoneError('');
             setCreatePersonModalError(null);
           }}
-          onSave={() => void handleCreateAndLinkPerson()}
+          onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkPersonForEdit() : void handleCreateAndLinkPerson()}
           cpfError={newPersonCpfError}
           setCpfError={setNewPersonCpfError}
           phoneError={newPersonPhoneError}
@@ -3587,7 +3936,7 @@ export default function RubricasPage() {
           setNewCompanyForm(createEmptyCompanyForm());
           setCreateCompanyModalError(null);
         }}
-        onSave={() => void handleCreateAndLinkCompany()}
+        onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkCompanyForEdit() : void handleCreateAndLinkCompany()}
         errorMessage={createCompanyModalError}
       />
 
