@@ -203,6 +203,7 @@ export default function EmpresasPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -436,6 +437,7 @@ export default function EmpresasPage() {
     setActionError(null);
     setEditingEmpresa(null);
     setFormData({
+      tipoEmpresa: undefined,
       razaoSocial: "",
       nomeFantasia: "",
       cnpj: "",
@@ -447,6 +449,7 @@ export default function EmpresasPage() {
       uf: "",
       responsavelPersonId: "",
       responsavel: undefined,
+      responsavelDesconhecido: false,
       tipoServico: "",
       valorContrato: undefined,
       dataInicio: "",
@@ -460,7 +463,7 @@ export default function EmpresasPage() {
     if (!ensureCanManageChildren()) return;
     setActionError(null);
     setEditingEmpresa(empresa);
-    setFormData({ ...empresa });
+    setFormData({ ...empresa, responsavelDesconhecido: !empresa.responsavelPersonId });
     setIsFormModalOpen(true);
   };
 
@@ -491,19 +494,20 @@ export default function EmpresasPage() {
       return;
     }
     if (!hasRequiredSharedCompanyFields(formData)) {
-      setActionError("Preencha os campos obrigatórios: razão social, nome fantasia, CNPJ, e-mail, telefone, endereço, cidade e UF.");
+      setModalError("Preencha os campos obrigatórios: tipo de empresa, razão social, nome fantasia, CNPJ e responsável.");
       return;
     }
 
     const cnpjDigits = onlyDigitsShared(formData.cnpj);
     if (cnpjDigits.length !== 14) {
-      setActionError("Informe um CNPJ válido com 14 dígitos.");
+      setModalError("Informe um CNPJ válido com 14 dígitos.");
       return;
     }
 
     try {
       setIsSaving(true);
       setActionError(null);
+      setModalError(null);
       const actorUserId = await requireCurrentUserId();
 
       const companyPayload = {
@@ -555,7 +559,7 @@ export default function EmpresasPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível salvar a empresa."));
+      setModalError(getErrorMessage(error, "Não foi possível salvar a empresa."));
     } finally {
       setIsSaving(false);
     }
@@ -810,9 +814,10 @@ export default function EmpresasPage() {
           setFormData={setFormData}
           isSaving={isSaving}
           isEditingItem={!!editingEmpresa}
-          onClose={() => { setIsFormModalOpen(false); setEditingEmpresa(null); setFormData({}); }}
+          onClose={() => { setIsFormModalOpen(false); setEditingEmpresa(null); setFormData({}); setModalError(null); }}
           onSave={() => { void saveEmpresa(); }}
           onDelete={editingEmpresa ? () => { void removeEmpresa(editingEmpresa.id); } : undefined}
+          errorMessage={modalError}
         />
       )}
 
