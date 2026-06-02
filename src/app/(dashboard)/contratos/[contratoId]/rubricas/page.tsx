@@ -3813,6 +3813,7 @@ export default function RubricasPage() {
         onClose={() => {
           setShowLinkPersonModal(false);
           setLinkPersonModalError(null);
+          setSelectedPersonToLink(undefined);
         }}
       >
         <div className="space-y-4">
@@ -3837,6 +3838,7 @@ export default function RubricasPage() {
               onClick={() => {
                 setShowLinkPersonModal(false);
                 setLinkPersonModalError(null);
+                setSelectedPersonToLink(undefined);
               }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
@@ -3859,6 +3861,7 @@ export default function RubricasPage() {
         onClose={() => {
           setShowLinkCompanyModal(false);
           setLinkCompanyModalError(null);
+          setSelectedCompanyToLink(undefined);
         }}
       >
         <div className="space-y-4">
@@ -3883,6 +3886,7 @@ export default function RubricasPage() {
               onClick={() => {
                 setShowLinkCompanyModal(false);
                 setLinkCompanyModalError(null);
+                setSelectedCompanyToLink(undefined);
               }}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
