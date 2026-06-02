@@ -108,6 +108,7 @@ export function MemberFormModal({
   phoneError,
   setPhoneError,
   errorMessage,
+  fieldErrors,
 }: {
   formData: MembroFormData;
   setFormData: Dispatch<SetStateAction<MembroFormData>>;
@@ -124,12 +125,14 @@ export function MemberFormModal({
   phoneError: string;
   setPhoneError: Dispatch<SetStateAction<string>>;
   errorMessage?: string | null;
+  fieldErrors?: Partial<Record<'nome' | 'status', string>>;
 }) {
   const avatarPreview = useMemo(
     () => (avatarFile ? URL.createObjectURL(avatarFile) : ""),
     [avatarFile],
   );
   const displayAvatarUrl = avatarPreview || currentAvatarUrl;
+  const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -138,11 +141,6 @@ export function MemberFormModal({
       }
     };
   }, [avatarPreview]);
-
-  const canSave =
-    hasRequiredMemberFields(formData) &&
-    !cpfError &&
-    !phoneError;
 
   const [ufOptions, setUfOptions] = useState<DropdownOption[]>([]);
   const [cityOptions, setCityOptions] = useState<DropdownOption[]>([]);
@@ -313,9 +311,16 @@ export function MemberFormModal({
                 type="text"
                 value={formData.nome}
                 onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
+                  hasAttemptedSave && !formData.nome.trim()
+                    ? 'border-red-300 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-[#004225]'
+                }`}
                 placeholder="Nome completo"
               />
+              {hasAttemptedSave && !formData.nome.trim() ? (
+                <p className="text-xs text-red-600">{fieldErrors?.nome || 'Informe o nome da pessoa.'}</p>
+              ) : null}
             </Field>
 
             <Field label="Papel">
@@ -361,14 +366,12 @@ export function MemberFormModal({
                 maxLength={14}
                 className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
                   cpfError
-                    ? "border-red-300 focus:ring-red-500"
-                    : "border-gray-300 focus:ring-[#004225]"
+                    ? 'border-red-300 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-[#004225]'
                 }`}
                 placeholder="000.000.000-00"
               />
-              {cpfError ? (
-                <p className="text-xs text-red-600">{cpfError}</p>
-              ) : null}
+              {cpfError ? <p className="text-xs text-red-600">{cpfError}</p> : null}
             </Field>
 
             <Field label="E-mail">
@@ -378,7 +381,9 @@ export function MemberFormModal({
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, email: e.target.value.toLowerCase() }))
                 }
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]"
+                className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
+                  "border-gray-300 focus:ring-[#004225]"
+                }`}
                 placeholder="email@dominio.com"
               />
             </Field>
@@ -529,7 +534,8 @@ export function MemberFormModal({
                 disabled={isSaving}
                 className="w-full"
               />
-            </Field>            <Field label="Status" required>
+            </Field>
+            <Field label="Status" required>
               <Dropdown
                 options={[
                   { value: "", label: "Não informado" },
@@ -546,8 +552,13 @@ export function MemberFormModal({
                 }
                 placeholder="Não informado"
                 disabled={isSaving}
-                className="w-full"
+                className={`w-full ${
+                  hasAttemptedSave && !formData.status ? 'border border-red-300' : ''
+                }`}
               />
+              {hasAttemptedSave && !formData.status ? (
+                <p className="text-xs text-red-600">{fieldErrors?.status || 'Informe o status da pessoa.'}</p>
+              ) : null}
             </Field>
 
             <Field label="Data iní­cio">
@@ -629,8 +640,11 @@ export function MemberFormModal({
               Cancelar
             </button>
             <button
-              onClick={onSave}
-              disabled={isSaving || !canSave}
+              onClick={() => {
+                setHasAttemptedSave(true);
+                onSave();
+              }}
+              disabled={isSaving}
               className="px-6 py-2.5 text-sm font-medium text-white bg-[#004225] rounded-lg hover:bg-[#003319] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving

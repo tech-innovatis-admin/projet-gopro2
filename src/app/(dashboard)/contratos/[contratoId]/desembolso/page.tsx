@@ -41,7 +41,6 @@ type ParcelaPrevista = {
 type ParcelaModalDraft = {
   dataPrevista: string;
   valorPrevistoCents: number;
-  status: StatusDisbursementScheduleEnum;
   observacao: string;
 };
 
@@ -96,7 +95,6 @@ const statusDropdownOptions = statusOptions.map((option) => ({
 const EMPTY_PARCELA_MODAL_DRAFT: ParcelaModalDraft = {
   dataPrevista: "",
   valorPrevistoCents: 0,
-  status: "PREVISTO",
   observacao: "",
 };
 
@@ -323,7 +321,6 @@ export default function DesembolsoPage() {
         return {
           dataPrevista: parcela.dataPrevista ?? "",
           valorPrevistoCents: Math.round(parseNumber(parcela.valorPrevisto) * 100),
-          status: parcela.status,
           observacao: parcela.observacao ?? "",
         };
       }
@@ -335,7 +332,6 @@ export default function DesembolsoPage() {
     Boolean(parcelaModalState) &&
     (parcelaModalDraft.dataPrevista !== parcelaModalInitialDraft.dataPrevista ||
       parcelaModalDraft.valorPrevistoCents !== parcelaModalInitialDraft.valorPrevistoCents ||
-      parcelaModalDraft.status !== parcelaModalInitialDraft.status ||
       parcelaModalDraft.observacao !== parcelaModalInitialDraft.observacao);
 
   const openCreateParcelaModal = () => {
@@ -358,7 +354,6 @@ export default function DesembolsoPage() {
     setParcelaModalDraft({
       dataPrevista: parcela.dataPrevista ?? "",
       valorPrevistoCents: Math.round(parseNumber(parcela.valorPrevisto) * 100),
-      status: parcela.status,
       observacao: parcela.observacao ?? "",
     });
     setParcelaModalState({
@@ -409,7 +404,6 @@ export default function DesembolsoPage() {
         projectId,
         expectedMonth: parcelaModalDraft.dataPrevista,
         expectedAmount: parcelaModalDraft.valorPrevistoCents / 100,
-        status: parcelaModalDraft.status,
         notes: toOptionalText(parcelaModalDraft.observacao),
       };
 
@@ -834,57 +828,8 @@ export default function DesembolsoPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[7fr_3fr]">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-700">
-                  Data prevista
-                </label>
-                <DatePicker
-                  value={parcelaModalDraft.dataPrevista}
-                  onChange={(value) =>
-                    setParcelaModalDraft((prev) => ({
-                      ...prev,
-                      dataPrevista: value,
-                    }))
-                  }
-                />
-              </div>
-
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-700">Status</label>
-                <Dropdown
-                  options={[
-                    {
-                      value: 'previsto',
-                      label: 'Previsto',
-                    },
-                    {
-                      value: 'parcial',
-                      label: 'Parcial',
-                    },
-                    {
-                      value: 'recebido',
-                      label: 'Recebido',
-                    },
-                    {
-                      value: 'cancelado',
-                      label: 'Cancelado',
-                    },
-                  ]}
-                  value={parcelaModalDraft.status}
-                  onChange={(value) =>
-                    setParcelaModalDraft((prev) => ({
-                      ...prev,
-                      status: (value ?? "PREVISTO") as StatusDisbursementScheduleEnum,
-                    }))
-                  }
-                  placeholder="Selecione o status"
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm leading-none text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/15"
-                />
-              </div>
-
-              <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-700">
                   Valor previsto
                 </label>
@@ -906,6 +851,21 @@ export default function DesembolsoPage() {
                   </span>
                   <span>Limite do contrato: {formatCurrency(maxParcelValueCents / 100)}</span>
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Data prevista
+                </label>
+                <DatePicker
+                  value={parcelaModalDraft.dataPrevista}
+                  onChange={(value) =>
+                    setParcelaModalDraft((prev) => ({
+                      ...prev,
+                      dataPrevista: value,
+                    }))
+                  }
+                />
               </div>
 
               <div className="md:col-span-2">

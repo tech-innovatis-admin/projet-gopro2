@@ -638,9 +638,17 @@ export default function RubricasPage() {
   const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
   const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
   const [createPersonModalError, setCreatePersonModalError] = useState<string | null>(null);
+  const [createPersonFieldErrors, setCreatePersonFieldErrors] = useState<Record<string, string>>({});
   const [createCompanyModalError, setCreateCompanyModalError] = useState<string | null>(null);
+  const [createCompanyFieldErrors, setCreateCompanyFieldErrors] = useState<Record<string, string>>({});
   const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
+  const [linkPersonFieldError, setLinkPersonFieldError] = useState<string | null>(null);
   const [linkCompanyModalError, setLinkCompanyModalError] = useState<string | null>(null);
+  const [linkCompanyFieldError, setLinkCompanyFieldError] = useState<string | null>(null);
+  const [createItemAttempted, setCreateItemAttempted] = useState(false);
+  const [editItemAttempted, setEditItemAttempted] = useState(false);
+  const [linkPersonAttempted, setLinkPersonAttempted] = useState(false);
+  const [linkCompanyAttempted, setLinkCompanyAttempted] = useState(false);
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -1104,6 +1112,8 @@ export default function RubricasPage() {
     setEditingItem(null);
     setEditForm(null);
     setItemPendingDeletion(null);
+    setCreateItemAttempted(false);
+    setEditItemAttempted(false);
     setNewItem(createEmptyItemDraft());
     setAddingToRubrica(rubricaId);
     setRubricas((current) =>
@@ -1117,6 +1127,7 @@ export default function RubricasPage() {
     setAddingToRubrica(null);
     setNewItem(createEmptyItemDraft());
     setItemFieldErrors({});
+    setCreateItemAttempted(false);
   };
 
   const appendProjectPersonOption = (option: ProjectPersonOption) => {
@@ -1160,9 +1171,14 @@ export default function RubricasPage() {
   };
 
   const handleLinkExistingPerson = async () => {
-    if (!selectedPersonToLink) return;
+    if (!selectedPersonToLink) {
+      setLinkPersonFieldError('Selecione uma pessoa para vincular.');
+      setLinkPersonModalError('Selecione uma pessoa para vincular.');
+      return;
+    }
     try {
       setIsSubmitting(true);
+      setLinkPersonFieldError(null);
       setLinkPersonModalError(null);
       const actorUserId = await requireCurrentUserId();
       const draftItemTotal = buildDraftItemTotal(newItem);
@@ -1187,6 +1203,7 @@ export default function RubricasPage() {
       );
       setShowLinkPersonModal(false);
       setSelectedPersonToLink(undefined);
+      setLinkPersonFieldError(null);
       showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
@@ -1196,9 +1213,14 @@ export default function RubricasPage() {
   };
 
   const handleLinkExistingPersonForEdit = async () => {
-    if (!selectedPersonToLink) return;
+    if (!selectedPersonToLink) {
+      setLinkPersonFieldError('Selecione uma pessoa para vincular.');
+      setLinkPersonModalError('Selecione uma pessoa para vincular.');
+      return;
+    }
     try {
       setIsSubmitting(true);
+      setLinkPersonFieldError(null);
       setLinkPersonModalError(null);
       const actorUserId = await requireCurrentUserId();
       const draftItemTotal = buildDraftItemTotal(editForm ?? {});
@@ -1223,6 +1245,7 @@ export default function RubricasPage() {
       );
       setShowLinkPersonModal(false);
       setSelectedPersonToLink(undefined);
+      setLinkPersonFieldError(null);
       showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
@@ -1232,9 +1255,14 @@ export default function RubricasPage() {
   };
 
   const handleLinkExistingCompany = async () => {
-    if (!selectedCompanyToLink) return;
+    if (!selectedCompanyToLink) {
+      setLinkCompanyFieldError('Selecione uma empresa para vincular.');
+      setLinkCompanyModalError('Selecione uma empresa para vincular.');
+      return;
+    }
     try {
       setIsSubmitting(true);
+      setLinkCompanyFieldError(null);
       setLinkCompanyModalError(null);
       const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
@@ -1272,6 +1300,7 @@ export default function RubricasPage() {
       );
       setShowLinkCompanyModal(false);
       setSelectedCompanyToLink(undefined);
+      setLinkCompanyFieldError(null);
       showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
@@ -1281,9 +1310,14 @@ export default function RubricasPage() {
   };
 
   const handleLinkExistingCompanyForEdit = async () => {
-    if (!selectedCompanyToLink) return;
+    if (!selectedCompanyToLink) {
+      setLinkCompanyFieldError('Selecione uma empresa para vincular.');
+      setLinkCompanyModalError('Selecione uma empresa para vincular.');
+      return;
+    }
     try {
       setIsSubmitting(true);
+      setLinkCompanyFieldError(null);
       setLinkCompanyModalError(null);
       const draftItemTotal = buildDraftItemTotal(editForm ?? {});
       const actorUserId = await requireCurrentUserId();
@@ -1321,6 +1355,7 @@ export default function RubricasPage() {
       );
       setShowLinkCompanyModal(false);
       setSelectedCompanyToLink(undefined);
+      setLinkCompanyFieldError(null);
       showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
@@ -1331,6 +1366,10 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkPerson = async () => {
     if (!hasRequiredMemberFields(newPersonForm)) {
+      setCreatePersonFieldErrors({
+        nome: newPersonForm.nome.trim() ? '' : 'Informe o nome da pessoa.',
+        status: newPersonForm.status ? '' : 'Informe o status da pessoa.',
+      });
       setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
       return;
     }
@@ -1353,6 +1392,7 @@ export default function RubricasPage() {
 
     try {
       setIsSubmitting(true);
+      setCreatePersonFieldErrors({});
       setCreatePersonModalError(null);
       const draftItemTotal = buildDraftItemTotal(newItem);
       const actorUserId = await requireCurrentUserId();
@@ -1421,6 +1461,7 @@ export default function RubricasPage() {
       setNewPersonAvatarFile(null);
       setNewPersonCpfError('');
       setNewPersonPhoneError('');
+      setCreatePersonFieldErrors({});
       showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setCreatePersonModalError(
@@ -1433,6 +1474,10 @@ export default function RubricasPage() {
 
   const handleCreateAndLinkPersonForEdit = async () => {
     if (!hasRequiredMemberFields(newPersonForm)) {
+      setCreatePersonFieldErrors({
+        nome: newPersonForm.nome.trim() ? '' : 'Informe o nome da pessoa.',
+        status: newPersonForm.status ? '' : 'Informe o status da pessoa.',
+      });
       setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
       return;
     }
@@ -1455,6 +1500,7 @@ export default function RubricasPage() {
 
     try {
       setIsSubmitting(true);
+      setCreatePersonFieldErrors({});
       setCreatePersonModalError(null);
       const draftItemTotal = buildDraftItemTotal(editForm ?? {});
       const actorUserId = await requireCurrentUserId();
@@ -1523,6 +1569,7 @@ export default function RubricasPage() {
       setNewPersonAvatarFile(null);
       setNewPersonCpfError('');
       setNewPersonPhoneError('');
+      setCreatePersonFieldErrors({});
       showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setCreatePersonModalError(
@@ -1539,7 +1586,18 @@ export default function RubricasPage() {
       return;
     }
     const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
+    if (!newCompanyForm.razaoSocial?.trim() || !newCompanyForm.status) {
+      setCreateCompanyFieldErrors({
+        razaoSocial: newCompanyForm.razaoSocial?.trim() ? '' : 'Informe a razão social.',
+        status: newCompanyForm.status ? '' : 'Informe o status do contrato.',
+      });
+      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
+      return;
+    }
     if (cnpjDigits.length !== 14) {
+      setCreateCompanyFieldErrors({
+        cnpj: 'Informe um CNPJ válido com 14 dígitos.',
+      });
       setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
       return;
     }
@@ -1552,6 +1610,7 @@ export default function RubricasPage() {
           : undefined;
     try {
       setIsSubmitting(true);
+      setCreateCompanyFieldErrors({});
       setCreateCompanyModalError(null);
       const actorUserId = await requireCurrentUserId();
       const company = await createCompany({
@@ -1602,6 +1661,7 @@ export default function RubricasPage() {
       applyBeneficiarySelection('company', String(linked.id));
       setShowCreateCompanyModal(false);
       setNewCompanyForm(createEmptyCompanyForm());
+      setCreateCompanyFieldErrors({});
       showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setCreateCompanyModalError(
@@ -1618,7 +1678,18 @@ export default function RubricasPage() {
       return;
     }
     const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
+    if (!newCompanyForm.razaoSocial?.trim() || !newCompanyForm.status) {
+      setCreateCompanyFieldErrors({
+        razaoSocial: newCompanyForm.razaoSocial?.trim() ? '' : 'Informe a razão social.',
+        status: newCompanyForm.status ? '' : 'Informe o status do contrato.',
+      });
+      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
+      return;
+    }
     if (cnpjDigits.length !== 14) {
+      setCreateCompanyFieldErrors({
+        cnpj: 'Informe um CNPJ válido com 14 dígitos.',
+      });
       setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
       return;
     }
@@ -1631,6 +1702,7 @@ export default function RubricasPage() {
           : undefined;
     try {
       setIsSubmitting(true);
+      setCreateCompanyFieldErrors({});
       setCreateCompanyModalError(null);
       const actorUserId = await requireCurrentUserId();
       const company = await createCompany({
@@ -1681,6 +1753,7 @@ export default function RubricasPage() {
       applyBeneficiarySelectionToEditForm('company', String(linked.id));
       setShowCreateCompanyModal(false);
       setNewCompanyForm(createEmptyCompanyForm());
+      setCreateCompanyFieldErrors({});
       showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
     } catch (error) {
       setCreateCompanyModalError(
@@ -1711,6 +1784,10 @@ export default function RubricasPage() {
     const quantidade = toPositiveInt(newItem.quantidade, 1);
     const meses = toPositiveInt(newItem.meses, 1);
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
+    if (valorUnitario <= 0) {
+      setActionError('Informe um valor unitário maior que zero.');
+      return;
+    }
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(newItem);
     const selectedProjectCompanyId =
@@ -1830,6 +1907,7 @@ export default function RubricasPage() {
     setEditingItem(item.id);
     setAddingToRubrica(null);
     setItemPendingDeletion(null);
+    setEditItemAttempted(false);
     setEditForm({
       ...item,
       metaIds: resolveMetaIdsForDraft(item),
@@ -1861,6 +1939,10 @@ export default function RubricasPage() {
     const quantidade = toPositiveInt(editForm.quantidade, 1);
     const meses = toPositiveInt(editForm.meses, 1);
     const valorUnitario = toMoneyValue(editForm.valorUnitario);
+    if (valorUnitario <= 0) {
+      setActionError('Informe um valor unitário maior que zero.');
+      return;
+    }
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(editForm);
     const hadBeneficiaryBefore = Boolean(
@@ -1943,6 +2025,7 @@ export default function RubricasPage() {
     setEditingItem(null);
     setEditForm(null);
     setItemFieldErrors({});
+    setEditItemAttempted(false);
   };
 
   const openDeleteItemModal = (rubricaId: string, item: ItemRubrica) => {
@@ -2321,6 +2404,30 @@ export default function RubricasPage() {
     });
   }, [remanejamentos, rubricas]);
 
+  const isCreateItemModalOpen = Boolean(addingToRubrica && currentCreateRubrica);
+  const isEditItemModalOpen = Boolean(editingItem && editForm && currentEditRubrica);
+  const isDeleteRubricaModalOpen = Boolean(rubricaPendingDeletion);
+  const isDeleteItemModalOpen = Boolean(itemPendingDeletion);
+  const isLinkPersonModalOpen = showLinkPersonModal;
+  const isLinkCompanyModalOpen = showLinkCompanyModal;
+  const isCreatePersonModalOpen = showCreatePersonModal;
+  const isCreateCompanyModalOpen = showCreateCompanyModal;
+  const isRemanejamentoModalVisible = Boolean(canManageChildren && itemParaRemanejamento);
+  const isHistoricoModalVisible = Boolean(canOpenTransferHistory && historicoModalOpen);
+  const isCriticalConflictModalOpen = Boolean(criticalConflictMessage);
+  const isAnyModalOpen =
+    isCreateItemModalOpen ||
+    isEditItemModalOpen ||
+    isDeleteRubricaModalOpen ||
+    isDeleteItemModalOpen ||
+    isLinkPersonModalOpen ||
+    isLinkCompanyModalOpen ||
+    isCreatePersonModalOpen ||
+    isCreateCompanyModalOpen ||
+    isRemanejamentoModalVisible ||
+    isHistoricoModalVisible ||
+    isCriticalConflictModalOpen;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -2433,7 +2540,7 @@ export default function RubricasPage() {
         </div>
       )}
 
-      {actionError && (
+      {!isAnyModalOpen && actionError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {actionError}
         </div>
@@ -2909,9 +3016,15 @@ export default function RubricasPage() {
             className="space-y-5"
             onSubmit={(event) => {
               event.preventDefault();
+              setCreateItemAttempted(true);
               void handleAddItem(currentCreateRubrica.id);
             }}
           >
+            {actionError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {actionError}
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
                 Rubrica de destino
@@ -2936,7 +3049,11 @@ export default function RubricasPage() {
                     }))
                   }
                   placeholder="Ex.: Serviço especializado"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
+                    createItemAttempted && !newItem.descricao?.trim()
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20'
+                  }`}
                   disabled={isSubmitting}
                   autoFocus
                 />
@@ -3045,8 +3162,13 @@ export default function RubricasPage() {
                       valorUnitario: cents / 100,
                     }))
                   }
+                  min={0.01}
                   disabled={isSubmitting}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
+                    createItemAttempted && toMoneyValue(newItem.valorUnitario) <= 0
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
             </div>
@@ -3094,6 +3216,13 @@ export default function RubricasPage() {
                       }))
                     }
                     disabled={isSubmitting}
+                    className={`w-full ${
+                      createItemAttempted &&
+                      !newItem.unlinkedItem &&
+                      !newItem.beneficiaryType
+                        ? 'border border-red-300'
+                        : ''
+                    }`}
                   />
                 </div>
 
@@ -3127,8 +3256,16 @@ export default function RubricasPage() {
                           current.beneficiaryType === 'company' ? value ?? undefined : current.projectCompanyId,
                       }))
                     }
-                  disabled={isSubmitting || !newItem.beneficiaryType}
-                />
+                    disabled={isSubmitting || !newItem.beneficiaryType}
+                    className={`w-full ${
+                      createItemAttempted &&
+                      !newItem.unlinkedItem &&
+                      Boolean(newItem.beneficiaryType) &&
+                      !newItem.beneficiaryReferenceId
+                        ? 'border border-red-300'
+                        : ''
+                    }`}
+                  />
                   {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
                     <p className="mt-1 text-xs text-gray-500">
                       Opcional. Use "sem vínculo" quando o item ainda não tiver responsável definido.
@@ -3150,11 +3287,13 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setLinkPersonModalError(null);
-                        setShowLinkPersonModal(true);
-                      }}
+                        onClick={() => {
+                          setBeneficiaryModalContext('create');
+                          setLinkPersonModalError(null);
+                          setLinkPersonFieldError(null);
+                          setLinkPersonAttempted(false);
+                          setShowLinkPersonModal(true);
+                        }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular pessoa existente
@@ -3168,6 +3307,7 @@ export default function RubricasPage() {
                         setNewPersonCpfError('');
                         setNewPersonPhoneError('');
                         setCreatePersonModalError(null);
+                        setCreatePersonFieldErrors({});
                         setShowCreatePersonModal(true);
                       }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
@@ -3181,11 +3321,13 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setLinkCompanyModalError(null);
-                        setShowLinkCompanyModal(true);
-                      }}
+                        onClick={() => {
+                          setBeneficiaryModalContext('create');
+                          setLinkCompanyModalError(null);
+                          setLinkCompanyFieldError(null);
+                          setLinkCompanyAttempted(false);
+                          setShowLinkCompanyModal(true);
+                        }}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
                     >
                       Vincular empresa existente
@@ -3195,6 +3337,7 @@ export default function RubricasPage() {
                       onClick={() => {
                         setBeneficiaryModalContext('create');
                         setCreateCompanyModalError(null);
+                        setCreateCompanyFieldErrors({});
                         setShowCreateCompanyModal(true);
                       }}
                       className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
@@ -3249,13 +3392,7 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={
-                  isSubmitting ||
-                  !newItem.descricao?.trim() ||
-                  (!newItem.unlinkedItem &&
-                    Boolean(newItem.beneficiaryType) &&
-                    !newItem.beneficiaryReferenceId)
-                }
+                disabled={isSubmitting}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
@@ -3289,9 +3426,15 @@ export default function RubricasPage() {
             className="space-y-5"
             onSubmit={(event) => {
               event.preventDefault();
+              setEditItemAttempted(true);
               void handleSaveEdit(currentEditRubrica.id);
             }}
           >
+            {actionError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {actionError}
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-blue-700">
                 Rubrica vinculada
@@ -3320,7 +3463,11 @@ export default function RubricasPage() {
                     )
                   }
                   placeholder="Ex.: Serviço especializado"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
+                    editItemAttempted && !editForm.descricao?.trim()
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/20'
+                  }`}
                   disabled={isSubmitting}
                   autoFocus
                 />
@@ -3448,13 +3595,18 @@ export default function RubricasPage() {
                       current
                         ? {
                             ...current,
-                            valorUnitario: cents / 100,
-                          }
+                          valorUnitario: cents / 100,
+                        }
                         : current
                     )
                   }
+                  min={0.01}
                   disabled={isSubmitting}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
+                    editItemAttempted && toMoneyValue(editForm.valorUnitario) <= 0
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/20'
+                  }`}
                 />
               </div>
             </div>
@@ -3510,6 +3662,13 @@ export default function RubricasPage() {
                       )
                     }
                     disabled={isSubmitting}
+                    className={`w-full ${
+                      editItemAttempted &&
+                      !editForm.unlinkedItem &&
+                      !editForm.beneficiaryType
+                        ? 'border border-red-300'
+                        : ''
+                    }`}
                   />
                 </div>
 
@@ -3552,6 +3711,14 @@ export default function RubricasPage() {
                       )
                     }
                     disabled={isSubmitting || !editForm.beneficiaryType}
+                    className={`w-full ${
+                      editItemAttempted &&
+                      !editForm.unlinkedItem &&
+                      Boolean(editForm.beneficiaryType) &&
+                      !editForm.beneficiaryReferenceId
+                        ? 'border border-red-300'
+                        : ''
+                    }`}
                   />
                   {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
                     <p className="mt-1 text-xs text-gray-500">
@@ -3570,11 +3737,13 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setLinkPersonModalError(null);
-                        setShowLinkPersonModal(true);
-                      }}
+                        onClick={() => {
+                          setBeneficiaryModalContext('edit');
+                          setLinkPersonModalError(null);
+                          setLinkPersonFieldError(null);
+                          setLinkPersonAttempted(false);
+                          setShowLinkPersonModal(true);
+                        }}
                       disabled={isSubmitting}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
                     >
@@ -3589,6 +3758,7 @@ export default function RubricasPage() {
                         setNewPersonCpfError('');
                         setNewPersonPhoneError('');
                         setCreatePersonModalError(null);
+                        setCreatePersonFieldErrors({});
                         setShowCreatePersonModal(true);
                       }}
                       disabled={isSubmitting}
@@ -3603,11 +3773,13 @@ export default function RubricasPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setLinkCompanyModalError(null);
-                        setShowLinkCompanyModal(true);
-                      }}
+                        onClick={() => {
+                          setBeneficiaryModalContext('edit');
+                          setLinkCompanyModalError(null);
+                          setLinkCompanyFieldError(null);
+                          setLinkCompanyAttempted(false);
+                          setShowLinkCompanyModal(true);
+                        }}
                       disabled={isSubmitting}
                       className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
                     >
@@ -3619,6 +3791,7 @@ export default function RubricasPage() {
                         setBeneficiaryModalContext('edit');
                         setNewCompanyForm(createEmptyCompanyForm());
                         setCreateCompanyModalError(null);
+                        setCreateCompanyFieldErrors({});
                         setShowCreateCompanyModal(true);
                       }}
                       disabled={isSubmitting}
@@ -3674,13 +3847,7 @@ export default function RubricasPage() {
               </button>
               <button
                 type="submit"
-                disabled={
-                  isSubmitting ||
-                  !editForm.descricao?.trim() ||
-                  (!editForm.unlinkedItem &&
-                    Boolean(editForm.beneficiaryType) &&
-                    !editForm.beneficiaryReferenceId)
-                }
+                disabled={isSubmitting}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
@@ -3707,6 +3874,11 @@ export default function RubricasPage() {
       >
         {rubricaPendingDeletion && (
           <div className="space-y-5">
+            {actionError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {actionError}
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-sm font-medium text-red-800">
                 Tem certeza de que deseja excluir esta rubrica?
@@ -3765,6 +3937,11 @@ export default function RubricasPage() {
       >
         {itemPendingDeletion && (
           <div className="space-y-5">
+            {actionError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {actionError}
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-sm font-medium text-red-800">
                 Tem certeza de que deseja excluir este item?
@@ -3807,98 +3984,124 @@ export default function RubricasPage() {
         )}
       </AppModalShell>
 
-      <AppModalShell
-        isOpen={showLinkPersonModal}
-        title="Vincular pessoa existente"
-        onClose={() => {
-          setShowLinkPersonModal(false);
-          setLinkPersonModalError(null);
-          setSelectedPersonToLink(undefined);
-        }}
-      >
+        <AppModalShell
+          isOpen={showLinkPersonModal}
+          title="Vincular pessoa existente"
+          onClose={() => {
+            setShowLinkPersonModal(false);
+            setLinkPersonModalError(null);
+            setLinkPersonFieldError(null);
+            setLinkPersonAttempted(false);
+            setSelectedPersonToLink(undefined);
+          }}
+        >
         <div className="space-y-4">
           {linkPersonModalError ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {linkPersonModalError}
             </div>
           ) : null}
-          <Dropdown
-            searchable
-            options={availablePeople.map((person) => ({
-              value: String(person.id),
-              label: person.fullName,
-            }))}
-            value={selectedPersonToLink}
-            placeholder="Selecione uma pessoa"
-            onChange={(value) => setSelectedPersonToLink(value)}
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowLinkPersonModal(false);
-                setLinkPersonModalError(null);
-                setSelectedPersonToLink(undefined);
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => beneficiaryModalContext === 'edit' ? void handleLinkExistingPersonForEdit() : void handleLinkExistingPerson()}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-            >
-              Vincular
-            </button>
+            <Dropdown
+              searchable
+              options={availablePeople.map((person) => ({
+                value: String(person.id),
+                label: person.fullName,
+              }))}
+              value={selectedPersonToLink}
+              placeholder="Selecione uma pessoa"
+              onChange={(value) => setSelectedPersonToLink(value)}
+              className={`w-full ${linkPersonAttempted && (!selectedPersonToLink || Boolean(linkPersonFieldError)) ? 'border border-red-300' : ''}`}
+            />
+            {linkPersonAttempted && (!selectedPersonToLink || linkPersonFieldError) ? (
+              <p className="text-xs text-red-600">{linkPersonFieldError || 'Selecione uma pessoa para vincular.'}</p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLinkPersonModal(false);
+                  setLinkPersonModalError(null);
+                  setLinkPersonFieldError(null);
+                  setLinkPersonAttempted(false);
+                  setSelectedPersonToLink(undefined);
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkPersonAttempted(true);
+                  beneficiaryModalContext === 'edit'
+                    ? void handleLinkExistingPersonForEdit()
+                    : void handleLinkExistingPerson();
+                }}
+                className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+              >
+                Vincular
+              </button>
           </div>
         </div>
       </AppModalShell>
 
-      <AppModalShell
-        isOpen={showLinkCompanyModal}
-        title="Vincular empresa existente"
-        onClose={() => {
-          setShowLinkCompanyModal(false);
-          setLinkCompanyModalError(null);
-          setSelectedCompanyToLink(undefined);
-        }}
-      >
+        <AppModalShell
+          isOpen={showLinkCompanyModal}
+          title="Vincular empresa existente"
+          onClose={() => {
+            setShowLinkCompanyModal(false);
+            setLinkCompanyModalError(null);
+            setLinkCompanyFieldError(null);
+            setLinkCompanyAttempted(false);
+            setSelectedCompanyToLink(undefined);
+          }}
+        >
         <div className="space-y-4">
           {linkCompanyModalError ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {linkCompanyModalError}
             </div>
           ) : null}
-          <Dropdown
-            searchable
-            options={availableCompanies.map((company) => ({
-              value: String(company.id),
-              label: company.tradeName || company.name,
-            }))}
-            value={selectedCompanyToLink}
-            placeholder="Selecione uma empresa"
-            onChange={(value) => setSelectedCompanyToLink(value)}
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowLinkCompanyModal(false);
-                setLinkCompanyModalError(null);
-                setSelectedCompanyToLink(undefined);
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => beneficiaryModalContext === 'edit' ? void handleLinkExistingCompanyForEdit() : void handleLinkExistingCompany()}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-            >
-              Vincular
-            </button>
+            <Dropdown
+              searchable
+              options={availableCompanies.map((company) => ({
+                value: String(company.id),
+                label: company.tradeName || company.name,
+              }))}
+              value={selectedCompanyToLink}
+              placeholder="Selecione uma empresa"
+              onChange={(value) => setSelectedCompanyToLink(value)}
+              className={`w-full ${linkCompanyAttempted && (!selectedCompanyToLink || Boolean(linkCompanyFieldError)) ? 'border border-red-300' : ''}`}
+            />
+            {linkCompanyAttempted && (!selectedCompanyToLink || linkCompanyFieldError) ? (
+              <p className="text-xs text-red-600">{linkCompanyFieldError || 'Selecione uma empresa para vincular.'}</p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLinkCompanyModal(false);
+                  setLinkCompanyModalError(null);
+                  setLinkCompanyFieldError(null);
+                  setLinkCompanyAttempted(false);
+                  setSelectedCompanyToLink(undefined);
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkCompanyAttempted(true);
+                  beneficiaryModalContext === 'edit'
+                    ? void handleLinkExistingCompanyForEdit()
+                    : void handleLinkExistingCompany();
+                }}
+                className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
+              >
+                Vincular
+              </button>
           </div>
         </div>
       </AppModalShell>
@@ -3912,20 +4115,22 @@ export default function RubricasPage() {
           currentAvatarUrl=""
           isSaving={isSubmitting}
           isEditingItem={false}
-          onClose={() => {
-            setShowCreatePersonModal(false);
-            setNewPersonForm(defaultMemberFormData());
-            setNewPersonAvatarFile(null);
-            setNewPersonCpfError('');
-            setNewPersonPhoneError('');
-            setCreatePersonModalError(null);
-          }}
+            onClose={() => {
+              setShowCreatePersonModal(false);
+              setNewPersonForm(defaultMemberFormData());
+              setNewPersonAvatarFile(null);
+              setNewPersonCpfError('');
+              setNewPersonPhoneError('');
+              setCreatePersonModalError(null);
+              setCreatePersonFieldErrors({});
+            }}
           onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkPersonForEdit() : void handleCreateAndLinkPerson()}
           cpfError={newPersonCpfError}
           setCpfError={setNewPersonCpfError}
           phoneError={newPersonPhoneError}
           setPhoneError={setNewPersonPhoneError}
           errorMessage={createPersonModalError}
+          fieldErrors={createPersonFieldErrors}
         />
       ) : null}
 
@@ -3935,13 +4140,15 @@ export default function RubricasPage() {
         setFormData={setNewCompanyForm}
         isSaving={isSubmitting}
         isEditingItem={false}
-        onClose={() => {
-          setShowCreateCompanyModal(false);
-          setNewCompanyForm(createEmptyCompanyForm());
-          setCreateCompanyModalError(null);
-        }}
+          onClose={() => {
+            setShowCreateCompanyModal(false);
+            setNewCompanyForm(createEmptyCompanyForm());
+            setCreateCompanyModalError(null);
+            setCreateCompanyFieldErrors({});
+          }}
         onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkCompanyForEdit() : void handleCreateAndLinkCompany()}
         errorMessage={createCompanyModalError}
+        fieldErrors={createCompanyFieldErrors}
       />
 
       {canManageChildren && itemParaRemanejamento && (

@@ -2055,7 +2055,7 @@ function NovoContratoPageContent() {
       const parcelaBase = {
         dataPrevista: newParcela.dataPrevista!,
         valorPrevisto: normalizeCurrencyNumber(newParcela.valorPrevisto),
-        status: newParcela.status ?? "PREVISTO",
+        status: "PREVISTO" as StatusDesembolso,
         observacao: newParcela.observacao || "",
       };
 
@@ -2290,7 +2290,7 @@ function NovoContratoPageContent() {
     numero: parcela.numero,
     expectedMonth: parcela.dataPrevista,
     expectedAmount: parcela.valorPrevisto,
-    status: parcela.status,
+    status: "PREVISTO",
     notes: normalizeOptionalText(parcela.observacao),
   });
 
@@ -3283,8 +3283,8 @@ function NovoContratoPageContent() {
                             </h4>
                             <p className="text-xs text-gray-600 mt-0.5">
                               {isEditingParcela
-                                ? "Atualize data, valor previsto, status e observacao"
-                                : "Informe data, valor previsto e status"}
+                                ? "Atualize data, valor previsto e observacao"
+                                : "Informe data e valor previsto"}
                             </p>
                           </div>
                           <button
@@ -3296,7 +3296,7 @@ function NovoContratoPageContent() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Data prevista <span className="text-red-500">*</span>
@@ -3329,18 +3329,6 @@ function NovoContratoPageContent() {
                                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
                               />
                             </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Status <span className="text-red-500">*</span>
-                            </label>
-                            <Dropdown
-                              options={statusDesembolsoOptions}
-                              value={newParcela.status || undefined}
-                              onChange={(value) => setNewParcela({ ...newParcela, status: value as StatusDesembolso })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
                           </div>
 
                           <div>
