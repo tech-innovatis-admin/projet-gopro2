@@ -56,6 +56,7 @@ export type MembroFormData = {
   status: StatusProjectPeopleEnum | "";
   startDate: string;
   endDate: string;
+  baseAmount: number | "";
 };
 
 function isBlank(value?: string) {
@@ -87,6 +88,7 @@ export function defaultMemberFormData(): MembroFormData {
     status: "",
     startDate: "",
     endDate: "",
+    baseAmount: "",
   };
 }
 export function MemberFormModal({
