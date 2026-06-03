@@ -568,7 +568,6 @@ export default function EmpresasPage() {
 
   const removeEmpresa = async (empresaId: string) => {
     if (!ensureCanManageChildren()) return;
-    if (!confirm("Deseja realmente excluir este vínculo da empresa com o projeto?")) return;
     try {
       setActionError(null);
       const empresa = empresas.find((item) => item.id === empresaId);

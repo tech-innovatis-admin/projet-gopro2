@@ -362,7 +362,7 @@ export function CompanyFormModal({
           <div className="flex items-center justify-between px-6 py-4">
             <div>
               {isEditingItem && onDelete ? (
-                <button onClick={() => { if (confirm('Deseja realmente excluir esta empresa do projeto?')) { onDelete(); requestClose(); } }} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600">
+                <button onClick={() => { if (confirm('Deseja realmente excluir esta empresa do projeto?')) { onDelete(); onClose(); } }} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600">
                   <Trash2 className="mr-2 inline-block h-4 w-4" />Excluir Vinculo
                 </button>
               ) : null}
