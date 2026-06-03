@@ -861,7 +861,7 @@ export interface ProjectPeopleRequestDTO {
   contractType?: ContractTypeEnum;
   startDate?: string;
   endDate?: string;
-  status?: StatusProjectPeopleEnum;
+  status: StatusProjectPeopleEnum;
   baseAmount?: number;
   notes?: string;
   createdBy?: number;

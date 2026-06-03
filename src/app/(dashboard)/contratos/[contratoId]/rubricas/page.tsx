@@ -343,6 +343,7 @@ const extractCriticalBeneficiaryConflictMessage = (error: unknown): string | nul
 };
 
 const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
+const RUBRICA_DEFAULT_PERSON_STATUS: StatusProjectPeopleEnum = 'ATIVO';
 
 const isPersistedId = (id: string) => /^\d+$/.test(id);
 const toPersistedId = (id: string) => Number.parseInt(id, 10);
@@ -1241,7 +1242,7 @@ export default function RubricasPage() {
       const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'EM_CADASTRO', createdBy: actorUserId }),
+        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'CONTRATADA', createdBy: actorUserId }),
       });
       if (!res.ok) {
         const err = (await res.json()) as { message?: string };
@@ -1282,7 +1283,7 @@ export default function RubricasPage() {
       const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'EM_CADASTRO', createdBy: actorUserId }),
+        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'CONTRATADA', createdBy: actorUserId }),
       });
       if (!res.ok) {
         const err = (await res.json()) as { message?: string };
@@ -1316,7 +1317,7 @@ export default function RubricasPage() {
     const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, partnerId: created.id, status: 'EM_CADASTRO', createdBy: actorUserId }),
+      body: JSON.stringify({ projectId, partnerId: created.id, status: 'CONTRATADA', createdBy: actorUserId }),
     });
     if (!res.ok) {
       const err = (await res.json()) as { message?: string };
@@ -1388,6 +1389,7 @@ export default function RubricasPage() {
       const linked = await createProjectPeople({
         projectId,
         personId: Number(selectedPersonToLink),
+        status: RUBRICA_DEFAULT_PERSON_STATUS,
         baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
         createdBy: actorUserId,
       });
@@ -1430,6 +1432,7 @@ export default function RubricasPage() {
       const linked = await createProjectPeople({
         projectId,
         personId: Number(selectedPersonToLink),
+        status: RUBRICA_DEFAULT_PERSON_STATUS,
         baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
         createdBy: actorUserId,
       });

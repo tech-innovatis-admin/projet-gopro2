@@ -65,6 +65,7 @@ import type {
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
   ProjectPeopleDetailedResponseDTO,
+  StatusProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { HttpError } from '@/src/lib/api/types';
 import { Dropdown } from '@/components/ui/dropdown';
@@ -73,6 +74,7 @@ type ID = string;
 
 const PAGE_SIZE = 20;
 const MAX_PAGE_REQUESTS = 1000;
+const DEFAULT_PROJECT_PERSON_STATUS: StatusProjectPeopleEnum = 'ATIVO';
 
 type SubitemLinkType = 'none' | 'person' | 'company';
 
@@ -1918,6 +1920,7 @@ export default function PagamentosPlanilhaPage() {
     await createProjectPeople({
       projectId,
       personId,
+      status: DEFAULT_PROJECT_PERSON_STATUS,
     });
     await loadProjectLinks();
 
@@ -1971,6 +1974,7 @@ export default function PagamentosPlanilhaPage() {
     await createProjectPeople({
       projectId,
       personId: createdPerson.id,
+      status: DEFAULT_PROJECT_PERSON_STATUS,
     });
     await loadProjectLinks();
 

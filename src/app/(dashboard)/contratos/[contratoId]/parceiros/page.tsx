@@ -141,7 +141,7 @@ async function linkPartner(contratoId: string, partnerId: number, createdBy: num
   const response = await fetch(`/api/backend/contracts/${contratoId}/parceiros`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId: Number(contratoId), partnerId, status: 'EM_CADASTRO', createdBy }),
+    body: JSON.stringify({ projectId: Number(contratoId), partnerId, status: 'CONTRATADA', createdBy }),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { message?: string } | null;

@@ -455,6 +455,7 @@ export default function EmpresasPage() {
       dataInicio: "",
       dataFim: "",
       observacao: "",
+      status: "CONTRATADA",
     });
     setIsFormModalOpen(true);
   };
@@ -606,7 +607,7 @@ export default function EmpresasPage() {
       await createProjectCompany({
         projectId,
         companyId: selectedCompanyId,
-        status: "EM_CADASTRO",
+        status: "CONTRATADA",
         isIncubated: false,
         createdBy: actorUserId,
       });

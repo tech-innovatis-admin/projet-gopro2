@@ -132,6 +132,7 @@ type MembroFormData = {
 };
 
 const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_PROJECT_PERSON_STATUS: StatusProjectPeopleEnum = "ATIVO";
 
 function parseProjectId(rawId: string) {
   const parsed = Number(rawId);
@@ -769,7 +770,7 @@ export default function EquipeTecnicaPage() {
               contractType: formData.contractType || undefined,
               startDate: toOptional(formData.startDate),
               endDate: toOptional(formData.endDate),
-              status: formData.status || undefined,
+              status: formData.status as StatusProjectPeopleEnum,
               notes: toOptional(formData.notes),
               createdBy: actorUserId,
             },
@@ -843,6 +844,7 @@ export default function EquipeTecnicaPage() {
           projectId,
           personId: selectedPersonId,
           role: papelToRole(linkPapel),
+          status: DEFAULT_PROJECT_PERSON_STATUS,
           institutionalLink: toOptional(linkVinculo),
           workloadHours:
             typeof linkCargaHoraria === "number" ? linkCargaHoraria : undefined,
