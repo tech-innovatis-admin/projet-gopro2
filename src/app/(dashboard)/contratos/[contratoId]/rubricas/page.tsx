@@ -43,8 +43,6 @@ import { mapParceiroFormToPartnerRequestDTO } from '@/src/app/(dashboard)/parcei
 import {
   createBudgetCategory,
   createBudgetItem,
-  assignBudgetItemBeneficiary,
-  removeBudgetItemBeneficiary,
   createBudgetTransfer,
   createCompany,
   createPeople,
@@ -155,9 +153,6 @@ interface ItemRubrica {
   projectPeopleId?: string;
   projectCompanyId?: string;
   projectPartnerId?: string;
-  beneficiaryType?: BeneficiaryType;
-  beneficiaryReferenceId?: string;
-  unlinkedItem?: boolean;
 }
 interface ProjectPersonOption {
   id: string;
@@ -248,10 +243,6 @@ const buildProjectCompanyOption = (
     `Empresa #${company.companyId}`;
   const cnpj = company.companyCnpj?.trim() || null;
   const status = company.status ?? null;
-  const balance =
-    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
-      ? company.availableBalance
-      : null;
   const totalValue =
     typeof company.totalValue === 'number' && Number.isFinite(company.totalValue)
       ? company.totalValue
@@ -262,13 +253,12 @@ const buildProjectCompanyOption = (
     name,
     cnpj,
     status,
-    availableBalance: balance,
+    availableBalance: null,
     totalValue,
     label: [
       name,
       cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado',
       formatContractingStatus(status),
-      balance != null ? `Saldo ${formatCurrency(balance)}` : null,
     ]
       .filter(Boolean)
       .join(' - '),
@@ -359,11 +349,6 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   webs: '',
   serviceOrder: '',
   protocol: '',
-  projectPeopleId: undefined,
-  projectCompanyId: undefined,
-  beneficiaryType: undefined,
-  beneficiaryReferenceId: undefined,
-  unlinkedItem: false,
 });
 
 const createEmptyCompanyForm = (): CompanyFormData => ({
@@ -398,12 +383,7 @@ const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
     toPositiveInt(draft.quantidade, 1) !== 1 ||
     toPositiveInt(draft.meses, 1) !== 1 ||
     toMoneyValue(draft.valorUnitario) > 0 ||
-    selectedMetaIds.length > 0 ||
-    Boolean(draft.projectPeopleId) ||
-    Boolean(draft.projectCompanyId) ||
-    Boolean(draft.beneficiaryType) ||
-    Boolean(draft.beneficiaryReferenceId) ||
-    Boolean(draft.unlinkedItem)
+    selectedMetaIds.length > 0
   );
 };
 
@@ -815,11 +795,6 @@ export default function RubricasPage() {
       toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
       toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
       toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
-      Boolean(editForm.unlinkedItem) !==
-        Boolean(!originalEditingItem.beneficiaryType || !originalEditingItem.beneficiaryReferenceId) ||
-      (editForm.beneficiaryType ?? '') !== (originalEditingItem.beneficiaryType ?? '') ||
-      (editForm.beneficiaryReferenceId ?? '') !==
-        (originalEditingItem.beneficiaryReferenceId ?? '') ||
       (editForm.projectPeopleId ?? '') !== (originalEditingItem.projectPeopleId ?? '') ||
       (editForm.projectCompanyId ?? '') !== (originalEditingItem.projectCompanyId ?? '') ||
       JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
@@ -993,14 +968,6 @@ export default function RubricasPage() {
           projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
           projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
           projectPartnerId: item.projectPartnerId ? String(item.projectPartnerId) : undefined,
-          beneficiaryType: item.beneficiaryType ?? undefined,
-          beneficiaryReferenceId: item.projectPeopleId
-            ? String(item.projectPeopleId)
-            : item.projectCompanyId
-              ? String(item.projectCompanyId)
-              : item.projectPartnerId
-                ? String(item.projectPartnerId)
-                : undefined,
           subitens: [],
         };
 
@@ -1134,38 +1101,6 @@ export default function RubricasPage() {
     [metas, resolveMetaIdsForDraft]
   );
 
-  const resolveBeneficiaryLabel = useCallback(
-    (item: ItemRubrica) => {
-      if (!item.beneficiaryType || !item.beneficiaryReferenceId) {
-        return 'Sem vínculo';
-      }
-
-      if (item.beneficiaryType === 'person') {
-        const personLabel =
-          projectPeopleOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
-          `Pessoa #${item.beneficiaryReferenceId}`;
-        return `Pessoa: ${personLabel}`;
-      }
-
-      if (item.beneficiaryType === 'partner') {
-        const partnerLabel =
-          projectPartnerOptions.find((option) => option.id === item.beneficiaryReferenceId)?.label ??
-          `Parceiro #${item.beneficiaryReferenceId}`;
-        return `Parceiro: ${partnerLabel}`;
-      }
-
-      const company = projectCompanyOptions.find(
-        (option) => option.id === item.beneficiaryReferenceId
-      );
-      if (!company) {
-        return `Empresa: #${item.beneficiaryReferenceId}`;
-      }
-
-      const cnpj = formatCnpjCompact(company.cnpj);
-      return `Empresa: ${company.name}${cnpj ? ` (${cnpj})` : ''}`;
-    },
-    [projectCompanyOptions, projectPartnerOptions, projectPeopleOptions]
-  );
 
   const resolveProjectCompanyLabel = useCallback(
     (item: ItemRubrica) => {
@@ -1364,9 +1299,6 @@ export default function RubricasPage() {
       projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
       projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
       projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
-      beneficiaryType: type,
-      beneficiaryReferenceId: referenceId,
-      unlinkedItem: false,
     }));
   };
 
@@ -1378,9 +1310,6 @@ export default function RubricasPage() {
             projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
             projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
             projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
-            beneficiaryType: type,
-            beneficiaryReferenceId: referenceId,
-            unlinkedItem: false,
           }
         : current
     );
@@ -1972,11 +1901,6 @@ export default function RubricasPage() {
       setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
-    if (!newItem.unlinkedItem && newItem.beneficiaryType && !newItem.beneficiaryReferenceId) {
-      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
-      return;
-    }
-
     const quantidade = toPositiveInt(newItem.quantidade, 1);
     const meses = toPositiveInt(newItem.meses, 1);
     const valorUnitario = toMoneyValue(newItem.valorUnitario);
@@ -1986,14 +1910,6 @@ export default function RubricasPage() {
     }
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(newItem);
-    const selectedProjectCompanyId =
-      !newItem.unlinkedItem && newItem.beneficiaryType === 'company'
-        ? (newItem.projectCompanyId ?? newItem.beneficiaryReferenceId)
-        : undefined;
-    const selectedCompany =
-      selectedProjectCompanyId
-        ? projectCompanyOptions.find((option) => option.id === selectedProjectCompanyId)
-        : null;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -2002,7 +1918,7 @@ export default function RubricasPage() {
 
     try {
       const actorUserId = await requireCurrentUserId();
-      const basePayload = {
+      await createBudgetItem({
         categoryId: toPersistedId(rubricaId),
         description: newItem.descricao.trim(),
         quantity: quantidade,
@@ -2011,37 +1927,12 @@ export default function RubricasPage() {
         plannedAmount: valorTotal,
         executedAmount: 0,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
-        projectPeopleId:
-          !newItem.unlinkedItem && newItem.projectPeopleId
-            ? toPersistedId(newItem.projectPeopleId)
-            : null,
-        projectCompanyId:
-          !newItem.unlinkedItem && newItem.projectCompanyId
-            ? toPersistedId(newItem.projectCompanyId)
-            : null,
-        projectPartnerId:
-          !newItem.unlinkedItem && newItem.beneficiaryType === 'partner' && newItem.projectPartnerId
-            ? toPersistedId(newItem.projectPartnerId)
-            : null,
         notes: buildBudgetItemNotes(newItem.notes, selectedMetaIds),
         webs: toOptional(newItem.webs),
         serviceOrder: toOptional(newItem.serviceOrder),
         protocol: toOptional(newItem.protocol),
         createdBy: actorUserId,
-      };
-
-      const createdItem = await createBudgetItem(basePayload);
-      if (
-        !newItem.unlinkedItem &&
-        newItem.beneficiaryType &&
-        newItem.beneficiaryReferenceId
-      ) {
-        await assignBudgetItemBeneficiary(createdItem.id, {
-          beneficiaryType: newItem.beneficiaryType,
-          referenceId: toPersistedId(newItem.beneficiaryReferenceId),
-          contractedAmount: valorTotal,
-        });
-      }
+      });
 
       await loadData();
       closeAddItemModal();
@@ -2056,13 +1947,7 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
-      if (conflictMessage) {
-        setCriticalConflictMessage(conflictMessage);
-        setActionError(null);
-      } else {
-        setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
-      }
+      setActionError(toErrorMessage(error, 'Não foi possível adicionar o item.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -2080,7 +1965,6 @@ export default function RubricasPage() {
     setEditForm({
       ...item,
       metaIds: resolveMetaIdsForDraft(item),
-      unlinkedItem: !item.beneficiaryType || !item.beneficiaryReferenceId,
     });
   };
 
@@ -2100,10 +1984,6 @@ export default function RubricasPage() {
       setActionError('Informe quantidade e meses antes de salvar o item.');
       return;
     }
-    if (!editForm.unlinkedItem && editForm.beneficiaryType && !editForm.beneficiaryReferenceId) {
-      setActionError('Selecione o beneficiário ou marque "Item de rúbrica sem vínculo".');
-      return;
-    }
 
     const quantidade = toPositiveInt(editForm.quantidade, 1);
     const meses = toPositiveInt(editForm.meses, 1);
@@ -2114,13 +1994,6 @@ export default function RubricasPage() {
     }
     const valorTotal = Number((quantidade * meses * valorUnitario).toFixed(2));
     const selectedMetaIds = resolveMetaIdsForDraft(editForm);
-    const hadBeneficiaryBefore = Boolean(
-      originalEditingItem?.beneficiaryType && originalEditingItem?.beneficiaryReferenceId
-    );
-    const shouldBeUnlinked =
-      Boolean(editForm.unlinkedItem) ||
-      !editForm.beneficiaryType ||
-      !editForm.beneficiaryReferenceId;
 
     setIsSubmitting(true);
     setActionError(null);
@@ -2137,36 +2010,12 @@ export default function RubricasPage() {
         unitCost: valorUnitario,
         plannedAmount: valorTotal,
         goalId: selectedMetaIds[0] ? toPersistedId(selectedMetaIds[0]) : null,
-        projectPeopleId:
-          !editForm.unlinkedItem && editForm.projectPeopleId
-            ? toPersistedId(editForm.projectPeopleId)
-            : null,
-        projectCompanyId:
-          !editForm.unlinkedItem && editForm.projectCompanyId
-            ? toPersistedId(editForm.projectCompanyId)
-            : null,
-        projectPartnerId:
-          !editForm.unlinkedItem && editForm.beneficiaryType === 'partner' && editForm.projectPartnerId
-            ? toPersistedId(editForm.projectPartnerId)
-            : null,
         notes: buildBudgetItemNotes(editForm.notes, selectedMetaIds),
         webs: toOptional(editForm.webs),
         serviceOrder: toOptional(editForm.serviceOrder),
         protocol: toOptional(editForm.protocol),
         updatedBy: actorUserId,
       });
-
-      if (shouldBeUnlinked) {
-        if (hadBeneficiaryBefore) {
-          await removeBudgetItemBeneficiary(toPersistedId(editingItem));
-        }
-      } else if (editForm.beneficiaryType && editForm.beneficiaryReferenceId) {
-        await assignBudgetItemBeneficiary(toPersistedId(editingItem), {
-          beneficiaryType: editForm.beneficiaryType,
-          referenceId: toPersistedId(editForm.beneficiaryReferenceId),
-          contractedAmount: valorTotal,
-        });
-      }
 
       await loadData();
       setEditingItem(null);
@@ -2182,13 +2031,7 @@ export default function RubricasPage() {
       }
     } catch (error) {
       captureItemFieldErrors(error);
-      const conflictMessage = extractCriticalBeneficiaryConflictMessage(error);
-      if (conflictMessage) {
-        setCriticalConflictMessage(conflictMessage);
-        setActionError(null);
-      } else {
-        setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
-      }
+      setActionError(toErrorMessage(error, 'Não foi possível atualizar o item.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -2994,13 +2837,7 @@ export default function RubricasPage() {
                             </span>
                           </td>
                           <td className="py-2 px-2 text-gray-700">
-                            <span
-                              className={
-                                item.beneficiaryType ? 'text-gray-700' : 'text-gray-400'
-                              }
-                            >
-                              {resolveBeneficiaryLabel(item)}
-                            </span>
+                            <span className="text-gray-400">-</span>
                           </td>
                           <td className="py-2 px-2 text-gray-700 text-center">
                             {item.webs?.trim() ? item.webs : <span className="text-gray-400">-</span>}
@@ -3363,218 +3200,6 @@ export default function RubricasPage() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
-                <Checkbox
-                  checked={Boolean(newItem.unlinkedItem)}
-                  onCheckedChange={(checked) =>
-                    setNewItem((current) => ({
-                      ...current,
-                      unlinkedItem: Boolean(checked),
-                      projectPeopleId: checked ? undefined : current.projectPeopleId,
-                      projectCompanyId: checked ? undefined : current.projectCompanyId,
-                      beneficiaryType: checked ? undefined : current.beneficiaryType,
-                      beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
-                    }))
-                  }
-                  disabled={isSubmitting}
-                />
-                Item de rúbrica sem vínculo
-              </label>
-
-              <div
-                className={`space-y-3 transition-opacity ${
-                  newItem.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
-                }`}
-              >
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
-                  <Dropdown
-                    options={[
-                      { value: 'person', label: 'Pessoa do projeto' },
-                      { value: 'company', label: 'Empresa do projeto' },
-                      { value: 'partner', label: 'IF / Fundação' },
-                    ]}
-                    value={newItem.beneficiaryType}
-                    placeholder="Selecione"
-                    onChange={(value) =>
-                      setNewItem((current) => ({
-                        ...current,
-                        beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
-                        beneficiaryReferenceId: undefined,
-                        projectPeopleId: undefined,
-                        projectCompanyId: undefined,
-                        projectPartnerId: undefined,
-                      }))
-                    }
-                    disabled={isSubmitting}
-                    className={`w-full ${
-                      createItemAttempted &&
-                      !newItem.unlinkedItem &&
-                      !newItem.beneficiaryType
-                        ? 'border border-red-300'
-                        : ''
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">
-                    Beneficiário no projeto
-                  </label>
-                  <Dropdown
-                    searchable
-                    options={(newItem.beneficiaryType === 'person'
-                      ? projectPeopleOptions
-                      : newItem.beneficiaryType === 'company'
-                        ? projectCompanyOptions
-                        : newItem.beneficiaryType === 'partner'
-                          ? projectPartnerOptions
-                          : []
-                    ).map((option) => ({ value: option.id, label: option.label }))}
-                    value={newItem.beneficiaryReferenceId}
-                    placeholder={
-                      !newItem.beneficiaryType
-                        ? 'Selecione primeiro o tipo de vínculo'
-                        : newItem.beneficiaryType === 'company'
-                          ? 'Selecione a empresa do projeto'
-                          : newItem.beneficiaryType === 'partner'
-                            ? 'Selecione o IF / Fundação'
-                            : 'Selecione a pessoa do projeto'
-                    }
-                    onChange={(value) =>
-                      setNewItem((current) => ({
-                        ...current,
-                        beneficiaryReferenceId: value ?? undefined,
-                        projectPeopleId:
-                          current.beneficiaryType === 'person' ? value ?? undefined : current.projectPeopleId,
-                        projectCompanyId:
-                          current.beneficiaryType === 'company' ? value ?? undefined : current.projectCompanyId,
-                        projectPartnerId:
-                          current.beneficiaryType === 'partner' ? value ?? undefined : current.projectPartnerId,
-                      }))
-                    }
-                    disabled={isSubmitting || !newItem.beneficiaryType}
-                    className={`w-full ${
-                      createItemAttempted &&
-                      !newItem.unlinkedItem &&
-                      Boolean(newItem.beneficiaryType) &&
-                      !newItem.beneficiaryReferenceId
-                        ? 'border border-red-300'
-                        : ''
-                    }`}
-                  />
-                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Opcional. Use "sem vínculo" quando o item ainda não tiver responsável definido.
-                    </p>
-                  ) : null}
-                  {itemFieldErrors.projectPeopleId ? (
-                    <p className="mt-1 text-xs text-red-600">
-                      {itemFieldErrors.projectPeopleId}
-                    </p>
-                  ) : null}
-                  {itemFieldErrors.projectCompanyId ? (
-                    <p className="mt-1 text-xs text-red-600">
-                      {itemFieldErrors.projectCompanyId}
-                    </p>
-                  ) : null}
-                </div>
-
-                {newItem.beneficiaryType === 'person' ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                        onClick={() => {
-                          setBeneficiaryModalContext('create');
-                          setLinkPersonModalError(null);
-                          setLinkPersonFieldError(null);
-                          setLinkPersonAttempted(false);
-                          setShowLinkPersonModal(true);
-                        }}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
-                    >
-                      Vincular pessoa existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setNewPersonForm(defaultMemberFormData());
-                        setNewPersonAvatarFile(null);
-                        setNewPersonCpfError('');
-                        setNewPersonPhoneError('');
-                        setCreatePersonModalError(null);
-                        setCreatePersonFieldErrors({});
-                        setShowCreatePersonModal(true);
-                      }}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Cadastrar nova pessoa
-                    </button>
-                  </div>
-                ) : null}
-
-                {newItem.beneficiaryType === 'company' ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                        onClick={() => {
-                          setBeneficiaryModalContext('create');
-                          setLinkCompanyModalError(null);
-                          setLinkCompanyFieldError(null);
-                          setLinkCompanyAttempted(false);
-                          setShowLinkCompanyModal(true);
-                        }}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
-                    >
-                      Vincular empresa existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setCreateCompanyModalError(null);
-                        setCreateCompanyFieldErrors({});
-                        setShowCreateCompanyModal(true);
-                      }}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Cadastrar nova empresa
-                    </button>
-                  </div>
-                ) : null}
-
-                {newItem.beneficiaryType === 'partner' ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setLinkPartnerModalError(null);
-                        setLinkPartnerFieldError(null);
-                        setLinkPartnerAttempted(false);
-                        setShowLinkPartnerModal(true);
-                      }}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225]"
-                    >
-                      Vincular IF/Fundação existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('create');
-                        setShowCreatePartnerModal(true);
-                      }}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Cadastrar novo IF/Fundação
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Valor total calculado
@@ -3837,239 +3462,6 @@ export default function RubricasPage() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
-                <Checkbox
-                  checked={Boolean(editForm.unlinkedItem)}
-                  onCheckedChange={(checked) =>
-                    setEditForm((current) =>
-                      current
-                        ? {
-                            ...current,
-                            unlinkedItem: Boolean(checked),
-                            projectPeopleId: checked ? undefined : current.projectPeopleId,
-                            projectCompanyId: checked ? undefined : current.projectCompanyId,
-                            beneficiaryType: checked ? undefined : current.beneficiaryType,
-                            beneficiaryReferenceId: checked ? undefined : current.beneficiaryReferenceId,
-                          }
-                        : current
-                    )
-                  }
-                  disabled={isSubmitting}
-                />
-                Item de rúbrica sem vínculo
-              </label>
-
-              <div
-                className={`space-y-3 transition-opacity ${
-                  editForm.unlinkedItem ? 'pointer-events-none opacity-50' : 'opacity-100'
-                }`}
-              >
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">Tipo de vínculo</label>
-                  <Dropdown
-                    options={[
-                      { value: 'person', label: 'Pessoa do projeto' },
-                      { value: 'company', label: 'Empresa do projeto' },
-                      { value: 'partner', label: 'IF / Fundação' },
-                    ]}
-                    value={editForm.beneficiaryType}
-                    placeholder="Selecione"
-                    onChange={(value) =>
-                      setEditForm((current) =>
-                        current
-                          ? {
-                              ...current,
-                              beneficiaryType: (value as BeneficiaryType | undefined) ?? undefined,
-                              beneficiaryReferenceId: undefined,
-                              projectPeopleId: undefined,
-                              projectCompanyId: undefined,
-                              projectPartnerId: undefined,
-                            }
-                          : current
-                      )
-                    }
-                    disabled={isSubmitting}
-                    className={`w-full ${
-                      editItemAttempted &&
-                      !editForm.unlinkedItem &&
-                      !editForm.beneficiaryType
-                        ? 'border border-red-300'
-                        : ''
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">
-                    Beneficiário no projeto
-                  </label>
-                  <Dropdown
-                    searchable
-                    options={(editForm.beneficiaryType === 'person'
-                      ? projectPeopleOptions
-                      : editForm.beneficiaryType === 'company'
-                        ? projectCompanyOptions
-                        : editForm.beneficiaryType === 'partner'
-                          ? projectPartnerOptions
-                          : []
-                    ).map((option) => ({ value: option.id, label: option.label }))}
-                    value={editForm.beneficiaryReferenceId}
-                    placeholder={
-                      !editForm.beneficiaryType
-                        ? 'Selecione primeiro o tipo de vínculo'
-                        : editForm.beneficiaryType === 'company'
-                          ? 'Selecione a empresa do projeto'
-                          : editForm.beneficiaryType === 'partner'
-                            ? 'Selecione o IF / Fundação'
-                            : 'Selecione a pessoa do projeto'
-                    }
-                    onChange={(value) =>
-                      setEditForm((current) =>
-                        current
-                          ? {
-                              ...current,
-                              beneficiaryReferenceId: value ?? undefined,
-                              projectPeopleId:
-                                current.beneficiaryType === 'person'
-                                  ? value ?? undefined
-                                  : current.projectPeopleId,
-                              projectCompanyId:
-                                current.beneficiaryType === 'company'
-                                  ? value ?? undefined
-                                  : current.projectCompanyId,
-                              projectPartnerId:
-                                current.beneficiaryType === 'partner'
-                                  ? value ?? undefined
-                                  : current.projectPartnerId,
-                            }
-                          : current
-                      )
-                    }
-                    disabled={isSubmitting || !editForm.beneficiaryType}
-                    className={`w-full ${
-                      editItemAttempted &&
-                      !editForm.unlinkedItem &&
-                      Boolean(editForm.beneficiaryType) &&
-                      !editForm.beneficiaryReferenceId
-                        ? 'border border-red-300'
-                        : ''
-                    }`}
-                  />
-                  {!itemFieldErrors.projectCompanyId && !itemFieldErrors.projectPeopleId ? (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Opcional. Use "sem vínculo" quando o item ainda não tiver responsável definido.
-                    </p>
-                  ) : null}
-                  {itemFieldErrors.projectPeopleId ? (
-                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectPeopleId}</p>
-                  ) : null}
-                  {itemFieldErrors.projectCompanyId ? (
-                    <p className="mt-1 text-xs text-red-600">{itemFieldErrors.projectCompanyId}</p>
-                  ) : null}
-                </div>
-
-                {editForm.beneficiaryType === 'person' && !editForm.unlinkedItem ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                        onClick={() => {
-                          setBeneficiaryModalContext('edit');
-                          setLinkPersonModalError(null);
-                          setLinkPersonFieldError(null);
-                          setLinkPersonAttempted(false);
-                          setShowLinkPersonModal(true);
-                        }}
-                      disabled={isSubmitting}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
-                    >
-                      Vincular pessoa existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setNewPersonForm(defaultMemberFormData());
-                        setNewPersonAvatarFile(null);
-                        setNewPersonCpfError('');
-                        setNewPersonPhoneError('');
-                        setCreatePersonModalError(null);
-                        setCreatePersonFieldErrors({});
-                        setShowCreatePersonModal(true);
-                      }}
-                      disabled={isSubmitting}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#003319] disabled:opacity-50"
-                    >
-                      Cadastrar nova pessoa
-                    </button>
-                  </div>
-                ) : null}
-
-                {editForm.beneficiaryType === 'company' && !editForm.unlinkedItem ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                        onClick={() => {
-                          setBeneficiaryModalContext('edit');
-                          setLinkCompanyModalError(null);
-                          setLinkCompanyFieldError(null);
-                          setLinkCompanyAttempted(false);
-                          setShowLinkCompanyModal(true);
-                        }}
-                      disabled={isSubmitting}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
-                    >
-                      Vincular empresa existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setNewCompanyForm(createEmptyCompanyForm());
-                        setCreateCompanyModalError(null);
-                        setCreateCompanyFieldErrors({});
-                        setShowCreateCompanyModal(true);
-                      }}
-                      disabled={isSubmitting}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#003319] disabled:opacity-50"
-                    >
-                      Cadastrar nova empresa
-                    </button>
-                  </div>
-                ) : null}
-
-                {editForm.beneficiaryType === 'partner' && !editForm.unlinkedItem ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setLinkPartnerModalError(null);
-                        setLinkPartnerFieldError(null);
-                        setLinkPartnerAttempted(false);
-                        setShowLinkPartnerModal(true);
-                      }}
-                      disabled={isSubmitting}
-                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-[#004225] hover:bg-emerald-50 disabled:opacity-50"
-                    >
-                      Vincular IF/Fundação existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBeneficiaryModalContext('edit');
-                        setShowCreatePartnerModal(true);
-                      }}
-                      disabled={isSubmitting}
-                      className="rounded-lg bg-[#004225] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#003319] disabled:opacity-50"
-                    >
-                      Cadastrar novo IF/Fundação
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Valor total calculado
@@ -4250,245 +3642,6 @@ export default function RubricasPage() {
         )}
       </AppModalShell>
 
-        <AppModalShell
-          isOpen={showLinkPersonModal}
-          title="Vincular pessoa existente"
-          onClose={() => {
-            setShowLinkPersonModal(false);
-            setLinkPersonModalError(null);
-            setLinkPersonFieldError(null);
-            setLinkPersonAttempted(false);
-            setSelectedPersonToLink(undefined);
-          }}
-        >
-        <div className="space-y-4">
-          {linkPersonModalError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {linkPersonModalError}
-            </div>
-          ) : null}
-            <Dropdown
-              searchable
-              options={availablePeople.map((person) => ({
-                value: String(person.id),
-                label: person.fullName,
-              }))}
-              value={selectedPersonToLink}
-              placeholder="Selecione uma pessoa"
-              onChange={(value) => setSelectedPersonToLink(value)}
-              className={`w-full ${linkPersonAttempted && (!selectedPersonToLink || Boolean(linkPersonFieldError)) ? 'border border-red-300' : ''}`}
-            />
-            {linkPersonAttempted && (!selectedPersonToLink || linkPersonFieldError) ? (
-              <p className="text-xs text-red-600">{linkPersonFieldError || 'Selecione uma pessoa para vincular.'}</p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLinkPersonModal(false);
-                  setLinkPersonModalError(null);
-                  setLinkPersonFieldError(null);
-                  setLinkPersonAttempted(false);
-                  setSelectedPersonToLink(undefined);
-                }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLinkPersonAttempted(true);
-                  beneficiaryModalContext === 'edit'
-                    ? void handleLinkExistingPersonForEdit()
-                    : void handleLinkExistingPerson();
-                }}
-                className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-              >
-                Vincular
-              </button>
-          </div>
-        </div>
-      </AppModalShell>
-
-        <AppModalShell
-          isOpen={showLinkCompanyModal}
-          title="Vincular empresa existente"
-          onClose={() => {
-            setShowLinkCompanyModal(false);
-            setLinkCompanyModalError(null);
-            setLinkCompanyFieldError(null);
-            setLinkCompanyAttempted(false);
-            setSelectedCompanyToLink(undefined);
-          }}
-        >
-        <div className="space-y-4">
-          {linkCompanyModalError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {linkCompanyModalError}
-            </div>
-          ) : null}
-            <Dropdown
-              searchable
-              options={availableCompanies.map((company) => ({
-                value: String(company.id),
-                label: company.tradeName || company.name,
-              }))}
-              value={selectedCompanyToLink}
-              placeholder="Selecione uma empresa"
-              onChange={(value) => setSelectedCompanyToLink(value)}
-              className={`w-full ${linkCompanyAttempted && (!selectedCompanyToLink || Boolean(linkCompanyFieldError)) ? 'border border-red-300' : ''}`}
-            />
-            {linkCompanyAttempted && (!selectedCompanyToLink || linkCompanyFieldError) ? (
-              <p className="text-xs text-red-600">{linkCompanyFieldError || 'Selecione uma empresa para vincular.'}</p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLinkCompanyModal(false);
-                  setLinkCompanyModalError(null);
-                  setLinkCompanyFieldError(null);
-                  setLinkCompanyAttempted(false);
-                  setSelectedCompanyToLink(undefined);
-                }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLinkCompanyAttempted(true);
-                  beneficiaryModalContext === 'edit'
-                    ? void handleLinkExistingCompanyForEdit()
-                    : void handleLinkExistingCompany();
-                }}
-                className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white"
-              >
-                Vincular
-              </button>
-          </div>
-        </div>
-      </AppModalShell>
-
-      <AppModalShell
-        isOpen={showLinkPartnerModal}
-        title="Vincular IF / Fundação existente"
-        onClose={() => {
-          setShowLinkPartnerModal(false);
-          setLinkPartnerModalError(null);
-          setLinkPartnerFieldError(null);
-          setLinkPartnerAttempted(false);
-          setSelectedPartnerToLink(undefined);
-        }}
-      >
-        <div className="space-y-4">
-          {linkPartnerModalError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {linkPartnerModalError}
-            </div>
-          ) : null}
-          <Dropdown
-            searchable
-            options={availablePartners.map((p) => ({
-              value: String(p.id),
-              label: `${p.tradeName || p.name} (${p.partnersType === 'IF' ? 'IF' : 'Fundação'})`,
-            }))}
-            value={selectedPartnerToLink}
-            placeholder="Selecione o IF ou Fundação"
-            onChange={(value) => setSelectedPartnerToLink(value)}
-            className={`w-full ${linkPartnerAttempted && (!selectedPartnerToLink || Boolean(linkPartnerFieldError)) ? 'border border-red-300' : ''}`}
-          />
-          {linkPartnerAttempted && (!selectedPartnerToLink || linkPartnerFieldError) ? (
-            <p className="text-xs text-red-600">{linkPartnerFieldError || 'Selecione um parceiro para vincular.'}</p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowLinkPartnerModal(false);
-                setLinkPartnerModalError(null);
-                setLinkPartnerFieldError(null);
-                setLinkPartnerAttempted(false);
-                setSelectedPartnerToLink(undefined);
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLinkPartnerAttempted(true);
-                beneficiaryModalContext === 'edit'
-                  ? void handleLinkExistingPartnerForEdit()
-                  : void handleLinkExistingPartner();
-              }}
-              disabled={isSubmitting}
-              className="rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Vincular
-            </button>
-          </div>
-        </div>
-      </AppModalShell>
-
-      <NovoParceiroModal
-        isOpen={showCreatePartnerModal}
-        onClose={() => setShowCreatePartnerModal(false)}
-        onSubmit={(data) =>
-          beneficiaryModalContext === 'edit'
-            ? handleCreateAndLinkPartnerForEdit(data)
-            : handleCreateAndLinkPartner(data)
-        }
-        zIndexClassName="z-[200]"
-      />
-
-      {showCreatePersonModal ? (
-        <MemberFormModal
-          formData={newPersonForm}
-          setFormData={setNewPersonForm}
-          avatarFile={newPersonAvatarFile}
-          setAvatarFile={setNewPersonAvatarFile}
-          currentAvatarUrl=""
-          isSaving={isSubmitting}
-          isEditingItem={false}
-            onClose={() => {
-              setShowCreatePersonModal(false);
-              setNewPersonForm(defaultMemberFormData());
-              setNewPersonAvatarFile(null);
-              setNewPersonCpfError('');
-              setNewPersonPhoneError('');
-              setCreatePersonModalError(null);
-              setCreatePersonFieldErrors({});
-            }}
-          onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkPersonForEdit() : void handleCreateAndLinkPerson()}
-          cpfError={newPersonCpfError}
-          setCpfError={setNewPersonCpfError}
-          phoneError={newPersonPhoneError}
-          setPhoneError={setNewPersonPhoneError}
-          errorMessage={createPersonModalError}
-          fieldErrors={createPersonFieldErrors}
-        />
-      ) : null}
-
-      <CompanyFormModal
-        isOpen={showCreateCompanyModal}
-        formData={newCompanyForm}
-        setFormData={setNewCompanyForm}
-        isSaving={isSubmitting}
-        isEditingItem={false}
-          onClose={() => {
-            setShowCreateCompanyModal(false);
-            setNewCompanyForm(createEmptyCompanyForm());
-            setCreateCompanyModalError(null);
-            setCreateCompanyFieldErrors({});
-          }}
-        onSave={() => beneficiaryModalContext === 'edit' ? void handleCreateAndLinkCompanyForEdit() : void handleCreateAndLinkCompany()}
-        errorMessage={createCompanyModalError}
-        fieldErrors={createCompanyFieldErrors}
-      />
 
       {canManageChildren && itemParaRemanejamento && (
         <RemanejamentoModal
@@ -4514,35 +3667,6 @@ export default function RubricasPage() {
         />
       )}
 
-      <AppModalShell
-        isOpen={Boolean(criticalConflictMessage)}
-        title="Conflito de vínculo financeiro"
-        description="A mesma pessoa não pode receber duas vezes no mesmo projeto."
-        icon={<AlertCircle className="h-5 w-5" />}
-        tone="danger"
-        onClose={() => setCriticalConflictMessage(null)}
-        maxWidthClassName="max-w-2xl"
-      >
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-            <p className="text-sm font-semibold text-red-800">Bloqueio de regra de negócio</p>
-            <p className="mt-1 text-sm text-red-700">{criticalConflictMessage}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-            Ajuste o beneficiário deste item para continuar: selecione outra pessoa ou outra
-            empresa sem responsável já vinculado financeiramente neste projeto.
-          </div>
-          <div className="flex justify-end border-t border-gray-200 pt-4">
-            <button
-              type="button"
-              onClick={() => setCriticalConflictMessage(null)}
-              className="rounded-xl bg-[#004225] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#00351d]"
-            >
-              Entendi
-            </button>
-          </div>
-        </div>
-      </AppModalShell>
     </div>
   );
 }

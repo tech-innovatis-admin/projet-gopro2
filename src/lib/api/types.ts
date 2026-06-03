@@ -850,6 +850,8 @@ export interface ProjectPeopleDetailedResponseDTO extends ProjectPeopleResponseD
   personAddress: string | null;
   personCity: string | null;
   personState: string | null;
+  totalPago?: number | null;
+  totalReservado?: number | null;
 }
 
 export interface ProjectPeopleRequestDTO {
@@ -928,8 +930,8 @@ export interface ProjectCompanyResponseDTO {
   endDate: string | null;
   status: ContractingStatusEnum | null;
   totalValue: number | null;
-  availableBalance?: number | null;
-  executionPercentage?: number | null;
+  totalPago?: number | null;
+  totalReservado?: number | null;
   notes: string | null;
   isIncubated: boolean | null;
   serviceType: string | null;
@@ -1144,10 +1146,6 @@ export interface BudgetItemRequestDTO {
   plannedAmount: number;
   executedAmount?: number;
   goalId?: number | null;
-  projectPeopleId?: number | null;
-  projectCompanyId?: number | null;
-  projectPartnerId?: number | null;
-  beneficiaryType?: 'person' | 'company' | 'partner' | null;
   contractedAmount?: number | null;
   notes?: string;
   webs?: string;
