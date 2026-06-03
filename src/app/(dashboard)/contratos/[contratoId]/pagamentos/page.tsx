@@ -111,7 +111,6 @@ type ItemRubrica = {
   valorBaseOrcado: number;
   remanejamentoDebito: number;
   remanejamentoCredito: number;
-  beneficiaryType?: 'person' | 'company' | 'partner' | null;
   projectPeopleId?: ID;
   projectCompanyId?: ID;
 };
@@ -188,7 +187,6 @@ type ProjectLinkedCompany = {
   label: string;
   cnpj?: string | null;
   status?: ProjectCompanyDetailedResponseDTO['status'];
-  availableBalance?: number | null;
 };
 
 type NewSubitemFormState = {
@@ -400,16 +398,11 @@ function buildProjectCompanyDisplayLabel(company: {
   name: string;
   cnpj?: string | null;
   status?: ProjectCompanyDetailedResponseDTO['status'];
-  availableBalance?: number | null;
 }) {
   const cnpjLabel = formatCnpj(company.cnpj);
   const statusLabel = getContractingStatusLabel(company.status ?? null);
-  const balanceLabel =
-    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
-      ? `Saldo ${formatCurrency(company.availableBalance)}`
-      : null;
 
-  return [company.name, cnpjLabel ? `CNPJ ${cnpjLabel}` : null, statusLabel, balanceLabel]
+  return [company.name, cnpjLabel ? `CNPJ ${cnpjLabel}` : null, statusLabel]
     .filter(Boolean)
     .join(' • ');
 }
@@ -590,7 +583,6 @@ export default function PagamentosPlanilhaPage() {
 
     return null;
   }, [subitemModalItemId, rubricas]);
-  const isBeneficiaryLockedByRubrica = Boolean(selectedSubitemItem?.beneficiaryType);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -677,42 +669,6 @@ export default function PagamentosPlanilhaPage() {
       companyId ? parsePersistedId(projectCompaniesById.get(companyId)?.projectLinkId) : null,
     [projectCompaniesById]
   );
-  const lockedBeneficiaryConfig = useMemo(() => {
-    if (!selectedSubitemItem?.beneficiaryType) return null;
-
-    if (selectedSubitemItem.beneficiaryType === 'person' && selectedSubitemItem.projectPeopleId) {
-      const linkedPerson = projectPeopleByLinkId.get(selectedSubitemItem.projectPeopleId);
-      if (!linkedPerson) return null;
-      return {
-        vinculoTipo: 'person' as SubitemLinkType,
-        personId: linkedPerson.personId,
-        organizationId: '',
-      };
-    }
-
-    if (selectedSubitemItem.beneficiaryType === 'company' && selectedSubitemItem.projectCompanyId) {
-      const linkedCompany = projectCompaniesByLinkId.get(selectedSubitemItem.projectCompanyId);
-      if (!linkedCompany) return null;
-      return {
-        vinculoTipo: 'company' as SubitemLinkType,
-        personId: '',
-        organizationId: linkedCompany.companyId,
-      };
-    }
-
-    return null;
-  }, [projectCompaniesByLinkId, projectPeopleByLinkId, selectedSubitemItem]);
-
-  useEffect(() => {
-    if (!isSubitemModalOpen || subitemModalEditingContext || !lockedBeneficiaryConfig) return;
-
-    setSubitemModalForm((current) => ({
-      ...current,
-      vinculoTipo: lockedBeneficiaryConfig.vinculoTipo,
-      personId: lockedBeneficiaryConfig.personId,
-      organizationId: lockedBeneficiaryConfig.organizationId,
-    }));
-  }, [isSubitemModalOpen, lockedBeneficiaryConfig, subitemModalEditingContext]);
   const linkableBasePeople = useMemo(
     () =>
       basePeople
@@ -733,34 +689,8 @@ export default function PagamentosPlanilhaPage() {
   );
 
   const getDefaultSubitemFormForItem = useCallback(
-    (item: ItemRubrica): NewSubitemFormState => {
-      if (item.beneficiaryType === 'person' && item.projectPeopleId) {
-        const linkedPerson = projectPeopleByLinkId.get(item.projectPeopleId);
-        if (linkedPerson) {
-          return {
-            nome: linkedPerson.fullName,
-            vinculoTipo: 'person',
-            personId: linkedPerson.personId,
-            organizationId: '',
-          };
-        }
-      }
-
-      if (item.beneficiaryType === 'company' && item.projectCompanyId) {
-        const linkedCompany = projectCompaniesByLinkId.get(item.projectCompanyId);
-        if (linkedCompany) {
-          return {
-            nome: linkedCompany.name,
-            vinculoTipo: 'company',
-            personId: '',
-            organizationId: linkedCompany.companyId,
-          };
-        }
-      }
-
-      return DEFAULT_NEW_SUBITEM_FORM;
-    },
-    [projectCompaniesByLinkId, projectPeopleByLinkId]
+    (_item: ItemRubrica): NewSubitemFormState => DEFAULT_NEW_SUBITEM_FORM,
+    []
   );
 
   const closeSubitemModal = ({
@@ -861,20 +791,13 @@ export default function PagamentosPlanilhaPage() {
             link.companyTradeName?.trim() || link.companyName?.trim() || `Empresa ${link.companyId}`;
           const cnpj = formatCnpj(link.companyCnpj);
           const statusLabel = getContractingStatusLabel(link.status ?? null);
-          const balanceLabel =
-            typeof link.availableBalance === 'number' && Number.isFinite(link.availableBalance)
-              ? `Saldo ${formatCurrency(link.availableBalance)}`
-              : null;
-
           return {
             projectLinkId: String(link.id),
             companyId: String(link.companyId),
             name,
             cnpj: link.companyCnpj ?? null,
             status: link.status ?? null,
-            availableBalance:
-              typeof link.availableBalance === 'number' ? link.availableBalance : null,
-            label: [name, cnpj ? `CNPJ ${cnpj}` : null, statusLabel, balanceLabel]
+            label: [name, cnpj ? `CNPJ ${cnpj}` : null, statusLabel]
               .filter(Boolean)
               .join(' • '),
           };
@@ -1005,7 +928,6 @@ export default function PagamentosPlanilhaPage() {
           valorBaseOrcado,
           remanejamentoDebito: transferBalance.debito,
           remanejamentoCredito: transferBalance.credito,
-          beneficiaryType: item.beneficiaryType ?? null,
           projectPeopleId: item.projectPeopleId != null ? String(item.projectPeopleId) : undefined,
           projectCompanyId:
             item.projectCompanyId != null ? String(item.projectCompanyId) : undefined,
@@ -1737,18 +1659,9 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
-      setSubitemModalError(
-        projectLinksError ??
-          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
-      );
-      return;
-    }
-
-    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
-    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
-    const effectiveOrganizationId =
-      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+    const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
+    const effectivePersonId = subitemModalForm.personId;
+    const effectiveOrganizationId = subitemModalForm.organizationId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -2032,18 +1945,9 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
-      setSubitemModalError(
-        projectLinksError ??
-          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
-      );
-      return;
-    }
-
-    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
-    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
-    const effectiveOrganizationId =
-      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+    const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
+    const effectivePersonId = subitemModalForm.personId;
+    const effectiveOrganizationId = subitemModalForm.organizationId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -3560,7 +3464,7 @@ export default function PagamentosPlanilhaPage() {
         isLoadingLinks={isLoadingProjectLinks}
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
-        lockBeneficiary={isBeneficiaryLockedByRubrica}
+        lockBeneficiary={false}
         isPersisting={isPersisting}
         onChange={(patch) => {
           setSubitemModalError(null);
