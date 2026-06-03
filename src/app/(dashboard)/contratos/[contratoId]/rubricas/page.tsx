@@ -2765,7 +2765,6 @@ export default function RubricasPage() {
                       { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Deb.)
                       { minWidth: 110, defaultWidth: 120, maxWidth: 220 }, // Rem. (Cred.)
                       { minWidth: 120, defaultWidth: 140, maxWidth: 230 }, // Valor Final
-                      { minWidth: 200, defaultWidth: 230, maxWidth: 320 }, // Responsável
                       { minWidth: 120, defaultWidth: 140, maxWidth: 240 }, // WEBS
                       { minWidth: 140, defaultWidth: 160, maxWidth: 280 }, // Ordem de Serviço
                       { minWidth: 120, defaultWidth: 140, maxWidth: 260 }, // Protocolo
@@ -2785,7 +2784,6 @@ export default function RubricasPage() {
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-red-600">Rem. (Deb.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-green-600">Rem. (Cred.)</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 text-blue-600">Valor Final</th>
-                        <th className="text-center py-2 px-2 font-medium text-gray-600">Responsável do item</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">WEBS</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600 whitespace-nowrap">Ordem de Serviço</th>
                         <th className="text-center py-2 px-2 font-medium text-gray-600">Protocolo</th>
@@ -2835,9 +2833,6 @@ export default function RubricasPage() {
                             <span className="font-semibold text-blue-600">
                               {formatCurrency(calcularValorFinalItem(item))}
                             </span>
-                          </td>
-                          <td className="py-2 px-2 text-gray-700">
-                            <span className="text-gray-400">-</span>
                           </td>
                           <td className="py-2 px-2 text-gray-700 text-center">
                             {item.webs?.trim() ? item.webs : <span className="text-gray-400">-</span>}

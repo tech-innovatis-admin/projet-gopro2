@@ -4,6 +4,7 @@ import type {
   PartnerRequestDTO,
   PartnerResponseDTO,
   PartnerUpdateDTO,
+  ProjectPartnerLinkResponseDTO,
 } from '../types';
 
 const BASE = '/partners';
@@ -36,5 +37,15 @@ export function updatePartner(id: number | string, payload: PartnerUpdateDTO) {
 
 export function deletePartner(id: number | string) {
   return http.delete<void>(`${BASE}/${id}`);
+}
+
+export function listProjectPartnerLinks(
+  projectId: number,
+  params: { page?: number; size?: number } = {}
+) {
+  return http.get<PageResponseDTO<ProjectPartnerLinkResponseDTO>>(
+    `/contracts/${projectId}/parceiros`,
+    { query: { page: params.page ?? 0, size: params.size ?? 50 } }
+  );
 }
 

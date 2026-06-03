@@ -683,6 +683,24 @@ export interface ProjectPartnerResponseDTO {
   partners: ProjectPartnerMetricDTO[];
 }
 
+export interface ProjectPartnerLinkResponseDTO {
+  id: number;
+  projectId: number;
+  partnerId: number | null;
+  partnerName: string | null;
+  partnerTradeName: string | null;
+  partnerType: PartnersTypeEnum | null;
+  status: string | null;
+  totalValue: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
 export type StatusDisbursementScheduleEnum =
   | 'PREVISTO'
   | 'PARCIAL'
@@ -1049,6 +1067,7 @@ export interface ExpenseResponseDTO {
   personId: number | null;
   organizationId: number | null;
   projectCompanyId: number | null;
+  projectPartnerId: number | null;
   description: string | null;
   invoiceNumber: string | null;
   invoiceDate: string | null;
@@ -1073,6 +1092,7 @@ export interface ExpenseRequestDTO {
   personId?: number;
   organizationId?: number;
   projectCompanyId?: number;
+  projectPartnerId?: number | null;
   description?: string;
   invoiceNumber?: string;
   invoiceDate?: string;

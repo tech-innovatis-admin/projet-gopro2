@@ -43,6 +43,7 @@ import {
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
+  listProjectPartnerLinks,
   reclassifyExpense,
   updateExpense,
   updateIncome,
@@ -66,6 +67,7 @@ import type {
   PeopleResponseDTO,
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
+  ProjectPartnerLinkResponseDTO,
   ProjectPeopleDetailedResponseDTO,
   StatusProjectPeopleEnum,
 } from '@/src/lib/api/types';
@@ -78,7 +80,7 @@ const PAGE_SIZE = 20;
 const MAX_PAGE_REQUESTS = 1000;
 const DEFAULT_PROJECT_PERSON_STATUS: StatusProjectPeopleEnum = 'ATIVO';
 
-type SubitemLinkType = 'none' | 'person' | 'company';
+type SubitemLinkType = 'none' | 'person' | 'company' | 'partner';
 
 type Lancamento = {
   id: ID;
@@ -96,6 +98,7 @@ type Subitem = {
   vinculoTipo: SubitemLinkType;
   personId?: ID;
   organizationId?: ID;
+  partnerId?: ID;
 };
 
 type ItemRubrica = {
@@ -189,11 +192,19 @@ type ProjectLinkedCompany = {
   status?: ProjectCompanyDetailedResponseDTO['status'];
 };
 
+type ProjectLinkedPartner = {
+  projectLinkId: ID;
+  partnerId: ID;
+  name: string;
+  label: string;
+};
+
 type NewSubitemFormState = {
   nome: string;
   vinculoTipo: SubitemLinkType;
   personId: string;
   organizationId: string;
+  partnerId: string;
 };
 
 type PaymentFieldErrors = Partial<{
@@ -208,6 +219,7 @@ const DEFAULT_NEW_SUBITEM_FORM: NewSubitemFormState = {
   vinculoTipo: 'none',
   personId: '',
   organizationId: '',
+  partnerId: '',
 };
 
 type CreatePersonFormState = {
@@ -516,6 +528,7 @@ export default function PagamentosPlanilhaPage() {
 
   const [projectPeople, setProjectPeople] = useState<ProjectLinkedPerson[]>([]);
   const [projectCompanies, setProjectCompanies] = useState<ProjectLinkedCompany[]>([]);
+  const [projectPartners, setProjectPartners] = useState<ProjectLinkedPartner[]>([]);
   const [isLoadingProjectLinks, setIsLoadingProjectLinks] = useState(false);
   const [projectLinksError, setProjectLinksError] = useState<string | null>(null);
   const [isSubitemModalOpen, setIsSubitemModalOpen] = useState(false);
@@ -664,6 +677,10 @@ export default function PagamentosPlanilhaPage() {
     () => new Map(projectCompanies.map((company) => [company.projectLinkId, company])),
     [projectCompanies]
   );
+  const projectPartnersByLinkId = useMemo(
+    () => new Map(projectPartners.map((p) => [p.projectLinkId, p])),
+    [projectPartners]
+  );
   const resolveProjectCompanyLinkId = useCallback(
     (companyId: string | undefined) =>
       companyId ? parsePersistedId(projectCompaniesById.get(companyId)?.projectLinkId) : null,
@@ -743,9 +760,14 @@ export default function PagamentosPlanilhaPage() {
         }`;
       }
 
+      if (subitem.vinculoTipo === 'partner') {
+        const linkedPartner = projectPartnersByLinkId.get(subitem.partnerId ?? '');
+        return `IF/Fundação: ${linkedPartner?.name ?? 'Parceiro vinculado ao projeto'}`;
+      }
+
       return 'Sem vínculo';
     },
-    [projectCompaniesById, projectPeopleById]
+    [projectCompaniesById, projectPartnersByLinkId, projectPeopleById]
   );
 
   const loadProjectLinks = useCallback(async () => {
@@ -760,12 +782,15 @@ export default function PagamentosPlanilhaPage() {
     setProjectLinksError(null);
 
     try {
-      const [peopleLinks, companyLinks] = await Promise.all([
+      const [peopleLinks, companyLinks, partnerLinks] = await Promise.all([
         fetchAllPages<ProjectPeopleDetailedResponseDTO>((query) =>
           listProjectPeopleDetailed({ ...query, projectId })
         ),
         fetchAllPages<ProjectCompanyDetailedResponseDTO>((query) =>
           listProjectCompaniesDetailed({ ...query, projectId })
+        ),
+        fetchAllPages<ProjectPartnerLinkResponseDTO>((query) =>
+          listProjectPartnerLinks(projectId, query)
         ),
       ]);
 
@@ -804,13 +829,29 @@ export default function PagamentosPlanilhaPage() {
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
+      const mappedPartners = partnerLinks
+        .filter((link) => link.partnerId != null)
+        .map<ProjectLinkedPartner>((link) => {
+          const name = link.partnerTradeName?.trim() || link.partnerName?.trim() || `Parceiro ${link.partnerId}`;
+          const typeLabel = link.partnerType === 'IF' ? 'IF' : link.partnerType === 'FUNDACAO' ? 'Fundação' : null;
+          return {
+            projectLinkId: String(link.id),
+            partnerId: String(link.partnerId),
+            name,
+            label: typeLabel ? `${name} • ${typeLabel}` : name,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
       setProjectPeople(mappedPeople);
       setProjectCompanies(mappedCompanies);
+      setProjectPartners(mappedPartners);
     } catch (error) {
       setProjectPeople([]);
       setProjectCompanies([]);
+      setProjectPartners([]);
       setProjectLinksError(
-        toErrorMessage(error, 'Não foi possível carregar as pessoas e empresas vinculadas ao projeto.')
+        toErrorMessage(error, 'Não foi possível carregar as pessoas, empresas e parceiros vinculados ao projeto.')
       );
     } finally {
       setIsLoadingProjectLinks(false);
@@ -958,7 +999,7 @@ export default function PagamentosPlanilhaPage() {
           mappedCompanyId ?? (expense.organizationId != null ? String(expense.organizationId) : undefined);
 
         const description = expense.description?.trim() || `Lançamento ${expense.id}`;
-        const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${description.toLowerCase()}`;
+        const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${expense.projectPartnerId ?? '0'}|${description.toLowerCase()}`;
 
         if (!subitemsByItem.has(expense.budgetItemId)) {
           subitemsByItem.set(expense.budgetItemId, new Map());
@@ -971,14 +1012,16 @@ export default function PagamentosPlanilhaPage() {
             id: `sub-${expense.budgetItemId}-${subitemMap.size + 1}`,
             empresaRh: description,
             lancamentos: [],
-            vinculoTipo: expense.organizationId
-              || expense.projectCompanyId
-              ? 'company'
-              : expense.personId
-                ? 'person'
-                : 'none',
+            vinculoTipo: expense.projectPartnerId != null
+              ? 'partner'
+              : expense.organizationId || expense.projectCompanyId
+                ? 'company'
+                : expense.personId
+                  ? 'person'
+                  : 'none',
             personId: expense.personId != null ? String(expense.personId) : undefined,
             organizationId: organizationIdForUi,
+            partnerId: expense.projectPartnerId != null ? String(expense.projectPartnerId) : undefined,
           };
           subitemMap.set(baseKey, subitem);
           item.subitens = [...(item.subitens ?? []), subitem];
@@ -1391,7 +1434,7 @@ export default function PagamentosPlanilhaPage() {
   const updateSubitemDraftState = (
     itemId: ID,
     subitemId: ID,
-    patch: Pick<Subitem, 'empresaRh' | 'vinculoTipo' | 'personId' | 'organizationId'>
+    patch: Pick<Subitem, 'empresaRh' | 'vinculoTipo' | 'personId' | 'organizationId' | 'partnerId'>
   ) => {
     setRubricas((previous) =>
       previous.map((rubrica) => ({
@@ -1408,6 +1451,7 @@ export default function PagamentosPlanilhaPage() {
                     vinculoTipo: patch.vinculoTipo,
                     personId: patch.personId,
                     organizationId: patch.organizationId,
+                    partnerId: patch.partnerId,
                   }
                 : subitem
             ),
@@ -1662,6 +1706,7 @@ export default function PagamentosPlanilhaPage() {
     const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
     const effectivePersonId = subitemModalForm.personId;
     const effectiveOrganizationId = subitemModalForm.organizationId;
+    const effectivePartnerId = subitemModalForm.partnerId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -1673,6 +1718,11 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    if (effectiveVinculoTipo === 'partner' && !effectivePartnerId) {
+      setSubitemModalError('Selecione um parceiro (IF/Fundação) vinculado ao projeto.');
+      return;
+    }
+
     const subitem: Subitem = {
       id: createDraftId('sub'),
       empresaRh: nome,
@@ -1680,6 +1730,7 @@ export default function PagamentosPlanilhaPage() {
       vinculoTipo: effectiveVinculoTipo,
       personId: effectiveVinculoTipo === 'person' ? effectivePersonId : undefined,
       organizationId: effectiveVinculoTipo === 'company' ? effectiveOrganizationId : undefined,
+      partnerId: effectiveVinculoTipo === 'partner' ? effectivePartnerId : undefined,
     };
 
     setRubricas((previous) =>
@@ -1783,6 +1834,7 @@ export default function PagamentosPlanilhaPage() {
       vinculoTipo: selected.subitem.vinculoTipo,
       personId: selected.subitem.personId ?? '',
       organizationId: selected.subitem.organizationId ?? '',
+      partnerId: selected.subitem.partnerId ?? '',
     });
     setIsSubitemModalOpen(true);
   };
@@ -1948,6 +2000,7 @@ export default function PagamentosPlanilhaPage() {
     const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
     const effectivePersonId = subitemModalForm.personId;
     const effectiveOrganizationId = subitemModalForm.organizationId;
+    const effectivePartnerId = subitemModalForm.partnerId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -1956,6 +2009,11 @@ export default function PagamentosPlanilhaPage() {
 
     if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
+      return;
+    }
+
+    if (effectiveVinculoTipo === 'partner' && !effectivePartnerId) {
+      setSubitemModalError('Selecione um parceiro (IF/Fundação) vinculado ao projeto.');
       return;
     }
 
@@ -1978,12 +2036,14 @@ export default function PagamentosPlanilhaPage() {
       effectiveVinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(nextOrganizationId)
         : null;
+    const nextPartnerId = effectiveVinculoTipo === 'partner' ? effectivePartnerId || undefined : undefined;
 
     updateSubitemDraftState(itemId, subitemId, {
       empresaRh: nome,
       vinculoTipo: effectiveVinculoTipo,
       personId: nextPersonId,
       organizationId: nextOrganizationId,
+      partnerId: nextPartnerId,
     });
 
     const expenseIds = (selected.subitem.lancamentos ?? [])
@@ -1999,6 +2059,8 @@ export default function PagamentosPlanilhaPage() {
       setSubitemModalError('Não foi possível resolver o vínculo da empresa no projeto.');
       return;
     }
+
+    const nextProjectPartnerId = nextPartnerId ? Number.parseInt(nextPartnerId, 10) : undefined;
 
     const budgetItemId = parsePersistedId(selected.item.id);
     if (budgetItemId == null) {
@@ -2032,6 +2094,7 @@ export default function PagamentosPlanilhaPage() {
               ? Number.parseInt(nextOrganizationId, 10)
               : undefined,
           projectCompanyId: nextProjectCompanyId ?? undefined,
+          projectPartnerId: nextProjectPartnerId,
           description: nome,
           invoiceNumber: currentExpense.invoiceNumber ?? undefined,
           invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2365,6 +2428,7 @@ export default function PagamentosPlanilhaPage() {
       subitem.vinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(subitem.organizationId)
         : null;
+    const partnerId = subitem.vinculoTipo === 'partner' ? parsePersistedId(subitem.partnerId) : null;
 
     const payload: ExpenseUpdateDTO = {
       projectId,
@@ -2379,6 +2443,7 @@ export default function PagamentosPlanilhaPage() {
       organizationId:
         subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
       projectCompanyId: projectCompanyId ?? undefined,
+      projectPartnerId: partnerId ?? undefined,
       description: description || currentExpense.description || undefined,
       invoiceNumber: currentExpense.invoiceNumber ?? undefined,
       invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2518,6 +2583,7 @@ export default function PagamentosPlanilhaPage() {
       subitem.vinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(subitem.organizationId)
         : null;
+    const partnerId = subitem.vinculoTipo === 'partner' ? parsePersistedId(subitem.partnerId) : null;
 
     const currentExpenseById = new Map(backendExpenses.map((expense) => [expense.id, expense]));
     const keepExpenseIds = new Set<number>();
@@ -2564,6 +2630,10 @@ export default function PagamentosPlanilhaPage() {
         );
         return;
       }
+      if (subitem.vinculoTipo === 'partner' && !partnerId) {
+        setActionError(`Selecione um parceiro (IF/Fundação) vinculado ao projeto para o subitem "${description}".`);
+        return;
+      }
 
       if (expenseId != null) {
         keepExpenseIds.add(expenseId);
@@ -2583,6 +2653,7 @@ export default function PagamentosPlanilhaPage() {
             organizationId:
               subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
             projectCompanyId: projectCompanyId ?? undefined,
+            projectPartnerId: partnerId ?? undefined,
             description,
           });
           continue;
@@ -2602,6 +2673,7 @@ export default function PagamentosPlanilhaPage() {
             organizationId:
               subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
             projectCompanyId: projectCompanyId ?? undefined,
+            projectPartnerId: partnerId ?? undefined,
             description,
             invoiceNumber: currentExpense.invoiceNumber ?? undefined,
             invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2620,6 +2692,7 @@ export default function PagamentosPlanilhaPage() {
             (currentExpense.personId ?? null) !== (payload.personId ?? null) ||
             (currentExpense.organizationId ?? null) !== (payload.organizationId ?? null) ||
             (currentExpense.projectCompanyId ?? null) !== (payload.projectCompanyId ?? null) ||
+            (currentExpense.projectPartnerId ?? null) !== (payload.projectPartnerId ?? null) ||
             (currentExpense.description || '') !== (payload.description || '');
 
           if (shouldUpdate) {
@@ -2640,6 +2713,7 @@ export default function PagamentosPlanilhaPage() {
           organizationId:
             subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
           projectCompanyId: projectCompanyId ?? undefined,
+          projectPartnerId: partnerId ?? undefined,
           description,
         });
       }
@@ -3464,6 +3538,7 @@ export default function PagamentosPlanilhaPage() {
         isLoadingLinks={isLoadingProjectLinks}
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
+        projectPartners={projectPartners}
         lockBeneficiary={false}
         isPersisting={isPersisting}
         onChange={(patch) => {
@@ -3479,6 +3554,7 @@ export default function PagamentosPlanilhaPage() {
             ...current,
             vinculoTipo: 'person',
             organizationId: '',
+            partnerId: '',
           }));
           setIsCreatePersonModalOpen(true);
         }}
@@ -3489,6 +3565,7 @@ export default function PagamentosPlanilhaPage() {
             ...current,
             vinculoTipo: 'company',
             personId: '',
+            partnerId: '',
           }));
           setIsCreateCompanyModalOpen(true);
         }}
@@ -4609,6 +4686,7 @@ function SubitemModal({
   isLoadingLinks,
   projectPeople,
   projectCompanies,
+  projectPartners,
   lockBeneficiary,
   isPersisting,
   onChange,
@@ -4630,6 +4708,7 @@ function SubitemModal({
   isLoadingLinks: boolean;
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
+  projectPartners: ProjectLinkedPartner[];
   lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
@@ -4648,7 +4727,8 @@ function SubitemModal({
     form.nome.trim().length > 0 ||
     form.vinculoTipo !== 'none' ||
     form.personId.length > 0 ||
-    form.organizationId.length > 0;
+    form.organizationId.length > 0 ||
+    form.partnerId.length > 0;
   const { requestClose, discardConfirmProps } = useModalCloseGuard({
     isOpen,
     shouldConfirm: hasFilledData,
@@ -4658,7 +4738,10 @@ function SubitemModal({
 
   const showPersonSelector = form.vinculoTipo === 'person';
   const showCompanySelector = form.vinculoTipo === 'company';
-  const showLinksError = Boolean(linksError) && (lockBeneficiary || showPersonSelector || showCompanySelector);
+  const showPartnerSelector = form.vinculoTipo === 'partner';
+  const showLinksError =
+    Boolean(linksError) &&
+    (lockBeneficiary || showPersonSelector || showCompanySelector || showPartnerSelector);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -4732,6 +4815,10 @@ function SubitemModal({
                 value: 'company',
                 label: 'Empresa vinculada ao projeto',
               },
+              {
+                value: 'partner',
+                label: 'IF / Fundação (parceiro)',
+              },
             ]}
             value={form.vinculoTipo}
             onChange={(value) => {
@@ -4742,6 +4829,7 @@ function SubitemModal({
                 vinculoTipo: nextType,
                 personId: nextType === 'person' ? form.personId : '',
                 organizationId: nextType === 'company' ? form.organizationId : '',
+                partnerId: nextType === 'partner' ? form.partnerId : '',
               });
             }}
             placeholder="Selecione..."
@@ -4919,6 +5007,50 @@ function SubitemModal({
             {fieldErrors.projectCompanyId ? (
               <p className="text-sm text-red-700">{fieldErrors.projectCompanyId}</p>
             ) : null}
+          </div>
+        ) : null}
+
+        {showPartnerSelector ? (
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-900">IF / Fundação vinculada</h3>
+              <p className="text-xs text-gray-500">
+                Selecione um parceiro (IF ou Fundação) vinculado ao projeto.
+              </p>
+            </div>
+            {isLoadingLinks ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
+                Carregando parceiros vinculados...
+              </div>
+            ) : projectPartners.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
+                Nenhum parceiro vinculado ao projeto.
+              </div>
+            ) : (
+              <Dropdown
+                options={projectPartners.map((partner) => ({
+                  value: partner.projectLinkId,
+                  label: partner.label,
+                }))}
+                value={form.partnerId}
+                onChange={(value) => {
+                  const nextPartnerId = value || '';
+                  const selectedPartner = projectPartners.find(
+                    (partner) => partner.projectLinkId === nextPartnerId
+                  );
+
+                  onChange({
+                    partnerId: nextPartnerId,
+                    personId: '',
+                    organizationId: '',
+                    nome: form.nome.trim() ? form.nome : selectedPartner?.name ?? form.nome,
+                  });
+                }}
+                placeholder="Selecione um parceiro"
+                disabled={isPersisting}
+                className="w-full"
+              />
+            )}
           </div>
         ) : null}
 

@@ -6,15 +6,16 @@ import {
   buildAuditChangesView,
   presentAuditChange,
   sortAuditChangesForPresentation,
-} from "./change-presentation.ts";
+} from "./change-presentation";
 import {
   buildBudgetCategoryReferenceLabel,
   buildBudgetItemReferenceLabel,
   enhanceBudgetReferenceChanges,
   resolveBudgetReferenceEntityLabel,
-} from "./budget-reference-presentation.ts";
-import { resolveAuditDescription, resolveAuditOperationKind } from "./log-presentation.ts";
-import type { AuditChange, AuditLogResponseDTO } from "./presentation.ts";
+} from "./budget-reference-presentation";
+import { resolveAuditDescription, resolveAuditOperationKind } from "./log-presentation";
+import type { AuditLogResponseDTO } from "../api/types";
+import type { AuditChange } from "./presentation";
 
 function createChange(overrides: Partial<AuditChange> = {}): AuditChange {
   return {
