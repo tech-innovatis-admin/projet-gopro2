@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -708,6 +708,9 @@ export default function RubricasPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
+  const isBudgetCapError = actionError?.includes('Valor excede o saldo disponivel') ?? false;
+  const createErrorRef = useRef<HTMLDivElement | null>(null);
+  const editErrorRef = useRef<HTMLDivElement | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [criticalConflictMessage, setCriticalConflictMessage] = useState<string | null>(null);
 
@@ -746,6 +749,18 @@ export default function RubricasPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (actionError && addingToRubrica) {
+      createErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [actionError, addingToRubrica]);
+
+  useEffect(() => {
+    if (actionError && editingItem) {
+      editErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [actionError, editingItem]);
 
   const ensureCanManageChildren = () => {
     if (canManageChildren) {
@@ -3196,7 +3211,7 @@ export default function RubricasPage() {
             }}
           >
             {actionError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div ref={createErrorRef} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {actionError}
               </div>
             ) : null}
@@ -3340,7 +3355,7 @@ export default function RubricasPage() {
                   min={0.01}
                   disabled={isSubmitting}
                   className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
-                    createItemAttempted && toMoneyValue(newItem.valorUnitario) <= 0
+                    (createItemAttempted && toMoneyValue(newItem.valorUnitario) <= 0) || isBudgetCapError
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
                       : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20'
                   }`}
@@ -3642,7 +3657,7 @@ export default function RubricasPage() {
             }}
           >
             {actionError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div ref={editErrorRef} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {actionError}
               </div>
             ) : null}
@@ -3814,7 +3829,7 @@ export default function RubricasPage() {
                   min={0.01}
                   disabled={isSubmitting}
                   className={`w-full rounded-xl border px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 ${
-                    editItemAttempted && toMoneyValue(editForm.valorUnitario) <= 0
+                    (editItemAttempted && toMoneyValue(editForm.valorUnitario) <= 0) || isBudgetCapError
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
                       : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/20'
                   }`}
