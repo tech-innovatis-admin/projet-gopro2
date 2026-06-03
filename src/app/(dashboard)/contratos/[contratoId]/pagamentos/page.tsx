@@ -13,6 +13,8 @@ import {
   Pencil,
   Save,
   Info,
+  HandCoins,
+  CopyPlus,
 } from 'lucide-react';
 import { ContractPagamentosLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
 import { ExpenseReclassifyModal } from '../_components/ExpenseReclassifyModal';
@@ -351,8 +353,8 @@ function createDraftLancamento(): Lancamento {
     id: createDraftId('lanc'),
     valor: 0,
     dataPag: '',
-    paymentStatus: 'RESERVADO',
-    paidBy: 'INNOVATIS',
+    paymentStatus: 'PAGO',
+    paidBy: 'EXECUCAO',
     expenseId: undefined,
   };
 }
@@ -2244,6 +2246,66 @@ export default function PagamentosPlanilhaPage() {
     );
   };
 
+  const handleDuplicateLancamento = (itemId: ID, subitemId: ID, lancamentoId: ID) => {
+    if (!ensureCanManageChildren()) return;
+
+    const selected = findItemAndSubitem(itemId, subitemId);
+    const itemSelecionado = selected?.item;
+    const subitemSelecionado = selected?.subitem;
+    const lancamentoSelecionado = subitemSelecionado?.lancamentos.find(
+      (lancamento) => lancamento.id === lancamentoId
+    );
+
+    if (!itemSelecionado || !subitemSelecionado || !lancamentoSelecionado) return;
+
+    const subitemKey = createSubitemKey(itemId, subitemId);
+    if (editingSubitemSession?.subitemKey && editingSubitemSession.subitemKey !== subitemKey) {
+      setActionError('Salve ou cancele o subitem em edição antes de editar outro.');
+      return;
+    }
+
+    if (!beginEditingSubitem(itemId, subitemId)) {
+      return;
+    }
+
+    const duplicateLancamento: Lancamento = {
+      ...lancamentoSelecionado,
+      id: createDraftId('lanc'),
+      dataPag: '',
+      expenseId: undefined,
+    };
+
+    const lancamentos = subitemSelecionado.lancamentos ?? [];
+    const launchIndex = lancamentos.findIndex((lancamento) => lancamento.id === lancamentoId);
+    const insertIndex = launchIndex >= 0 ? launchIndex + 1 : lancamentos.length;
+
+    setActionError(null);
+    setExpandedSubitemKey(subitemKey);
+    setEditingLancamentosSubitemKey(subitemKey);
+    setRubricas((previous) =>
+      previous.map((rubrica) => ({
+        ...rubrica,
+        itens: rubrica.itens.map((item) => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            subitens: (item.subitens ?? []).map((subitem) => {
+              if (subitem.id !== subitemId) return subitem;
+
+              const nextLancamentos = [...(subitem.lancamentos ?? [])];
+              nextLancamentos.splice(insertIndex, 0, duplicateLancamento);
+
+              return {
+                ...subitem,
+                lancamentos: nextLancamentos,
+              };
+            }),
+          };
+        }),
+      }))
+    );
+  };
+
   const handleEditLancamentos = (itemId: ID, subitemId: ID) => {
     if (!ensureCanManageChildren()) return;
 
@@ -3253,6 +3315,7 @@ export default function PagamentosPlanilhaPage() {
         onRemoveLaunch={handleRemoveLancamento}
         onMarkLaunchPaid={handleMarkLancamentoAsPaid}
         onStartReclassifyLaunch={handleStartReclassifyLaunch}
+        onDuplicateLaunch={handleDuplicateLancamento}
       />
 
       <BudgetItemPickerModal
@@ -3592,6 +3655,7 @@ type SharedPaymentPresentationHandlers = {
   onRemoveLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
   onMarkLaunchPaid: (itemId: ID, paymentId: ID, launchId: ID) => Promise<void>;
   onStartReclassifyLaunch: (itemId: ID, launch: Lancamento) => void;
+  onDuplicateLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
 };
 
 const INCOME_STATUS_OPTIONS: Array<{ value: IncomeStatusEnum; label: string }> = [
@@ -3624,7 +3688,14 @@ type PaymentCardProps = Omit<SharedPaymentPresentationHandlers, 'onStartAddPayme
 
 type PaymentLaunchListProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
+  | 'canManageChildren'
+  | 'isPersisting'
+  | 'onAddLaunch'
+  | 'onUpdateLaunch'
+  | 'onRemoveLaunch'
+  | 'onMarkLaunchPaid'
+  | 'onStartReclassifyLaunch'
+  | 'onDuplicateLaunch'
 > & {
   view: PaymentViewModel;
 };
@@ -3637,7 +3708,9 @@ type LaunchRowProps = Pick<
   paymentId: ID;
   launch: Lancamento;
   index: number;
+  isLast: boolean;
   isEditing: boolean;
+  onDuplicateLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
 };
 
 function SummaryMetricCard({
@@ -4227,6 +4300,7 @@ function PaymentCard({
             onRemoveLaunch={handlers.onRemoveLaunch}
             onMarkLaunchPaid={handlers.onMarkLaunchPaid}
             onStartReclassifyLaunch={handlers.onStartReclassifyLaunch}
+            onDuplicateLaunch={handlers.onDuplicateLaunch}
           />
         ) : null}
       </div>
@@ -4243,6 +4317,7 @@ function PaymentLaunchList({
   onRemoveLaunch,
   onMarkLaunchPaid,
   onStartReclassifyLaunch,
+  onDuplicateLaunch,
 }: PaymentLaunchListProps) {
   return (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -4285,6 +4360,7 @@ function PaymentLaunchList({
               paymentId={view.payment.id}
               launch={launch}
               index={index}
+              isLast={index === view.lancamentosParaExibir.length - 1}
               isEditing={view.isEditingLancamentos}
               canManageChildren={canManageChildren}
               isPersisting={isPersisting}
@@ -4292,6 +4368,7 @@ function PaymentLaunchList({
               onRemoveLaunch={onRemoveLaunch}
               onMarkLaunchPaid={onMarkLaunchPaid}
               onStartReclassifyLaunch={onStartReclassifyLaunch}
+              onDuplicateLaunch={onDuplicateLaunch}
             />
           ))
         )}
@@ -4305,6 +4382,7 @@ function LaunchRow({
   paymentId,
   launch,
   index,
+  isLast,
   isEditing,
   canManageChildren,
   isPersisting,
@@ -4312,6 +4390,7 @@ function LaunchRow({
   onRemoveLaunch,
   onMarkLaunchPaid,
   onStartReclassifyLaunch,
+  onDuplicateLaunch,
 }: LaunchRowProps) {
   if (canManageChildren && isEditing) {
     return (
@@ -4363,7 +4442,7 @@ function LaunchRow({
             }
             placeholder="Selecionar data"
             disabled={isPersisting}
-            className="h-10 min-w-[220px] rounded-xl border-slate-300 bg-white px-2 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
+            className="h-10 min-w-[220px] rounded-xl border-slate-300 bg-white px-1 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
           />
           <div className="flex items-center justify-end gap-2">
             <button
@@ -4378,6 +4457,20 @@ function LaunchRow({
             </button>
           </div>
         </div>
+        {isLast && isEditing ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => onDuplicateLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Duplicar último lançamento"
+              title="Duplicar último lançamento"
+            >
+              <CopyPlus className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -4398,6 +4491,20 @@ function LaunchRow({
             {formatDate(launch.dataPag)}
           </span>
         </div>
+        {isLast && isEditing ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => onDuplicateLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Duplicar último lançamento"
+              title="Duplicar último lançamento"
+            >
+              <CopyPlus className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
 
         {canManageChildren ? (
           <div className="flex items-center gap-2 self-end lg:self-auto">
