@@ -138,6 +138,7 @@ export function CompanyFormModal({
   const [isResolvingZipCode, setIsResolvingZipCode] = useState(false);
   const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
   const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const hasFilledData = Object.values(formData).some((value) => {
     if (typeof value === 'string') return value.trim().length > 0;
     if (typeof value === 'number') return value > 0;
@@ -154,6 +155,7 @@ export function CompanyFormModal({
   useEffect(() => {
     if (!isOpen) {
       setHasAttemptedSave(false);
+      setShowDeleteConfirm(false);
     }
   }, [isOpen]);
 
@@ -362,7 +364,7 @@ export function CompanyFormModal({
           <div className="flex items-center justify-between px-6 py-4">
             <div>
               {isEditingItem && onDelete ? (
-                <button onClick={() => { if (confirm('Deseja realmente excluir esta empresa do projeto?')) { onDelete(); onClose(); } }} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600">
+                <button onClick={() => setShowDeleteConfirm(true)} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600">
                   <Trash2 className="mr-2 inline-block h-4 w-4" />Excluir Vinculo
                 </button>
               ) : null}
@@ -377,6 +379,14 @@ export function CompanyFormModal({
         </div>
       </div>
       <ConfirmDiscardModal {...discardConfirmProps} isLoading={isSaving} />
+      <ConfirmDiscardModal
+        isOpen={showDeleteConfirm}
+        title="Excluir vínculo?"
+        message="Deseja realmente excluir este vínculo da empresa com o projeto?"
+        confirmLabel="Excluir"
+        onConfirm={() => { setShowDeleteConfirm(false); onDelete!(); onClose(); }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

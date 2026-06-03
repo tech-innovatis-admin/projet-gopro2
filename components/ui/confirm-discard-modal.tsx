@@ -7,6 +7,7 @@ type ConfirmDiscardModalProps = {
   isOpen: boolean;
   title?: string;
   message?: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -16,6 +17,7 @@ export function ConfirmDiscardModal({
   isOpen,
   title = 'Descartar alterações?',
   message = 'Você tem alterações não salvas. Tem certeza que deseja descartar?',
+  confirmLabel = 'Descartar',
   onConfirm,
   onCancel,
   isLoading = false,
@@ -88,7 +90,7 @@ export function ConfirmDiscardModal({
             disabled={isLoading}
             className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Descartando...' : 'Descartar'}
+            {isLoading ? 'Aguarde...' : confirmLabel}
           </button>
         </div>
       </div>
