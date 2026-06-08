@@ -42,6 +42,10 @@ type ContractPartner = {
   partnerType: PartnersType;
   status: ContractingStatus | null;
   totalValue: number | null;
+  totalExecutado: number | null;
+  totalPago: number | null;
+  totalReservado: number | null;
+  totalPagamentoRecebido: number | null;
   startDate: string | null;
   endDate: string | null;
   notes: string | null;
@@ -302,6 +306,11 @@ export default function ParceirosDoContratoPage() {
     [partners]
   );
 
+  const totalExecutado = useMemo(
+    () => partners.reduce((sum, p) => sum + (p.totalExecutado ?? 0), 0),
+    [partners]
+  );
+
   // ---------------------------------------------------------------------------
   // Link handler
   // ---------------------------------------------------------------------------
@@ -536,8 +545,28 @@ export default function ParceirosDoContratoPage() {
                   )}
                 </div>
 
+                {/* Resumo financeiro de pagamentos */}
+                <div className="mt-3 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Pago</span>
+                    <span className="font-medium text-green-700">{formatCurrency(partner.totalPago)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Reservado</span>
+                    <span className="font-medium text-blue-700">{formatCurrency(partner.totalReservado)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Pagamento recebido</span>
+                    <span className="font-medium text-teal-700">{formatCurrency(partner.totalPagamentoRecebido)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs border-t border-gray-200 pt-1.5 mt-1">
+                    <span className="font-medium text-gray-700">Total executado</span>
+                    <span className="font-semibold text-[#004225]">{formatCurrency(partner.totalExecutado)}</span>
+                  </div>
+                </div>
+
                 {/* Card footer */}
-                <div className="flex items-end justify-between mt-4 pt-3 border-t border-gray-100 gap-3">
+                <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-100 gap-3">
                   <div className="text-xs text-gray-500">
                     {partner.startDate || partner.endDate
                       ? [formatDateBr(partner.startDate), formatDateBr(partner.endDate)]
@@ -545,9 +574,14 @@ export default function ParceirosDoContratoPage() {
                           .join(' até ')
                       : 'Período não informado'}
                   </div>
-                  <span className="font-semibold text-[#004225] text-sm">
-                    {formatCurrency(partner.totalValue)}
-                  </span>
+                  {partner.totalValue != null && (
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">Valor contratado</p>
+                      <span className="font-semibold text-gray-700 text-sm">
+                        {formatCurrency(partner.totalValue)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -557,14 +591,19 @@ export default function ParceirosDoContratoPage() {
 
       {/* Footer totals */}
       {partners.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
           <span className="text-sm font-medium text-gray-700">
             Total: <strong className="text-gray-900">{partners.length}</strong>{' '}
             parceiro{partners.length !== 1 ? 's' : ''}
           </span>
-          <span className="text-sm text-gray-600">
-            Valor total: <strong className="text-gray-900">{formatCurrency(totalValue)}</strong>
-          </span>
+          <div className="flex items-center gap-4 text-sm text-gray-600">
+            <span>
+              Valor contratado: <strong className="text-gray-900">{formatCurrency(totalValue)}</strong>
+            </span>
+            <span>
+              Total executado: <strong className="text-[#004225]">{formatCurrency(totalExecutado)}</strong>
+            </span>
+          </div>
         </div>
       )}
 

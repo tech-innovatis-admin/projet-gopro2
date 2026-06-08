@@ -692,6 +692,10 @@ export interface ProjectPartnerLinkResponseDTO {
   partnerType: PartnersTypeEnum | null;
   status: string | null;
   totalValue: number | null;
+  totalExecutado: number | null;
+  totalPago: number | null;
+  totalReservado: number | null;
+  totalPagamentoRecebido: number | null;
   startDate: string | null;
   endDate: string | null;
   notes: string | null;
