@@ -2054,6 +2054,7 @@ export default function PagamentosPlanilhaPage() {
     }
 
     const linkResponse = await createProjectPartner(projectId, {
+      projectId,
       partnerId,
       status: 'EM_EXECUCAO',
     });
@@ -2084,6 +2085,7 @@ export default function PagamentosPlanilhaPage() {
 
     const createdPartner = await createPartner(mapParceiroFormToPartnerRequestDTO(parceiro));
     const linkResponse = await createProjectPartner(projectId, {
+      projectId,
       partnerId: createdPartner.id,
       status: 'EM_EXECUCAO',
     });

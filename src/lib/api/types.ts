@@ -702,6 +702,7 @@ export interface ProjectPartnerLinkResponseDTO {
 }
 
 export interface ProjectPartnerLinkRequestDTO {
+  projectId: number;
   partnerId: number;
   status: string;
 }
