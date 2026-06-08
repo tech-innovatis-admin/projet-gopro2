@@ -15,53 +15,22 @@ import {
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
-import { Dropdown } from '@/components/ui/dropdown';
 import { RemanejamentoModal, type RemanejamentoForm } from './_components/RemanejamentoModal';
 import { HistoricoRemanejamentos } from './_components/HistoricoRemanejamentos';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
 import { ResizableTable } from '@/components/ui/resizable-table';
 import { ContractRubricasLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
 import {
-  CompanyFormModal,
-  type CompanyFormData,
-  hasRequiredCompanyFields,
-  onlyDigits,
-} from '../_components/CompanyFormModal';
-import {
-  MemberFormModal,
-  defaultMemberFormData,
-  hasRequiredMemberFields,
-  type MembroFormData,
-} from '../_components/MemberFormModal';
-import { unformatCPF, validateCPFComplete } from '../equipe-tecnica/_components/CPFValidator';
-import {
-  unformatPhone,
-  validatePhoneComplete,
-} from '../equipe-tecnica/_components/PhoneValidator';
-import { NovoParceiroModal } from '@/src/app/(dashboard)/parceiros/_components/NovoParceiroModal';
-import { mapParceiroFormToPartnerRequestDTO } from '@/src/app/(dashboard)/parceiros/mappers';
-import {
   createBudgetCategory,
   createBudgetItem,
   createBudgetTransfer,
-  createCompany,
-  createPeople,
-  createProjectCompany,
-  createProjectPeople,
   deleteDocument,
   deleteBudgetCategory,
   deleteBudgetItem,
   listBudgetCategories,
   listBudgetItems,
   listBudgetTransfers,
-  listCompanies,
   listGoals,
-  listPartners,
-  createPartner,
-  listPeople,
-  listProjectCompaniesDetailed,
-  listProjectPeopleDetailed,
-  updatePeople,
   updateBudgetCategory,
   updateBudgetItem,
   uploadDocument,
@@ -80,16 +49,10 @@ import {
 } from '@/src/lib/budget-transfers/comeback';
 import {
   type BudgetTransferRequestDTO,
-  type CompanyResponseDTO,
-  type ContractingStatusEnum,
   type GoalResponseDTO,
   HttpError,
   type PageResponseDTO,
-  type PeopleResponseDTO,
-  type ProjectCompanyDetailedResponseDTO,
   type ProjectBudgetSummaryDTO,
-  type RoleProjectPeopleEnum,
-  type StatusProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { getUserErrorMessage } from '@/src/lib/feedback/user-messages';
 
@@ -113,16 +76,10 @@ type Lancamento = {
   valor: number;
   dataPag: string;
 };
-type BeneficiaryType = 'person' | 'company' | 'partner';
 
 function toOptional(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function papelToRole(papel: MembroFormData['papel']): RoleProjectPeopleEnum {
-  if (papel === 'BOLSISTA') return 'BOLSISTA';
-  return 'DIRETOR';
 }
 
 type Subitem = {
@@ -150,42 +107,7 @@ interface ItemRubrica {
   remanejamentoDebito?: number;
   remanejamentoCredito?: number;
   valorFinal?: number;
-  projectPeopleId?: string;
-  projectCompanyId?: string;
-  projectPartnerId?: string;
 }
-interface ProjectPersonOption {
-  id: string;
-  label: string;
-  baseAmount?: number | null;
-}
-interface ProjectCompanyOption {
-  id: string;
-  label: string;
-  name: string;
-  cnpj?: string | null;
-  status?: ContractingStatusEnum | null;
-  availableBalance?: number | null;
-  totalValue?: number | null;
-}
-
-interface ProjectPartnerOption {
-  id: string;
-  label: string;
-  partnerType: 'IF' | 'FUNDACAO';
-}
-
-type ProjectPartnerData = {
-  id: number;
-  partnerId: number;
-  partnerName: string;
-  partnerTradeName: string | null;
-  partnerType: 'IF' | 'FUNDACAO';
-};
-
-type NewPartnerFormData = { name: string; partnersType: 'IF' | 'FUNDACAO' | '' };
-const emptyPartnerForm = (): NewPartnerFormData => ({ name: '', partnersType: '' });
-
 interface Rubrica {
   id: string;
   codigo: string;
@@ -222,49 +144,6 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-const CONTRACTING_STATUS_LABELS: Record<ContractingStatusEnum, string> = {
-  EM_CADASTRO: 'Em cadastro',
-  EM_CONTRATACAO: 'Em contratação',
-  CONTRATADA: 'Contratada',
-  EM_EXECUCAO: 'Em execução',
-  CONCLUIDA: 'Concluída',
-  CANCELADA: 'Cancelada',
-};
-
-const formatContractingStatus = (status?: ContractingStatusEnum | null) =>
-  status ? CONTRACTING_STATUS_LABELS[status] ?? status : 'Status não informado';
-
-const buildProjectCompanyOption = (
-  company: ProjectCompanyDetailedResponseDTO
-): ProjectCompanyOption => {
-  const name =
-    company.companyTradeName?.trim() ||
-    company.companyName?.trim() ||
-    `Empresa #${company.companyId}`;
-  const cnpj = company.companyCnpj?.trim() || null;
-  const status = company.status ?? null;
-  const totalValue =
-    typeof company.totalValue === 'number' && Number.isFinite(company.totalValue)
-      ? company.totalValue
-      : null;
-
-  return {
-    id: String(company.id),
-    name,
-    cnpj,
-    status,
-    availableBalance: null,
-    totalValue,
-    label: [
-      name,
-      cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado',
-      formatContractingStatus(status),
-    ]
-      .filter(Boolean)
-      .join(' - '),
-  };
-};
-
 const toSafeNumber = (value: number | null | undefined): number => {
   if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
     return 0;
@@ -298,42 +177,8 @@ const toInputDateValue = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatCnpjCompact = (value?: string | null) => {
-  const digits = (value ?? '').replace(/\D/g, '').slice(0, 14);
-  if (digits.length !== 14) return null;
-  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
-};
-
 const toErrorMessage = (error: unknown, fallback: string) =>
   getUserErrorMessage(error, fallback);
-
-const extractCriticalBeneficiaryConflictMessage = (error: unknown): string | null => {
-  if (!(error instanceof HttpError) || !error.fieldErrors) {
-    return null;
-  }
-
-  const candidateMessages = [
-    error.fieldErrors.projectPeopleId,
-    error.fieldErrors.projectCompanyId,
-  ].filter((message): message is string => Boolean(message?.trim()));
-
-  for (const message of candidateMessages) {
-    const normalized = message.toLowerCase();
-    const isConflictMessage =
-      normalized.includes('responsavel') &&
-      normalized.includes('rubrica') &&
-      (normalized.includes('ja recebe') || normalized.includes('nao pode receber'));
-
-    if (isConflictMessage) {
-      return message;
-    }
-  }
-
-  return null;
-};
-
-const RUBRICA_DEFAULT_COMPANY_STATUS: ContractingStatusEnum = 'CONTRATADA';
-const RUBRICA_DEFAULT_PERSON_STATUS: StatusProjectPeopleEnum = 'ATIVO';
 
 const isPersistedId = (id: string) => /^\d+$/.test(id);
 const toPersistedId = (id: string) => Number.parseInt(id, 10);
@@ -350,26 +195,6 @@ const createEmptyItemDraft = (): Partial<ItemRubrica> => ({
   serviceOrder: '',
   protocol: '',
 });
-
-const createEmptyCompanyForm = (): CompanyFormData => ({
-  razaoSocial: '',
-  nomeFantasia: '',
-  cnpj: '',
-  email: '',
-  telefone: '',
-  endereco: '',
-  cidade: '',
-  uf: '',
-  status: RUBRICA_DEFAULT_COMPANY_STATUS,
-});
-
-const buildDraftItemTotal = (draft: Partial<ItemRubrica>) => {
-  const quantidade = toPositiveInt(draft.quantidade, 1);
-  const meses = toPositiveInt(draft.meses, 1);
-  const valorUnitario = toMoneyValue(draft.valorUnitario);
-  return Number((quantidade * meses * valorUnitario).toFixed(2));
-};
-
 
 const isItemDraftDirty = (draft: Partial<ItemRubrica> | null) => {
   if (!draft) return false;
@@ -624,47 +449,13 @@ export default function RubricasPage() {
 
   const [rubricas, setRubricas] = useState<Rubrica[]>([]);
   const [metas, setMetas] = useState<MetaOption[]>([]);
-  const [projectPeopleOptions, setProjectPeopleOptions] = useState<ProjectPersonOption[]>([]);
-  const [projectCompanyOptions, setProjectCompanyOptions] = useState<ProjectCompanyOption[]>([]);
-  const [projectPartnerOptions, setProjectPartnerOptions] = useState<ProjectPartnerOption[]>([]);
   const [budgetSummary, setBudgetSummary] = useState<ProjectBudgetSummaryDTO | null>(null);
-  const [availablePeople, setAvailablePeople] = useState<PeopleResponseDTO[]>([]);
-  const [availableCompanies, setAvailableCompanies] = useState<CompanyResponseDTO[]>([]);
-  const [availablePartners, setAvailablePartners] = useState<{ id: number; name: string; tradeName: string | null; partnersType: 'IF' | 'FUNDACAO' }[]>([]);
-  const [showCreatePersonModal, setShowCreatePersonModal] = useState(false);
-  const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
-  const [showLinkPersonModal, setShowLinkPersonModal] = useState(false);
-  const [showLinkCompanyModal, setShowLinkCompanyModal] = useState(false);
-  const [selectedPersonToLink, setSelectedPersonToLink] = useState<string | undefined>(undefined);
-  const [selectedCompanyToLink, setSelectedCompanyToLink] = useState<string | undefined>(undefined);
-  const [newPersonForm, setNewPersonForm] = useState<MembroFormData>(defaultMemberFormData);
-  const [newPersonAvatarFile, setNewPersonAvatarFile] = useState<File | null>(null);
-  const [newPersonCpfError, setNewPersonCpfError] = useState('');
-  const [newPersonPhoneError, setNewPersonPhoneError] = useState('');
-  const [newCompanyForm, setNewCompanyForm] = useState<CompanyFormData>(createEmptyCompanyForm());
-  const [createPersonModalError, setCreatePersonModalError] = useState<string | null>(null);
-  const [createPersonFieldErrors, setCreatePersonFieldErrors] = useState<Record<string, string>>({});
-  const [createCompanyModalError, setCreateCompanyModalError] = useState<string | null>(null);
-  const [createCompanyFieldErrors, setCreateCompanyFieldErrors] = useState<Record<string, string>>({});
-  const [showLinkPartnerModal, setShowLinkPartnerModal] = useState(false);
-  const [showCreatePartnerModal, setShowCreatePartnerModal] = useState(false);
-  const [selectedPartnerToLink, setSelectedPartnerToLink] = useState<string | undefined>(undefined);
-  const [linkPartnerModalError, setLinkPartnerModalError] = useState<string | null>(null);
-  const [linkPartnerFieldError, setLinkPartnerFieldError] = useState<string | null>(null);
-  const [linkPartnerAttempted, setLinkPartnerAttempted] = useState(false);
-  const [linkPersonModalError, setLinkPersonModalError] = useState<string | null>(null);
-  const [linkPersonFieldError, setLinkPersonFieldError] = useState<string | null>(null);
-  const [linkCompanyModalError, setLinkCompanyModalError] = useState<string | null>(null);
-  const [linkCompanyFieldError, setLinkCompanyFieldError] = useState<string | null>(null);
   const [createItemAttempted, setCreateItemAttempted] = useState(false);
   const [editItemAttempted, setEditItemAttempted] = useState(false);
-  const [linkPersonAttempted, setLinkPersonAttempted] = useState(false);
-  const [linkCompanyAttempted, setLinkCompanyAttempted] = useState(false);
   const [editingRubrica, setEditingRubrica] = useState<string | null>(null);
   const [editRubricaForm, setEditRubricaForm] = useState<RubricaEditForm | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ItemRubrica> | null>(null);
-  const [beneficiaryModalContext, setBeneficiaryModalContext] = useState<'create' | 'edit'>('create');
   const [addingToRubrica, setAddingToRubrica] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Partial<ItemRubrica>>(createEmptyItemDraft);
   const [itemPendingDeletion, setItemPendingDeletion] = useState<{
@@ -692,7 +483,6 @@ export default function RubricasPage() {
   const createErrorRef = useRef<HTMLDivElement | null>(null);
   const editErrorRef = useRef<HTMLDivElement | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [criticalConflictMessage, setCriticalConflictMessage] = useState<string | null>(null);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -795,8 +585,6 @@ export default function RubricasPage() {
       toPositiveInt(editForm.quantidade, 1) !== toPositiveInt(originalEditingItem.quantidade, 1) ||
       toPositiveInt(editForm.meses, 1) !== toPositiveInt(originalEditingItem.meses, 1) ||
       toMoneyValue(editForm.valorUnitario) !== toMoneyValue(originalEditingItem.valorUnitario) ||
-      (editForm.projectPeopleId ?? '') !== (originalEditingItem.projectPeopleId ?? '') ||
-      (editForm.projectCompanyId ?? '') !== (originalEditingItem.projectCompanyId ?? '') ||
       JSON.stringify(currentMetaIds) !== JSON.stringify(originalMetaIds)
     );
   }, [editForm, metas, originalEditingItem]);
@@ -808,11 +596,6 @@ export default function RubricasPage() {
     if (!Number.isFinite(projectId)) {
       setRubricas([]);
       setMetas([]);
-      setProjectPeopleOptions([]);
-      setProjectCompanyOptions([]);
-      setProjectPartnerOptions([]);
-      setAvailablePeople([]);
-      setAvailableCompanies([]);
       setRemanejamentos([]);
       setLoadError('ID do contrato inválido para carregar rubricas.');
       setIsLoading(false);
@@ -825,13 +608,7 @@ export default function RubricasPage() {
         allItems,
         allGoals,
         allTransfers,
-        allProjectPeople,
-        allProjectCompanies,
-        allPeople,
-        allCompanies,
         summary,
-        allProjectPartners,
-        allPartners,
       ] = await Promise.all([
         fetchAllPages((query) => listBudgetCategories({ ...query, projectId })),
         fetchAllPages((query) => listBudgetItems({ ...query, projectId })),
@@ -839,16 +616,7 @@ export default function RubricasPage() {
           () => [] as GoalResponseDTO[]
         ),
         fetchAllPages((query) => listBudgetTransfers({ ...query, projectId })),
-        fetchAllPages((query) => listProjectPeopleDetailed({ ...query, projectId })),
-        fetchAllPages((query) => listProjectCompaniesDetailed({ ...query, projectId })),
-        fetchAllPages((query) => listPeople(query)),
-        fetchAllPages((query) => listCompanies(query)),
         getProjectBudgetSummary(projectId),
-        fetch(`/api/backend/contracts/${projectId}/parceiros?size=200`)
-          .then((r) => r.ok ? (r.json() as Promise<{ content: ProjectPartnerData[] }>) : { content: [] })
-          .then((d) => d.content)
-          .catch(() => [] as ProjectPartnerData[]),
-        fetchAllPages((query) => listPartners(query)).catch(() => [] as Awaited<ReturnType<typeof listPartners>>['content']),
       ]);
       setBudgetSummary(summary);
 
@@ -862,64 +630,6 @@ export default function RubricasPage() {
           numero: goal.numero,
           titulo: goal.titulo,
         }))
-      );
-
-      const projectPeople = allProjectPeople
-        .filter((item) => item.projectId === projectId && item.isActive)
-        .map((item) => ({
-          id: String(item.id),
-          label: item.personFullName?.trim() || `Pessoa #${item.personId}`,
-          baseAmount:
-            typeof item.baseAmount === 'number' && Number.isFinite(item.baseAmount)
-              ? item.baseAmount
-              : null,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-      setProjectPeopleOptions(projectPeople);
-
-      const projectCompanies = allProjectCompanies
-        .filter((item) => item.projectId === projectId && item.isActive)
-        .map(buildProjectCompanyOption)
-        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-      setProjectCompanyOptions(projectCompanies);
-
-      setProjectPartnerOptions(
-        allProjectPartners
-          .map((pp) => ({
-            id: String(pp.id),
-            label: pp.partnerTradeName?.trim()
-              ? `${pp.partnerTradeName.trim()} — ${pp.partnerName}`
-              : pp.partnerName,
-            partnerType: pp.partnerType,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-      );
-
-      const linkedPartnerIds = new Set(allProjectPartners.map((pp) => pp.partnerId));
-      setAvailablePartners(
-        allPartners
-          .filter((p) => p.isActive && !linkedPartnerIds.has(p.id))
-          .map((p) => ({
-            id: p.id,
-            name: p.name,
-            tradeName: p.tradeName?.trim() || null,
-            partnersType: p.partnersType,
-          }))
-      );
-
-      const projectPeopleIds = new Set(
-        allProjectPeople.filter((item) => item.projectId === projectId).map((item) => item.personId)
-      );
-      const projectCompanyIds = new Set(
-        allProjectCompanies
-          .filter((item) => item.projectId === projectId)
-          .map((item) => item.companyId)
-      );
-      setAvailablePeople(
-        allPeople.filter((person) => person.isActive && !projectPeopleIds.has(person.id))
-      );
-      setAvailableCompanies(
-        allCompanies.filter((company) => company.isActive && !projectCompanyIds.has(company.id))
       );
 
       const categories = allCategories
@@ -965,9 +675,6 @@ export default function RubricasPage() {
           webs: item.webs ?? undefined,
           serviceOrder: item.serviceOrder ?? undefined,
           protocol: item.protocol ?? undefined,
-          projectPeopleId: item.projectPeopleId ? String(item.projectPeopleId) : undefined,
-          projectCompanyId: item.projectCompanyId ? String(item.projectCompanyId) : undefined,
-          projectPartnerId: item.projectPartnerId ? String(item.projectPartnerId) : undefined,
           subitens: [],
         };
 
@@ -1022,10 +729,6 @@ export default function RubricasPage() {
       setLoadError(toErrorMessage(error, 'Não foi possível carregar as rubricas.'));
       setRubricas([]);
       setMetas([]);
-      setProjectPeopleOptions([]);
-      setProjectCompanyOptions([]);
-      setAvailablePeople([]);
-      setAvailableCompanies([]);
       setRemanejamentos([]);
       setBudgetSummary(null);
     } finally {
@@ -1101,24 +804,6 @@ export default function RubricasPage() {
     [metas, resolveMetaIdsForDraft]
   );
 
-
-  const resolveProjectCompanyLabel = useCallback(
-    (item: ItemRubrica) => {
-      if (!item.projectCompanyId) {
-        return 'Não definida';
-      }
-
-      const company = projectCompanyOptions.find((option) => option.id === item.projectCompanyId);
-      if (!company) {
-        return `Empresa #${item.projectCompanyId}`;
-      }
-
-      const cnpj = formatCnpjCompact(company.cnpj);
-      return `${company.name}${cnpj ? ` (${cnpj})` : ''}`;
-    },
-    [projectCompanyOptions]
-  );
-
   const toggleExpand = (rubricaId: string) => {
     setRubricas((current) =>
       current.map((rubrica) =>
@@ -1152,741 +837,6 @@ export default function RubricasPage() {
     setNewItem(createEmptyItemDraft());
     setItemFieldErrors({});
     setCreateItemAttempted(false);
-  };
-
-  const appendProjectPersonOption = (option: ProjectPersonOption) => {
-    setProjectPeopleOptions((current) => {
-      const next = current.filter((item) => item.id !== option.id);
-      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-    });
-  };
-
-  const appendProjectCompanyOption = (option: ProjectCompanyOption) => {
-    setProjectCompanyOptions((current) => {
-      const next = current.filter((item) => item.id !== option.id);
-      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-    });
-  };
-
-  const appendProjectPartnerOption = (option: ProjectPartnerOption) => {
-    setProjectPartnerOptions((current) => {
-      const next = current.filter((item) => item.id !== option.id);
-      return [...next, option].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-    });
-  };
-
-  const handleLinkExistingPartner = async () => {
-    if (!selectedPartnerToLink) {
-      setLinkPartnerFieldError('Selecione um parceiro para vincular.');
-      setLinkPartnerModalError('Selecione um parceiro para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkPartnerFieldError(null);
-      setLinkPartnerModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const selectedPartner =
-        availablePartners.find((p) => String(p.id) === selectedPartnerToLink) ?? null;
-      const partnerLabel = selectedPartner?.tradeName || selectedPartner?.name || `Parceiro #${selectedPartnerToLink}`;
-      const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'CONTRATADA', createdBy: actorUserId }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? 'Não foi possível vincular o parceiro.');
-      }
-      const linked = (await res.json()) as ProjectPartnerData;
-      appendProjectPartnerOption({
-        id: String(linked.id),
-        label: partnerLabel,
-        partnerType: selectedPartner?.partnersType ?? 'IF',
-      });
-      applyBeneficiarySelection('partner', String(linked.id));
-      setAvailablePartners((current) => current.filter((p) => String(p.id) !== selectedPartnerToLink));
-      setShowLinkPartnerModal(false);
-      setSelectedPartnerToLink(undefined);
-      showSavedMessage('Parceiro vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkPartnerModalError(toErrorMessage(error, 'Não foi possível vincular o parceiro.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleLinkExistingPartnerForEdit = async () => {
-    if (!selectedPartnerToLink) {
-      setLinkPartnerFieldError('Selecione um parceiro para vincular.');
-      setLinkPartnerModalError('Selecione um parceiro para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkPartnerFieldError(null);
-      setLinkPartnerModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const selectedPartner =
-        availablePartners.find((p) => String(p.id) === selectedPartnerToLink) ?? null;
-      const partnerLabel = selectedPartner?.tradeName || selectedPartner?.name || `Parceiro #${selectedPartnerToLink}`;
-      const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, partnerId: Number(selectedPartnerToLink), status: 'CONTRATADA', createdBy: actorUserId }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        throw new Error(err.message ?? 'Não foi possível vincular o parceiro.');
-      }
-      const linked = (await res.json()) as ProjectPartnerData;
-      appendProjectPartnerOption({
-        id: String(linked.id),
-        label: partnerLabel,
-        partnerType: selectedPartner?.partnersType ?? 'IF',
-      });
-      applyBeneficiarySelectionToEditForm('partner', String(linked.id));
-      setAvailablePartners((current) => current.filter((p) => String(p.id) !== selectedPartnerToLink));
-      setShowLinkPartnerModal(false);
-      setSelectedPartnerToLink(undefined);
-      showSavedMessage('Parceiro vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkPartnerModalError(toErrorMessage(error, 'Não foi possível vincular o parceiro.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateAndLinkPartnerInternal = async (
-    formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0],
-    applySelection: (type: BeneficiaryType, id: string) => void
-  ) => {
-    const actorUserId = await requireCurrentUserId();
-    const payload = mapParceiroFormToPartnerRequestDTO(formData);
-    const created = await createPartner({ ...payload, createdBy: actorUserId });
-    const res = await fetch(`/api/backend/contracts/${projectId}/parceiros`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, partnerId: created.id, status: 'CONTRATADA', createdBy: actorUserId }),
-    });
-    if (!res.ok) {
-      const err = (await res.json()) as { message?: string };
-      throw new Error(err.message ?? 'Não foi possível vincular o parceiro ao contrato.');
-    }
-    const linked = (await res.json()) as ProjectPartnerData;
-    const partnerLabel = created.tradeName?.trim() || created.name;
-    appendProjectPartnerOption({
-      id: String(linked.id),
-      label: partnerLabel,
-      partnerType: created.partnersType,
-    });
-    applySelection('partner', String(linked.id));
-    setShowCreatePartnerModal(false);
-    showSavedMessage('Parceiro criado e vinculado ao item. Revise os dados e salve a rubrica quando concluir.');
-  };
-
-  const handleCreateAndLinkPartner = async (formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0]) => {
-    await handleCreateAndLinkPartnerInternal(formData, applyBeneficiarySelection);
-  };
-
-  const handleCreateAndLinkPartnerForEdit = async (formData: Parameters<typeof mapParceiroFormToPartnerRequestDTO>[0]) => {
-    await handleCreateAndLinkPartnerInternal(formData, applyBeneficiarySelectionToEditForm);
-  };
-
-  const applyBeneficiarySelection = (type: BeneficiaryType, referenceId: string) => {
-    setNewItem((current) => ({
-      ...current,
-      projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
-      projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
-      projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
-    }));
-  };
-
-  const applyBeneficiarySelectionToEditForm = (type: BeneficiaryType, referenceId: string) => {
-    setEditForm((current) =>
-      current
-        ? {
-            ...current,
-            projectPeopleId: type === 'person' ? referenceId : current.projectPeopleId,
-            projectCompanyId: type === 'company' ? referenceId : current.projectCompanyId,
-            projectPartnerId: type === 'partner' ? referenceId : current.projectPartnerId,
-          }
-        : current
-    );
-  };
-
-  const handleLinkExistingPerson = async () => {
-    if (!selectedPersonToLink) {
-      setLinkPersonFieldError('Selecione uma pessoa para vincular.');
-      setLinkPersonModalError('Selecione uma pessoa para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkPersonFieldError(null);
-      setLinkPersonModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const draftItemTotal = buildDraftItemTotal(newItem);
-      const selectedPerson =
-        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
-      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
-      const linked = await createProjectPeople({
-        projectId,
-        personId: Number(selectedPersonToLink),
-        status: RUBRICA_DEFAULT_PERSON_STATUS,
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-        createdBy: actorUserId,
-      });
-
-      appendProjectPersonOption({
-        id: String(linked.id),
-        label: personLabel,
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      });
-      applyBeneficiarySelection('person', String(linked.id));
-      setAvailablePeople((current) =>
-        current.filter((person) => String(person.id) !== selectedPersonToLink)
-      );
-      setShowLinkPersonModal(false);
-      setSelectedPersonToLink(undefined);
-      setLinkPersonFieldError(null);
-      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleLinkExistingPersonForEdit = async () => {
-    if (!selectedPersonToLink) {
-      setLinkPersonFieldError('Selecione uma pessoa para vincular.');
-      setLinkPersonModalError('Selecione uma pessoa para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkPersonFieldError(null);
-      setLinkPersonModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
-      const selectedPerson =
-        availablePeople.find((person) => String(person.id) === selectedPersonToLink) ?? null;
-      const personLabel = selectedPerson?.fullName ?? `Pessoa #${selectedPersonToLink}`;
-      const linked = await createProjectPeople({
-        projectId,
-        personId: Number(selectedPersonToLink),
-        status: RUBRICA_DEFAULT_PERSON_STATUS,
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-        createdBy: actorUserId,
-      });
-
-      appendProjectPersonOption({
-        id: String(linked.id),
-        label: personLabel,
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      });
-      applyBeneficiarySelectionToEditForm('person', String(linked.id));
-      setAvailablePeople((current) =>
-        current.filter((person) => String(person.id) !== selectedPersonToLink)
-      );
-      setShowLinkPersonModal(false);
-      setSelectedPersonToLink(undefined);
-      setLinkPersonFieldError(null);
-      showSavedMessage('Pessoa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkPersonModalError(toErrorMessage(error, 'Não foi possível vincular a pessoa.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleLinkExistingCompany = async () => {
-    if (!selectedCompanyToLink) {
-      setLinkCompanyFieldError('Selecione uma empresa para vincular.');
-      setLinkCompanyModalError('Selecione uma empresa para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkCompanyFieldError(null);
-      setLinkCompanyModalError(null);
-      const draftItemTotal = buildDraftItemTotal(newItem);
-      const actorUserId = await requireCurrentUserId();
-      const selectedCompany =
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
-      const companyName =
-        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
-      const linked = await createProjectCompany({
-        projectId,
-        companyId: Number(selectedCompanyToLink),
-        totalValue: draftItemTotal > 0 ? draftItemTotal : undefined,
-        status: RUBRICA_DEFAULT_COMPANY_STATUS,
-        createdBy: actorUserId,
-      });
-
-      appendProjectCompanyOption({
-        id: String(linked.id),
-        label: [
-          companyName,
-          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
-          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
-          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
-        ]
-          .filter(Boolean)
-          .join(' - '),
-        name: companyName,
-        cnpj: selectedCompany?.cnpj ?? null,
-        status: RUBRICA_DEFAULT_COMPANY_STATUS,
-        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
-        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
-      });
-      applyBeneficiarySelection('company', String(linked.id));
-      setAvailableCompanies((current) =>
-        current.filter((company) => String(company.id) !== selectedCompanyToLink)
-      );
-      setShowLinkCompanyModal(false);
-      setSelectedCompanyToLink(undefined);
-      setLinkCompanyFieldError(null);
-      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleLinkExistingCompanyForEdit = async () => {
-    if (!selectedCompanyToLink) {
-      setLinkCompanyFieldError('Selecione uma empresa para vincular.');
-      setLinkCompanyModalError('Selecione uma empresa para vincular.');
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      setLinkCompanyFieldError(null);
-      setLinkCompanyModalError(null);
-      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
-      const actorUserId = await requireCurrentUserId();
-      const selectedCompany =
-        availableCompanies.find((company) => String(company.id) === selectedCompanyToLink) ?? null;
-      const companyName =
-        selectedCompany?.tradeName || selectedCompany?.name || `Empresa #${selectedCompanyToLink}`;
-      const linked = await createProjectCompany({
-        projectId,
-        companyId: Number(selectedCompanyToLink),
-        totalValue: draftItemTotal > 0 ? draftItemTotal : undefined,
-        status: RUBRICA_DEFAULT_COMPANY_STATUS,
-        createdBy: actorUserId,
-      });
-
-      appendProjectCompanyOption({
-        id: String(linked.id),
-        label: [
-          companyName,
-          selectedCompany?.cnpj ? `CNPJ ${selectedCompany.cnpj}` : 'CNPJ não informado',
-          formatContractingStatus(RUBRICA_DEFAULT_COMPANY_STATUS),
-          draftItemTotal > 0 ? `Saldo ${formatCurrency(draftItemTotal)}` : null,
-        ]
-          .filter(Boolean)
-          .join(' - '),
-        name: companyName,
-        cnpj: selectedCompany?.cnpj ?? null,
-        status: RUBRICA_DEFAULT_COMPANY_STATUS,
-        availableBalance: draftItemTotal > 0 ? draftItemTotal : null,
-        totalValue: draftItemTotal > 0 ? draftItemTotal : null,
-      });
-      applyBeneficiarySelectionToEditForm('company', String(linked.id));
-      setAvailableCompanies((current) =>
-        current.filter((company) => String(company.id) !== selectedCompanyToLink)
-      );
-      setShowLinkCompanyModal(false);
-      setSelectedCompanyToLink(undefined);
-      setLinkCompanyFieldError(null);
-      showSavedMessage('Empresa vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setLinkCompanyModalError(toErrorMessage(error, 'Não foi possível vincular a empresa.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateAndLinkPerson = async () => {
-    if (!hasRequiredMemberFields(newPersonForm)) {
-      setCreatePersonFieldErrors({
-        nome: newPersonForm.nome.trim() ? '' : 'Informe o nome da pessoa.',
-        status: newPersonForm.status ? '' : 'Informe o status da pessoa.',
-      });
-      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
-      return;
-    }
-
-    if (newPersonForm.cpf.trim()) {
-      const validation = validateCPFComplete(newPersonForm.cpf);
-      if (!validation.isValid) {
-        setNewPersonCpfError(validation.errorMessage);
-        return;
-      }
-    }
-
-    if (newPersonForm.telefone.trim()) {
-      const validation = validatePhoneComplete(newPersonForm.telefone);
-      if (!validation.isValid) {
-        setNewPersonPhoneError(validation.errorMessage);
-        return;
-      }
-    }
-
-    try {
-      setIsSubmitting(true);
-      setCreatePersonFieldErrors({});
-      setCreatePersonModalError(null);
-      const draftItemTotal = buildDraftItemTotal(newItem);
-      const actorUserId = await requireCurrentUserId();
-      const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
-      const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
-      const peoplePayload = {
-        fullName: newPersonForm.nome.trim(),
-        cpf: cpf || undefined,
-        email: toOptional(newPersonForm.email),
-        phone: toOptional(phone),
-        birthDate: toOptional(newPersonForm.birthDate),
-        address: toOptional(newPersonForm.endereco),
-        city: toOptional(newPersonForm.city),
-        state: toOptional(newPersonForm.state)?.toUpperCase(),
-        notes: toOptional(newPersonForm.notes),
-      };
-
-      const person = await createPeople(peoplePayload);
-      const linked = await createProjectPeople({
-        projectId,
-        personId: person.id,
-        role: papelToRole(newPersonForm.papel),
-        workloadHours: newPersonForm.cargaHoraria,
-        institutionalLink: toOptional(newPersonForm.vinculo),
-        contractType: newPersonForm.contractType || undefined,
-        startDate: toOptional(newPersonForm.startDate),
-        endDate: toOptional(newPersonForm.endDate),
-        status: newPersonForm.status as StatusProjectPeopleEnum,
-        notes: toOptional(newPersonForm.notes),
-        createdBy: actorUserId,
-      });
-
-      if (newPersonAvatarFile) {
-        const uploaded = await uploadDocument({
-          file: newPersonAvatarFile,
-          ownerType: 'PEOPLE',
-          ownerId: person.id,
-          category: 'FOTO_PERFIL',
-        });
-
-        await updatePeople(person.id, {
-          ...peoplePayload,
-          avatarUrl: uploaded.id,
-        });
-      }
-
-      appendProjectPersonOption({
-        id: String(linked.id),
-        label: newPersonForm.nome.trim(),
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      });
-      applyBeneficiarySelection('person', String(linked.id));
-      setShowCreatePersonModal(false);
-      setNewPersonForm(defaultMemberFormData());
-      setNewPersonAvatarFile(null);
-      setNewPersonCpfError('');
-      setNewPersonPhoneError('');
-      setCreatePersonFieldErrors({});
-      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreatePersonModalError(
-        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateAndLinkPersonForEdit = async () => {
-    if (!hasRequiredMemberFields(newPersonForm)) {
-      setCreatePersonFieldErrors({
-        nome: newPersonForm.nome.trim() ? '' : 'Informe o nome da pessoa.',
-        status: newPersonForm.status ? '' : 'Informe o status da pessoa.',
-      });
-      setCreatePersonModalError('Preencha os campos obrigatórios da pessoa (nome e status) antes de salvar.');
-      return;
-    }
-
-    if (newPersonForm.cpf.trim()) {
-      const validation = validateCPFComplete(newPersonForm.cpf);
-      if (!validation.isValid) {
-        setNewPersonCpfError(validation.errorMessage);
-        return;
-      }
-    }
-
-    if (newPersonForm.telefone.trim()) {
-      const validation = validatePhoneComplete(newPersonForm.telefone);
-      if (!validation.isValid) {
-        setNewPersonPhoneError(validation.errorMessage);
-        return;
-      }
-    }
-
-    try {
-      setIsSubmitting(true);
-      setCreatePersonFieldErrors({});
-      setCreatePersonModalError(null);
-      const draftItemTotal = buildDraftItemTotal(editForm ?? {});
-      const actorUserId = await requireCurrentUserId();
-      const cpf = newPersonForm.cpf ? unformatCPF(newPersonForm.cpf) : undefined;
-      const phone = newPersonForm.telefone ? unformatPhone(newPersonForm.telefone) : undefined;
-      const peoplePayload = {
-        fullName: newPersonForm.nome.trim(),
-        cpf: cpf || undefined,
-        email: toOptional(newPersonForm.email),
-        phone: toOptional(phone),
-        birthDate: toOptional(newPersonForm.birthDate),
-        address: toOptional(newPersonForm.endereco),
-        city: toOptional(newPersonForm.city),
-        state: toOptional(newPersonForm.state)?.toUpperCase(),
-        notes: toOptional(newPersonForm.notes),
-      };
-
-      const person = await createPeople(peoplePayload);
-      const linked = await createProjectPeople({
-        projectId,
-        personId: person.id,
-        role: papelToRole(newPersonForm.papel),
-        workloadHours: newPersonForm.cargaHoraria,
-        institutionalLink: toOptional(newPersonForm.vinculo),
-        contractType: newPersonForm.contractType || undefined,
-        startDate: toOptional(newPersonForm.startDate),
-        endDate: toOptional(newPersonForm.endDate),
-        status: newPersonForm.status as StatusProjectPeopleEnum,
-        notes: toOptional(newPersonForm.notes),
-        createdBy: actorUserId,
-      });
-
-      if (newPersonAvatarFile) {
-        const uploaded = await uploadDocument({
-          file: newPersonAvatarFile,
-          ownerType: 'PEOPLE',
-          ownerId: person.id,
-          category: 'FOTO_PERFIL',
-        });
-
-        await updatePeople(person.id, {
-          ...peoplePayload,
-          avatarUrl: uploaded.id,
-        });
-      }
-
-      appendProjectPersonOption({
-        id: String(linked.id),
-        label: newPersonForm.nome.trim(),
-        baseAmount: draftItemTotal > 0 ? draftItemTotal : undefined,
-      });
-      applyBeneficiarySelectionToEditForm('person', String(linked.id));
-      setShowCreatePersonModal(false);
-      setNewPersonForm(defaultMemberFormData());
-      setNewPersonAvatarFile(null);
-      setNewPersonCpfError('');
-      setNewPersonPhoneError('');
-      setCreatePersonFieldErrors({});
-      showSavedMessage('Pessoa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreatePersonModalError(
-        toErrorMessage(error, 'Não foi possível cadastrar e vincular a pessoa.')
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateAndLinkCompany = async () => {
-    if (!hasRequiredCompanyFields(newCompanyForm)) {
-      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
-      return;
-    }
-    const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
-    if (!newCompanyForm.razaoSocial?.trim() || !newCompanyForm.status) {
-      setCreateCompanyFieldErrors({
-        razaoSocial: newCompanyForm.razaoSocial?.trim() ? '' : 'Informe a razão social.',
-        status: newCompanyForm.status ? '' : 'Informe o status do contrato.',
-      });
-      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
-      return;
-    }
-    if (cnpjDigits.length !== 14) {
-      setCreateCompanyFieldErrors({
-        cnpj: 'Informe um CNPJ válido com 14 dígitos.',
-      });
-      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
-      return;
-    }
-    const draftItemTotal = buildDraftItemTotal(newItem);
-    const totalValueForProjectCompany =
-      typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
-        ? newCompanyForm.valorContrato
-        : draftItemTotal > 0
-          ? draftItemTotal
-          : undefined;
-    try {
-      setIsSubmitting(true);
-      setCreateCompanyFieldErrors({});
-      setCreateCompanyModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const company = await createCompany({
-        name: newCompanyForm.razaoSocial!.trim(),
-        tradeName: newCompanyForm.nomeFantasia!.trim(),
-        cnpj: cnpjDigits,
-        email: toOptional(newCompanyForm.email),
-        phone: toOptional(onlyDigits(newCompanyForm.telefone)),
-        address: toOptional(newCompanyForm.endereco),
-        city: toOptional(newCompanyForm.cidade),
-        state: toOptional(newCompanyForm.uf)?.toUpperCase(),
-        responsiblePersonId: newCompanyForm.responsavelPersonId
-          ? Number(newCompanyForm.responsavelPersonId)
-          : undefined,
-        createdBy: actorUserId,
-      });
-      const linked = await createProjectCompany({
-        projectId,
-        companyId: company.id,
-        serviceType: toOptional(newCompanyForm.tipoServico),
-        totalValue: totalValueForProjectCompany,
-        startDate: toOptional(newCompanyForm.dataInicio),
-        endDate: toOptional(newCompanyForm.dataFim),
-        notes: toOptional(newCompanyForm.observacao),
-        isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
-        status: newCompanyForm.status as ContractingStatusEnum,
-        createdBy: actorUserId,
-      });
-      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
-      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
-      const formattedCnpj = formatCnpjCompact(cnpjDigits);
-      appendProjectCompanyOption({
-        id: String(linked.id),
-        label: [
-          companyName,
-          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
-          formatContractingStatus(companyStatus),
-          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
-        ]
-          .filter(Boolean)
-          .join(' - '),
-        name: companyName,
-        cnpj: formattedCnpj,
-        status: companyStatus,
-        availableBalance: totalValueForProjectCompany ?? null,
-        totalValue: totalValueForProjectCompany ?? null,
-      });
-      applyBeneficiarySelection('company', String(linked.id));
-      setShowCreateCompanyModal(false);
-      setNewCompanyForm(createEmptyCompanyForm());
-      setCreateCompanyFieldErrors({});
-      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreateCompanyModalError(
-        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateAndLinkCompanyForEdit = async () => {
-    if (!hasRequiredCompanyFields(newCompanyForm)) {
-      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
-      return;
-    }
-    const cnpjDigits = onlyDigits(newCompanyForm.cnpj);
-    if (!newCompanyForm.razaoSocial?.trim() || !newCompanyForm.status) {
-      setCreateCompanyFieldErrors({
-        razaoSocial: newCompanyForm.razaoSocial?.trim() ? '' : 'Informe a razão social.',
-        status: newCompanyForm.status ? '' : 'Informe o status do contrato.',
-      });
-      setCreateCompanyModalError('Preencha os campos obrigatórios da empresa (razão social, nome fantasia, CNPJ e status).');
-      return;
-    }
-    if (cnpjDigits.length !== 14) {
-      setCreateCompanyFieldErrors({
-        cnpj: 'Informe um CNPJ válido com 14 dígitos.',
-      });
-      setCreateCompanyModalError('Informe um CNPJ válido com 14 dígitos.');
-      return;
-    }
-    const draftItemTotal = buildDraftItemTotal(editForm ?? {});
-    const totalValueForProjectCompany =
-      typeof newCompanyForm.valorContrato === 'number' && newCompanyForm.valorContrato > 0
-        ? newCompanyForm.valorContrato
-        : draftItemTotal > 0
-          ? draftItemTotal
-          : undefined;
-    try {
-      setIsSubmitting(true);
-      setCreateCompanyFieldErrors({});
-      setCreateCompanyModalError(null);
-      const actorUserId = await requireCurrentUserId();
-      const company = await createCompany({
-        name: newCompanyForm.razaoSocial!.trim(),
-        tradeName: newCompanyForm.nomeFantasia!.trim(),
-        cnpj: cnpjDigits,
-        email: toOptional(newCompanyForm.email),
-        phone: toOptional(onlyDigits(newCompanyForm.telefone)),
-        address: toOptional(newCompanyForm.endereco),
-        city: toOptional(newCompanyForm.cidade),
-        state: toOptional(newCompanyForm.uf)?.toUpperCase(),
-        responsiblePersonId: newCompanyForm.responsavelPersonId
-          ? Number(newCompanyForm.responsavelPersonId)
-          : undefined,
-        createdBy: actorUserId,
-      });
-      const linked = await createProjectCompany({
-        projectId,
-        companyId: company.id,
-        serviceType: toOptional(newCompanyForm.tipoServico),
-        totalValue: totalValueForProjectCompany,
-        startDate: toOptional(newCompanyForm.dataInicio),
-        endDate: toOptional(newCompanyForm.dataFim),
-        notes: toOptional(newCompanyForm.observacao),
-        isIncubated: newCompanyForm.tipoEmpresa === 'INCUBADA',
-        status: newCompanyForm.status as ContractingStatusEnum,
-        createdBy: actorUserId,
-      });
-      const companyName = newCompanyForm.nomeFantasia!.trim() || newCompanyForm.razaoSocial!.trim();
-      const companyStatus = newCompanyForm.status || RUBRICA_DEFAULT_COMPANY_STATUS;
-      const formattedCnpj = formatCnpjCompact(cnpjDigits);
-      appendProjectCompanyOption({
-        id: String(linked.id),
-        label: [
-          companyName,
-          formattedCnpj ? `CNPJ ${formattedCnpj}` : 'CNPJ não informado',
-          formatContractingStatus(companyStatus),
-          totalValueForProjectCompany != null ? `Saldo ${formatCurrency(totalValueForProjectCompany)}` : null,
-        ]
-          .filter(Boolean)
-          .join(' - '),
-        name: companyName,
-        cnpj: formattedCnpj,
-        status: companyStatus,
-        availableBalance: totalValueForProjectCompany ?? null,
-        totalValue: totalValueForProjectCompany ?? null,
-      });
-      applyBeneficiarySelectionToEditForm('company', String(linked.id));
-      setShowCreateCompanyModal(false);
-      setNewCompanyForm(createEmptyCompanyForm());
-      setCreateCompanyFieldErrors({});
-      showSavedMessage('Empresa criada e vinculada ao item. Revise os dados e salve a rubrica quando concluir.');
-    } catch (error) {
-      setCreateCompanyModalError(
-        toErrorMessage(error, 'Não foi possível cadastrar e vincular a empresa.')
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleAddItem = async (rubricaId: string) => {
@@ -2441,25 +1391,15 @@ export default function RubricasPage() {
   const isEditItemModalOpen = Boolean(editingItem && editForm && currentEditRubrica);
   const isDeleteRubricaModalOpen = Boolean(rubricaPendingDeletion);
   const isDeleteItemModalOpen = Boolean(itemPendingDeletion);
-  const isLinkPersonModalOpen = showLinkPersonModal;
-  const isLinkCompanyModalOpen = showLinkCompanyModal;
-  const isCreatePersonModalOpen = showCreatePersonModal;
-  const isCreateCompanyModalOpen = showCreateCompanyModal;
   const isRemanejamentoModalVisible = Boolean(canManageChildren && itemParaRemanejamento);
   const isHistoricoModalVisible = Boolean(canOpenTransferHistory && historicoModalOpen);
-  const isCriticalConflictModalOpen = Boolean(criticalConflictMessage);
   const isAnyModalOpen =
     isCreateItemModalOpen ||
     isEditItemModalOpen ||
     isDeleteRubricaModalOpen ||
     isDeleteItemModalOpen ||
-    isLinkPersonModalOpen ||
-    isLinkCompanyModalOpen ||
-    isCreatePersonModalOpen ||
-    isCreateCompanyModalOpen ||
     isRemanejamentoModalVisible ||
-    isHistoricoModalVisible ||
-    isCriticalConflictModalOpen;
+    isHistoricoModalVisible;
 
   if (isLoading) {
     return (
