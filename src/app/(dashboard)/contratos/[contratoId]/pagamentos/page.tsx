@@ -3554,6 +3554,7 @@ export default function PagamentosPlanilhaPage() {
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
         projectPartners={projectPartners}
+        parceirosHref={`/contratos/${contratoId}/parceiros`}
         lockBeneficiary={false}
         isPersisting={isPersisting}
         onChange={(patch) => {
@@ -4702,6 +4703,7 @@ function SubitemModal({
   projectPeople,
   projectCompanies,
   projectPartners,
+  parceirosHref,
   lockBeneficiary,
   isPersisting,
   onChange,
@@ -4724,6 +4726,7 @@ function SubitemModal({
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
   projectPartners: ProjectLinkedPartner[];
+  parceirosHref: string;
   lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
@@ -5027,11 +5030,22 @@ function SubitemModal({
 
         {showPartnerSelector ? (
           <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">IF / Fundação vinculada</h3>
-              <p className="text-xs text-gray-500">
-                Selecione um parceiro (IF ou Fundação) vinculado ao projeto.
-              </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900">IF / Fundação vinculada</h3>
+                <p className="text-xs text-gray-500">
+                  Parceiros vinculados a este contrato na aba{' '}
+                  <a
+                    href={parceirosHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-[#004225] underline hover:text-[#003319]"
+                  >
+                    Parceiros
+                  </a>
+                  .
+                </p>
+              </div>
             </div>
             {isLoadingLinks ? (
               <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
@@ -5039,7 +5053,16 @@ function SubitemModal({
               </div>
             ) : projectPartners.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
-                Nenhum parceiro vinculado ao projeto.
+                Nenhum parceiro vinculado ao projeto.{' '}
+                <a
+                  href={parceirosHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-[#004225] underline hover:text-[#003319]"
+                >
+                  Acesse a aba Parceiros
+                </a>{' '}
+                para vincular um IF ou Fundação antes de registrar o pagamento.
               </div>
             ) : (
               <Dropdown
