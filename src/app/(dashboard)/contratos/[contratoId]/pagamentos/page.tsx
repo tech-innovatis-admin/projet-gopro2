@@ -1718,6 +1718,11 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    if (effectiveVinculoTipo === 'none') {
+      setSubitemModalError('Selecione o tipo de vínculo do pagamento (pessoa, empresa ou parceiro).');
+      return;
+    }
+
     if (effectiveVinculoTipo === 'partner' && !effectivePartnerId) {
       setSubitemModalError('Selecione um parceiro (IF/Fundação) vinculado ao projeto.');
       return;
@@ -2009,6 +2014,11 @@ export default function PagamentosPlanilhaPage() {
 
     if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
+      return;
+    }
+
+    if (effectiveVinculoTipo === 'none') {
+      setSubitemModalError('Selecione o tipo de vínculo do pagamento (pessoa, empresa ou parceiro).');
       return;
     }
 
@@ -2612,6 +2622,11 @@ export default function PagamentosPlanilhaPage() {
 
       if (!description) {
         setActionError(`Informe o nome do pagamento no item "${item.descricao}".`);
+        return;
+      }
+
+      if (subitem.vinculoTipo === 'none') {
+        setActionError(`Selecione o tipo de vínculo para o subitem "${description}" (pessoa, empresa ou parceiro).`);
         return;
       }
 
