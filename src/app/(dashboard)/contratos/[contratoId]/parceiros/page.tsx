@@ -555,10 +555,6 @@ export default function ParceirosDoContratoPage() {
                     <span className="text-gray-500">Reservado</span>
                     <span className="font-medium text-blue-700">{formatCurrency(partner.totalReservado)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">Pagamento recebido</span>
-                    <span className="font-medium text-teal-700">{formatCurrency(partner.totalPagamentoRecebido)}</span>
-                  </div>
                   <div className="flex items-center justify-between text-xs border-t border-gray-200 pt-1.5 mt-1">
                     <span className="font-medium text-gray-700">Total executado</span>
                     <span className="font-semibold text-[#004225]">{formatCurrency(partner.totalExecutado)}</span>
