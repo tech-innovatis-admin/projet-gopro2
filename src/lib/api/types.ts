@@ -701,6 +701,11 @@ export interface ProjectPartnerLinkResponseDTO {
   updatedBy: number | null;
 }
 
+export interface ProjectPartnerLinkRequestDTO {
+  partnerId: number;
+  status: string;
+}
+
 export type StatusDisbursementScheduleEnum =
   | 'PREVISTO'
   | 'PARCIAL'

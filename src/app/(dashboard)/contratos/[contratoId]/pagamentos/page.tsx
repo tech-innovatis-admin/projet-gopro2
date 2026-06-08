@@ -28,8 +28,10 @@ import {
   createCompany,
   createExpense,
   createIncome,
+  createPartner,
   createPeople,
   createProjectCompany,
+  createProjectPartner,
   createProjectPeople,
   deleteExpense,
   deleteIncome,
@@ -40,6 +42,7 @@ import {
   listExpenses,
   listGoals,
   listIncomes,
+  listPartners,
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
@@ -64,6 +67,9 @@ import type {
   IncomeResponseDTO,
   IncomeStatusEnum,
   PageResponseDTO,
+  PartnerRequestDTO,
+  PartnerResponseDTO,
+  PartnersTypeEnum,
   PeopleResponseDTO,
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
@@ -260,6 +266,20 @@ const DEFAULT_CREATE_COMPANY_FORM: CreateCompanyFormState = {
   address: '',
   city: '',
   state: '',
+};
+
+type CreatePartnerFormState = {
+  name: string;
+  tradeName: string;
+  partnersType: PartnersTypeEnum | '';
+  cnpj: string;
+};
+
+const DEFAULT_CREATE_PARTNER_FORM: CreatePartnerFormState = {
+  name: '',
+  tradeName: '',
+  partnersType: '',
+  cnpj: '',
 };
 
 function formatCurrency(value: number) {
@@ -543,12 +563,16 @@ export default function PagamentosPlanilhaPage() {
   const [subitemModalFieldErrors, setSubitemModalFieldErrors] = useState<PaymentFieldErrors>({});
   const [isCreatePersonModalOpen, setIsCreatePersonModalOpen] = useState(false);
   const [isCreateCompanyModalOpen, setIsCreateCompanyModalOpen] = useState(false);
+  const [isCreatePartnerModalOpen, setIsCreatePartnerModalOpen] = useState(false);
   const [isLinkExistingPersonModalOpen, setIsLinkExistingPersonModalOpen] = useState(false);
   const [isLinkExistingCompanyModalOpen, setIsLinkExistingCompanyModalOpen] = useState(false);
+  const [isLinkExistingPartnerModalOpen, setIsLinkExistingPartnerModalOpen] = useState(false);
   const [basePeople, setBasePeople] = useState<PeopleResponseDTO[]>([]);
   const [baseCompanies, setBaseCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [basePartners, setBasePartners] = useState<PartnerResponseDTO[]>([]);
   const [isLoadingBasePeople, setIsLoadingBasePeople] = useState(false);
   const [isLoadingBaseCompanies, setIsLoadingBaseCompanies] = useState(false);
+  const [isLoadingBasePartners, setIsLoadingBasePartners] = useState(false);
   const [isEditingSubitens, setIsEditingSubitens] = useState(false);
   const [expandedSubitemKey, setExpandedSubitemKey] = useState<ID | null>(null);
   const [editingLancamentosSubitemKey, setEditingLancamentosSubitemKey] = useState<ID | null>(null);
@@ -703,6 +727,21 @@ export default function PagamentosPlanilhaPage() {
           return nameA.localeCompare(nameB, 'pt-BR');
         }),
     [baseCompanies, projectCompaniesById]
+  );
+  const projectPartnerIdSet = useMemo(
+    () => new Set(projectPartners.map((p) => p.partnerId)),
+    [projectPartners]
+  );
+  const linkableBasePartners = useMemo(
+    () =>
+      basePartners
+        .filter((partner) => partner.isActive && !projectPartnerIdSet.has(String(partner.id)))
+        .sort((a, b) => {
+          const nameA = a.tradeName?.trim() || a.name;
+          const nameB = b.tradeName?.trim() || b.name;
+          return nameA.localeCompare(nameB, 'pt-BR');
+        }),
+    [basePartners, projectPartnerIdSet]
   );
 
   const getDefaultSubitemFormForItem = useCallback(
@@ -877,6 +916,19 @@ export default function PagamentosPlanilhaPage() {
       setBaseCompanies(companies);
     } finally {
       setIsLoadingBaseCompanies(false);
+    }
+  }, []);
+
+  const loadBasePartners = useCallback(async () => {
+    setIsLoadingBasePartners(true);
+
+    try {
+      const partners = await fetchAllPages<PartnerResponseDTO>((query) =>
+        listPartners({ page: query.page, size: query.size })
+      );
+      setBasePartners(partners);
+    } finally {
+      setIsLoadingBasePartners(false);
     }
   }, []);
 
@@ -1986,6 +2038,81 @@ export default function PagamentosPlanilhaPage() {
     setSubitemModalError(null);
     setIsCreateCompanyModalOpen(false);
     showSavedMessage('Empresa vinculada ao projeto com sucesso.');
+  };
+
+  const handleOpenLinkExistingPartnerModal = async () => {
+    if (!ensureCanManageChildren()) return;
+
+    setSubitemModalError(null);
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      personId: '',
+      organizationId: '',
+    }));
+
+    try {
+      await loadBasePartners();
+      setIsLinkExistingPartnerModalOpen(true);
+    } catch (error) {
+      setSubitemModalError(
+        toErrorMessage(error, 'Não foi possível carregar os parceiros cadastrados.')
+      );
+    }
+  };
+
+  const handleLinkExistingPartner = async (partnerId: number) => {
+    if (!Number.isFinite(projectId)) {
+      throw new Error('ID do contrato inválido para vincular o parceiro.');
+    }
+
+    const linkResponse = await createProjectPartner(projectId, {
+      partnerId,
+      status: 'EM_EXECUCAO',
+    });
+    await loadProjectLinks();
+
+    const linkedPartner = basePartners.find((p) => p.id === partnerId);
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      partnerId: String(linkResponse.id),
+      personId: '',
+      organizationId: '',
+      nome: current.nome.trim()
+        ? current.nome
+        : (linkedPartner?.tradeName?.trim() || linkedPartner?.name) ?? current.nome,
+    }));
+    setIsLinkExistingPartnerModalOpen(false);
+    setSubitemModalError(null);
+    showSavedMessage('Parceiro vinculado ao projeto com sucesso.');
+  };
+
+  const handleCreateAndLinkPartner = async (payload: PartnerRequestDTO) => {
+    if (!Number.isFinite(projectId)) {
+      throw new Error('ID do contrato inválido para vincular o parceiro.');
+    }
+
+    const createdPartner = await createPartner(payload);
+    const linkResponse = await createProjectPartner(projectId, {
+      partnerId: createdPartner.id,
+      status: 'EM_EXECUCAO',
+    });
+    await loadProjectLinks();
+
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      partnerId: String(linkResponse.id),
+      personId: '',
+      organizationId: '',
+      nome: current.nome.trim()
+        ? current.nome
+        : createdPartner.tradeName?.trim() || createdPartner.name,
+    }));
+    setSubitemModalError(null);
+    setIsCreatePartnerModalOpen(false);
+    showSavedMessage('Parceiro criado e vinculado ao projeto com sucesso.');
   };
 
   const handleSaveSubitemModal = async () => {
@@ -3554,7 +3681,6 @@ export default function PagamentosPlanilhaPage() {
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
         projectPartners={projectPartners}
-        parceirosHref={`/contratos/${contratoId}/parceiros`}
         lockBeneficiary={false}
         isPersisting={isPersisting}
         onChange={(patch) => {
@@ -3590,6 +3716,20 @@ export default function PagamentosPlanilhaPage() {
         }}
         onOpenLinkExistingCompany={() => {
           void handleOpenLinkExistingCompanyModal();
+        }}
+        onOpenCreatePartner={() => {
+          setSubitemModalError(null);
+          setSubitemModalFieldErrors({});
+          setSubitemModalForm((current) => ({
+            ...current,
+            vinculoTipo: 'partner',
+            personId: '',
+            organizationId: '',
+          }));
+          setIsCreatePartnerModalOpen(true);
+        }}
+        onOpenLinkExistingPartner={() => {
+          void handleOpenLinkExistingPartnerModal();
         }}
         onSubmit={() => {
           setSubitemModalFieldErrors({});
@@ -3628,6 +3768,20 @@ export default function PagamentosPlanilhaPage() {
         isLoading={isLoadingBaseCompanies}
         onClose={() => setIsLinkExistingCompanyModalOpen(false)}
         onSave={handleLinkExistingCompany}
+      />
+
+      <CreateLinkedPartnerModal
+        isOpen={isCreatePartnerModalOpen}
+        onClose={() => setIsCreatePartnerModalOpen(false)}
+        onSave={handleCreateAndLinkPartner}
+      />
+
+      <LinkExistingPartnerModal
+        isOpen={isLinkExistingPartnerModalOpen}
+        partners={linkableBasePartners}
+        isLoading={isLoadingBasePartners}
+        onClose={() => setIsLinkExistingPartnerModalOpen(false)}
+        onSave={handleLinkExistingPartner}
       />
     </div>
   );
@@ -4703,15 +4857,16 @@ function SubitemModal({
   projectPeople,
   projectCompanies,
   projectPartners,
-  parceirosHref,
   lockBeneficiary,
   isPersisting,
   onChange,
   onClose,
   onOpenCreatePerson,
   onOpenCreateCompany,
+  onOpenCreatePartner,
   onOpenLinkExistingPerson,
   onOpenLinkExistingCompany,
+  onOpenLinkExistingPartner,
   onSubmit,
 }: {
   isOpen: boolean;
@@ -4726,15 +4881,16 @@ function SubitemModal({
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
   projectPartners: ProjectLinkedPartner[];
-  parceirosHref: string;
   lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
   onClose: () => void;
   onOpenCreatePerson: () => void;
   onOpenCreateCompany: () => void;
+  onOpenCreatePartner: () => void;
   onOpenLinkExistingPerson: () => void;
   onOpenLinkExistingCompany: () => void;
+  onOpenLinkExistingPartner: () => void;
   onSubmit: () => void;
 }) {
   const personFieldRef = useRef<HTMLDivElement | null>(null);
@@ -5030,21 +5186,32 @@ function SubitemModal({
 
         {showPartnerSelector ? (
           <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-medium text-gray-900">IF / Fundação vinculada</h3>
                 <p className="text-xs text-gray-500">
-                  Parceiros vinculados a este contrato na aba{' '}
-                  <a
-                    href={parceirosHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-[#004225] underline hover:text-[#003319]"
-                  >
-                    Parceiros
-                  </a>
-                  .
+                  Selecione um parceiro já vinculado ao projeto ou cadastre um novo.
                 </p>
+              </div>
+              <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={onOpenLinkExistingPartner}
+                  disabled={isPersisting || lockBeneficiary}
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <Check className="h-4 w-4" />
+                  Vincular existente
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenCreatePartner}
+                  disabled={isPersisting || lockBeneficiary}
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo parceiro
+                </button>
               </div>
             </div>
             {isLoadingLinks ? (
@@ -5053,16 +5220,7 @@ function SubitemModal({
               </div>
             ) : projectPartners.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
-                Nenhum parceiro vinculado ao projeto.{' '}
-                <a
-                  href={parceirosHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-[#004225] underline hover:text-[#003319]"
-                >
-                  Acesse a aba Parceiros
-                </a>{' '}
-                para vincular um IF ou Fundação antes de registrar o pagamento.
+                Nenhum parceiro vinculado ao projeto.
               </div>
             ) : (
               <Dropdown
@@ -5085,7 +5243,7 @@ function SubitemModal({
                   });
                 }}
                 placeholder="Selecione um parceiro"
-                disabled={isPersisting}
+                disabled={isPersisting || lockBeneficiary}
                 className="w-full"
               />
             )}
@@ -5781,6 +5939,276 @@ function LinkExistingCompanyModal({
     </ModalShell>
   );
 }
+
+function LinkExistingPartnerModal({
+  isOpen,
+  partners,
+  isLoading,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  partners: PartnerResponseDTO[];
+  isLoading: boolean;
+  onClose: () => void;
+  onSave: (partnerId: number) => Promise<void>;
+}) {
+  const [selectedId, setSelectedId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedId('');
+    setError(null);
+    setIsSaving(false);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    if (!selectedId) {
+      setError('Selecione um parceiro cadastrado para vincular.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await onSave(Number(selectedId));
+    } catch (saveError) {
+      setError(toErrorMessage(saveError, 'Não foi possível vincular o parceiro existente.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell
+      title="Vincular parceiro existente"
+      subtitle="Escolha um IF ou Fundação já cadastrado na base para vinculá-lo ao projeto."
+      onClose={onClose}
+      maxWidthClassName="max-w-xl"
+      zIndexClassName="z-[60]"
+    >
+      <div className="space-y-4 p-6">
+        {isLoading ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+            Carregando parceiros cadastrados...
+          </div>
+        ) : partners.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+            Todos os parceiros cadastrados já estão vinculados a este projeto.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              Parceiro cadastrado <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedId}
+              onChange={(event) => setSelectedId(event.target.value)}
+              disabled={isSaving}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+            >
+              <option value="">Selecione um parceiro</option>
+              {partners.map((partner) => {
+                const displayName = partner.tradeName?.trim() || partner.name;
+                const typeLabel = partner.partnersType === 'IF' ? 'IF' : 'Fundação';
+                return (
+                  <option key={partner.id} value={String(partner.id)}>
+                    {displayName} • {typeLabel}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+
+        {error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSaving || isLoading || partners.length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" />
+            {isSaving ? 'Vinculando...' : 'Vincular ao projeto'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function CreateLinkedPartnerModal({
+  isOpen,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (payload: PartnerRequestDTO) => Promise<void>;
+}) {
+  const [form, setForm] = useState<CreatePartnerFormState>(DEFAULT_CREATE_PARTNER_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setForm(DEFAULT_CREATE_PARTNER_FORM);
+    setError(null);
+    setIsSaving(false);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    const name = form.name.trim();
+    if (!name) {
+      setError('Informe o nome do parceiro.');
+      return;
+    }
+    if (!form.partnersType) {
+      setError('Selecione o tipo de parceiro (IF ou Fundação).');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await onSave({
+        name,
+        tradeName: form.tradeName.trim() || undefined,
+        partnersType: form.partnersType,
+        cnpj: onlyDigits(form.cnpj) || undefined,
+      });
+    } catch (saveError) {
+      setError(toErrorMessage(saveError, 'Não foi possível cadastrar o parceiro.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell
+      title="Novo parceiro"
+      subtitle="Cadastre o parceiro e vincule-o automaticamente a este projeto."
+      onClose={onClose}
+      maxWidthClassName="max-w-xl"
+      zIndexClassName="z-[60]"
+    >
+      <div className="space-y-4 p-6">
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">
+            Nome <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+            disabled={isSaving}
+            autoFocus
+            placeholder="Ex: Universidade Federal de Minas Gerais"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">
+            Nome fantasia / Sigla
+          </label>
+          <input
+            type="text"
+            value={form.tradeName}
+            onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))}
+            disabled={isSaving}
+            placeholder="Ex: UFMG"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">
+            Tipo <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={form.partnersType}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                partnersType: event.target.value as PartnersTypeEnum | '',
+              }))
+            }
+            disabled={isSaving}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+          >
+            <option value="">Selecione o tipo</option>
+            <option value="IF">IF (Instituto Federal)</option>
+            <option value="FUNDACAO">Fundação</option>
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">CNPJ</label>
+          <input
+            type="text"
+            value={form.cnpj}
+            onChange={(event) => setForm((current) => ({ ...current, cnpj: event.target.value }))}
+            disabled={isSaving}
+            placeholder="00.000.000/0000-00"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+          />
+        </div>
+
+        {error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" />
+            {isSaving ? 'Cadastrando...' : 'Cadastrar e vincular'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 function Field({
   label,
   required,

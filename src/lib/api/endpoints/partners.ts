@@ -4,6 +4,7 @@ import type {
   PartnerRequestDTO,
   PartnerResponseDTO,
   PartnerUpdateDTO,
+  ProjectPartnerLinkRequestDTO,
   ProjectPartnerLinkResponseDTO,
 } from '../types';
 
@@ -47,5 +48,11 @@ export function listProjectPartnerLinks(
     `/contracts/${projectId}/parceiros`,
     { query: { page: params.page ?? 0, size: params.size ?? 50 } }
   );
+}
+
+export function createProjectPartner(projectId: number, payload: ProjectPartnerLinkRequestDTO) {
+  return http.post<ProjectPartnerLinkResponseDTO>(`/contracts/${projectId}/parceiros`, {
+    body: payload,
+  });
 }
 
