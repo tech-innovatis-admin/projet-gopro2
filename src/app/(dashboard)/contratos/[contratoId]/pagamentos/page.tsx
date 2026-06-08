@@ -19,6 +19,9 @@ import {
 import { ContractPagamentosLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
 import { ExpenseReclassifyModal } from '../_components/ExpenseReclassifyModal';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
+import { NovoParceiroModal } from '@/src/app/(dashboard)/parceiros/_components/NovoParceiroModal';
+import { mapParceiroFormToPartnerRequestDTO } from '@/src/app/(dashboard)/parceiros/mappers';
+import type { Parceiro } from '@/src/app/(dashboard)/parceiros/types';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -67,9 +70,7 @@ import type {
   IncomeResponseDTO,
   IncomeStatusEnum,
   PageResponseDTO,
-  PartnerRequestDTO,
   PartnerResponseDTO,
-  PartnersTypeEnum,
   PeopleResponseDTO,
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
@@ -266,20 +267,6 @@ const DEFAULT_CREATE_COMPANY_FORM: CreateCompanyFormState = {
   address: '',
   city: '',
   state: '',
-};
-
-type CreatePartnerFormState = {
-  name: string;
-  tradeName: string;
-  partnersType: PartnersTypeEnum | '';
-  cnpj: string;
-};
-
-const DEFAULT_CREATE_PARTNER_FORM: CreatePartnerFormState = {
-  name: '',
-  tradeName: '',
-  partnersType: '',
-  cnpj: '',
 };
 
 function formatCurrency(value: number) {
@@ -2088,12 +2075,14 @@ export default function PagamentosPlanilhaPage() {
     showSavedMessage('Parceiro vinculado ao projeto com sucesso.');
   };
 
-  const handleCreateAndLinkPartner = async (payload: PartnerRequestDTO) => {
+  const handleCreateAndLinkPartner = async (
+    parceiro: Omit<Parceiro, 'id' | 'createdAt' | 'totalContratos' | 'contratosAtivos' | 'valorTotalContratos'>
+  ) => {
     if (!Number.isFinite(projectId)) {
       throw new Error('ID do contrato inválido para vincular o parceiro.');
     }
 
-    const createdPartner = await createPartner(payload);
+    const createdPartner = await createPartner(mapParceiroFormToPartnerRequestDTO(parceiro));
     const linkResponse = await createProjectPartner(projectId, {
       partnerId: createdPartner.id,
       status: 'EM_EXECUCAO',
@@ -3770,10 +3759,11 @@ export default function PagamentosPlanilhaPage() {
         onSave={handleLinkExistingCompany}
       />
 
-      <CreateLinkedPartnerModal
+      <NovoParceiroModal
         isOpen={isCreatePartnerModalOpen}
         onClose={() => setIsCreatePartnerModalOpen(false)}
-        onSave={handleCreateAndLinkPartner}
+        onSubmit={handleCreateAndLinkPartner}
+        zIndexClassName="z-[60]"
       />
 
       <LinkExistingPartnerModal
@@ -6050,158 +6040,6 @@ function LinkExistingPartnerModal({
           >
             <Check className="h-4 w-4" />
             {isSaving ? 'Vinculando...' : 'Vincular ao projeto'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-function CreateLinkedPartnerModal({
-  isOpen,
-  onClose,
-  onSave,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (payload: PartnerRequestDTO) => Promise<void>;
-}) {
-  const [form, setForm] = useState<CreatePartnerFormState>(DEFAULT_CREATE_PARTNER_FORM);
-  const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setForm(DEFAULT_CREATE_PARTNER_FORM);
-    setError(null);
-    setIsSaving(false);
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = async () => {
-    const name = form.name.trim();
-    if (!name) {
-      setError('Informe o nome do parceiro.');
-      return;
-    }
-    if (!form.partnersType) {
-      setError('Selecione o tipo de parceiro (IF ou Fundação).');
-      return;
-    }
-
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      await onSave({
-        name,
-        tradeName: form.tradeName.trim() || undefined,
-        partnersType: form.partnersType,
-        cnpj: onlyDigits(form.cnpj) || undefined,
-      });
-    } catch (saveError) {
-      setError(toErrorMessage(saveError, 'Não foi possível cadastrar o parceiro.'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell
-      title="Novo parceiro"
-      subtitle="Cadastre o parceiro e vincule-o automaticamente a este projeto."
-      onClose={onClose}
-      maxWidthClassName="max-w-xl"
-      zIndexClassName="z-[60]"
-    >
-      <div className="space-y-4 p-6">
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">
-            Nome <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            disabled={isSaving}
-            autoFocus
-            placeholder="Ex: Universidade Federal de Minas Gerais"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">
-            Nome fantasia / Sigla
-          </label>
-          <input
-            type="text"
-            value={form.tradeName}
-            onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))}
-            disabled={isSaving}
-            placeholder="Ex: UFMG"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">
-            Tipo <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={form.partnersType}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                partnersType: event.target.value as PartnersTypeEnum | '',
-              }))
-            }
-            disabled={isSaving}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-          >
-            <option value="">Selecione o tipo</option>
-            <option value="IF">IF (Instituto Federal)</option>
-            <option value="FUNDACAO">Fundação</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-gray-700">CNPJ</label>
-          <input
-            type="text"
-            value={form.cnpj}
-            onChange={(event) => setForm((current) => ({ ...current, cnpj: event.target.value }))}
-            disabled={isSaving}
-            placeholder="00.000.000/0000-00"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-          />
-        </div>
-
-        {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSaving}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
-          >
-            <X className="h-4 w-4" />
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={isSaving}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Check className="h-4 w-4" />
-            {isSaving ? 'Cadastrando...' : 'Cadastrar e vincular'}
           </button>
         </div>
       </div>
