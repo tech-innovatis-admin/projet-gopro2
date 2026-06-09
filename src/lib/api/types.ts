@@ -285,9 +285,9 @@ export interface PartnerResponseDTO {
 export interface PartnerRequestDTO {
   acronym?: string;
   name: string;
-  tradeName: string;
+  tradeName?: string;
   partnersType: PartnersTypeEnum;
-  cnpj: string;
+  cnpj?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -411,11 +411,11 @@ export interface CompanyRequestDTO {
   name: string;
   tradeName: string;
   cnpj: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
   responsiblePersonId?: number | null;
   createdBy?: number;
 }
@@ -478,6 +478,7 @@ export interface ProjectResponseDTO {
   city: string | null;
   state: string | null;
   executionLocation: string | null;
+  projectBankAccount: string | null;
   executedByInnovatis: boolean | null;
   isActive: boolean;
   totalReceived: number | null;
@@ -512,6 +513,7 @@ export interface ProjectRequestDTO {
   city?: string;
   state?: string;
   executionLocation?: string;
+  projectBankAccount?: string;
   executedByInnovatis: boolean;
   createdBy?: number;
 }
@@ -681,6 +683,34 @@ export interface ProjectPartnerResponseDTO {
   partners: ProjectPartnerMetricDTO[];
 }
 
+export interface ProjectPartnerLinkResponseDTO {
+  id: number;
+  projectId: number;
+  partnerId: number | null;
+  partnerName: string | null;
+  partnerTradeName: string | null;
+  partnerType: PartnersTypeEnum | null;
+  status: string | null;
+  totalValue: number | null;
+  totalExecutado: number | null;
+  totalPago: number | null;
+  totalReservado: number | null;
+  totalPagamentoRecebido: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+export interface ProjectPartnerLinkRequestDTO {
+  projectId: number;
+  partnerId: number;
+  status: string;
+}
+
 export type StatusDisbursementScheduleEnum =
   | 'PREVISTO'
   | 'PARCIAL'
@@ -707,13 +737,13 @@ export interface DisbursementScheduleRequestDTO {
   numero: number;
   expectedMonth: string;
   expectedAmount: number;
-  status: StatusDisbursementScheduleEnum;
+  status?: StatusDisbursementScheduleEnum;
   notes?: string;
   createdBy?: number;
 }
 
 export interface DisbursementScheduleUpdateDTO
-  extends Partial<DisbursementScheduleRequestDTO> {
+  extends Omit<Partial<DisbursementScheduleRequestDTO>, "status"> {
   updatedBy?: number;
 }
 
@@ -848,6 +878,8 @@ export interface ProjectPeopleDetailedResponseDTO extends ProjectPeopleResponseD
   personAddress: string | null;
   personCity: string | null;
   personState: string | null;
+  totalPago?: number | null;
+  totalReservado?: number | null;
 }
 
 export interface ProjectPeopleRequestDTO {
@@ -859,7 +891,7 @@ export interface ProjectPeopleRequestDTO {
   contractType?: ContractTypeEnum;
   startDate?: string;
   endDate?: string;
-  status?: StatusProjectPeopleEnum;
+  status: StatusProjectPeopleEnum;
   baseAmount?: number;
   notes?: string;
   createdBy?: number;
@@ -926,8 +958,8 @@ export interface ProjectCompanyResponseDTO {
   endDate: string | null;
   status: ContractingStatusEnum | null;
   totalValue: number | null;
-  availableBalance?: number | null;
-  executionPercentage?: number | null;
+  totalPago?: number | null;
+  totalReservado?: number | null;
   notes: string | null;
   isIncubated: boolean | null;
   serviceType: string | null;
@@ -1045,6 +1077,7 @@ export interface ExpenseResponseDTO {
   personId: number | null;
   organizationId: number | null;
   projectCompanyId: number | null;
+  projectPartnerId: number | null;
   description: string | null;
   invoiceNumber: string | null;
   invoiceDate: string | null;
@@ -1069,6 +1102,7 @@ export interface ExpenseRequestDTO {
   personId?: number;
   organizationId?: number;
   projectCompanyId?: number;
+  projectPartnerId?: number | null;
   description?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
@@ -1119,7 +1153,8 @@ export interface BudgetItemResponseDTO {
   goalId: number | null;
   projectPeopleId: number | null;
   projectCompanyId: number | null;
-  beneficiaryType: 'person' | 'company' | null;
+  projectPartnerId: number | null;
+  beneficiaryType: 'person' | 'company' | 'partner' | null;
   contractedAmount: number | null;
   notes: string | null;
   webs: string | null;
@@ -1141,9 +1176,6 @@ export interface BudgetItemRequestDTO {
   plannedAmount: number;
   executedAmount?: number;
   goalId?: number | null;
-  projectPeopleId?: number | null;
-  projectCompanyId?: number | null;
-  beneficiaryType?: 'person' | 'company' | null;
   contractedAmount?: number | null;
   notes?: string;
   webs?: string;
@@ -1157,7 +1189,7 @@ export interface BudgetItemUpdateDTO extends Partial<BudgetItemRequestDTO> {
 }
 
 export interface BudgetItemBeneficiaryAssignRequestDTO {
-  beneficiaryType: 'person' | 'company';
+  beneficiaryType: 'person' | 'company' | 'partner';
   referenceId: number;
   contractedAmount: number;
 }

@@ -13,10 +13,15 @@ import {
   Pencil,
   Save,
   Info,
+  HandCoins,
+  CopyPlus,
 } from 'lucide-react';
 import { ContractPagamentosLoadingSkeleton } from '../_components/ContractLoadingSkeleton';
 import { ExpenseReclassifyModal } from '../_components/ExpenseReclassifyModal';
 import { MoneyInput } from '../desembolso/_components/MoneyImput';
+import { NovoParceiroModal } from '@/src/app/(dashboard)/parceiros/_components/NovoParceiroModal';
+import { mapParceiroFormToPartnerRequestDTO } from '@/src/app/(dashboard)/parceiros/mappers';
+import type { Parceiro } from '@/src/app/(dashboard)/parceiros/types';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { ConfirmDiscardModal } from '@/components/ui/confirm-discard-modal';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -26,8 +31,10 @@ import {
   createCompany,
   createExpense,
   createIncome,
+  createPartner,
   createPeople,
   createProjectCompany,
+  createProjectPartner,
   createProjectPeople,
   deleteExpense,
   deleteIncome,
@@ -38,9 +45,11 @@ import {
   listExpenses,
   listGoals,
   listIncomes,
+  listPartners,
   listPeople,
   listProjectCompaniesDetailed,
   listProjectPeopleDetailed,
+  listProjectPartnerLinks,
   reclassifyExpense,
   updateExpense,
   updateIncome,
@@ -61,10 +70,13 @@ import type {
   IncomeResponseDTO,
   IncomeStatusEnum,
   PageResponseDTO,
+  PartnerResponseDTO,
   PeopleResponseDTO,
   PeopleRequestDTO,
   ProjectCompanyDetailedResponseDTO,
+  ProjectPartnerLinkResponseDTO,
   ProjectPeopleDetailedResponseDTO,
+  StatusProjectPeopleEnum,
 } from '@/src/lib/api/types';
 import { HttpError } from '@/src/lib/api/types';
 import { Dropdown } from '@/components/ui/dropdown';
@@ -73,8 +85,9 @@ type ID = string;
 
 const PAGE_SIZE = 20;
 const MAX_PAGE_REQUESTS = 1000;
+const DEFAULT_PROJECT_PERSON_STATUS: StatusProjectPeopleEnum = 'ATIVO';
 
-type SubitemLinkType = 'none' | 'person' | 'company';
+type SubitemLinkType = 'none' | 'person' | 'company' | 'partner';
 
 type Lancamento = {
   id: ID;
@@ -92,6 +105,7 @@ type Subitem = {
   vinculoTipo: SubitemLinkType;
   personId?: ID;
   organizationId?: ID;
+  partnerId?: ID;
 };
 
 type ItemRubrica = {
@@ -107,7 +121,6 @@ type ItemRubrica = {
   valorBaseOrcado: number;
   remanejamentoDebito: number;
   remanejamentoCredito: number;
-  beneficiaryType?: 'person' | 'company' | null;
   projectPeopleId?: ID;
   projectCompanyId?: ID;
 };
@@ -184,7 +197,13 @@ type ProjectLinkedCompany = {
   label: string;
   cnpj?: string | null;
   status?: ProjectCompanyDetailedResponseDTO['status'];
-  availableBalance?: number | null;
+};
+
+type ProjectLinkedPartner = {
+  projectLinkId: ID;
+  partnerId: ID;
+  name: string;
+  label: string;
 };
 
 type NewSubitemFormState = {
@@ -192,6 +211,7 @@ type NewSubitemFormState = {
   vinculoTipo: SubitemLinkType;
   personId: string;
   organizationId: string;
+  partnerId: string;
 };
 
 type PaymentFieldErrors = Partial<{
@@ -206,6 +226,7 @@ const DEFAULT_NEW_SUBITEM_FORM: NewSubitemFormState = {
   vinculoTipo: 'none',
   personId: '',
   organizationId: '',
+  partnerId: '',
 };
 
 type CreatePersonFormState = {
@@ -349,8 +370,8 @@ function createDraftLancamento(): Lancamento {
     id: createDraftId('lanc'),
     valor: 0,
     dataPag: '',
-    paymentStatus: 'RESERVADO',
-    paidBy: 'INNOVATIS',
+    paymentStatus: 'PAGO',
+    paidBy: 'EXECUCAO',
     expenseId: undefined,
   };
 }
@@ -396,16 +417,11 @@ function buildProjectCompanyDisplayLabel(company: {
   name: string;
   cnpj?: string | null;
   status?: ProjectCompanyDetailedResponseDTO['status'];
-  availableBalance?: number | null;
 }) {
   const cnpjLabel = formatCnpj(company.cnpj);
   const statusLabel = getContractingStatusLabel(company.status ?? null);
-  const balanceLabel =
-    typeof company.availableBalance === 'number' && Number.isFinite(company.availableBalance)
-      ? `Saldo ${formatCurrency(company.availableBalance)}`
-      : null;
 
-  return [company.name, cnpjLabel ? `CNPJ ${cnpjLabel}` : null, statusLabel, balanceLabel]
+  return [company.name, cnpjLabel ? `CNPJ ${cnpjLabel}` : null, statusLabel]
     .filter(Boolean)
     .join(' • ');
 }
@@ -519,6 +535,7 @@ export default function PagamentosPlanilhaPage() {
 
   const [projectPeople, setProjectPeople] = useState<ProjectLinkedPerson[]>([]);
   const [projectCompanies, setProjectCompanies] = useState<ProjectLinkedCompany[]>([]);
+  const [projectPartners, setProjectPartners] = useState<ProjectLinkedPartner[]>([]);
   const [isLoadingProjectLinks, setIsLoadingProjectLinks] = useState(false);
   const [projectLinksError, setProjectLinksError] = useState<string | null>(null);
   const [isSubitemModalOpen, setIsSubitemModalOpen] = useState(false);
@@ -533,12 +550,16 @@ export default function PagamentosPlanilhaPage() {
   const [subitemModalFieldErrors, setSubitemModalFieldErrors] = useState<PaymentFieldErrors>({});
   const [isCreatePersonModalOpen, setIsCreatePersonModalOpen] = useState(false);
   const [isCreateCompanyModalOpen, setIsCreateCompanyModalOpen] = useState(false);
+  const [isCreatePartnerModalOpen, setIsCreatePartnerModalOpen] = useState(false);
   const [isLinkExistingPersonModalOpen, setIsLinkExistingPersonModalOpen] = useState(false);
   const [isLinkExistingCompanyModalOpen, setIsLinkExistingCompanyModalOpen] = useState(false);
+  const [isLinkExistingPartnerModalOpen, setIsLinkExistingPartnerModalOpen] = useState(false);
   const [basePeople, setBasePeople] = useState<PeopleResponseDTO[]>([]);
   const [baseCompanies, setBaseCompanies] = useState<CompanyResponseDTO[]>([]);
+  const [basePartners, setBasePartners] = useState<PartnerResponseDTO[]>([]);
   const [isLoadingBasePeople, setIsLoadingBasePeople] = useState(false);
   const [isLoadingBaseCompanies, setIsLoadingBaseCompanies] = useState(false);
+  const [isLoadingBasePartners, setIsLoadingBasePartners] = useState(false);
   const [isEditingSubitens, setIsEditingSubitens] = useState(false);
   const [expandedSubitemKey, setExpandedSubitemKey] = useState<ID | null>(null);
   const [editingLancamentosSubitemKey, setEditingLancamentosSubitemKey] = useState<ID | null>(null);
@@ -586,7 +607,6 @@ export default function PagamentosPlanilhaPage() {
 
     return null;
   }, [subitemModalItemId, rubricas]);
-  const isBeneficiaryLockedByRubrica = Boolean(selectedSubitemItem?.beneficiaryType);
 
   const showSavedMessage = (message: string) => {
     setSavedMessage(message);
@@ -668,47 +688,15 @@ export default function PagamentosPlanilhaPage() {
     () => new Map(projectCompanies.map((company) => [company.projectLinkId, company])),
     [projectCompanies]
   );
+  const projectPartnersByLinkId = useMemo(
+    () => new Map(projectPartners.map((p) => [p.projectLinkId, p])),
+    [projectPartners]
+  );
   const resolveProjectCompanyLinkId = useCallback(
     (companyId: string | undefined) =>
       companyId ? parsePersistedId(projectCompaniesById.get(companyId)?.projectLinkId) : null,
     [projectCompaniesById]
   );
-  const lockedBeneficiaryConfig = useMemo(() => {
-    if (!selectedSubitemItem?.beneficiaryType) return null;
-
-    if (selectedSubitemItem.beneficiaryType === 'person' && selectedSubitemItem.projectPeopleId) {
-      const linkedPerson = projectPeopleByLinkId.get(selectedSubitemItem.projectPeopleId);
-      if (!linkedPerson) return null;
-      return {
-        vinculoTipo: 'person' as SubitemLinkType,
-        personId: linkedPerson.personId,
-        organizationId: '',
-      };
-    }
-
-    if (selectedSubitemItem.beneficiaryType === 'company' && selectedSubitemItem.projectCompanyId) {
-      const linkedCompany = projectCompaniesByLinkId.get(selectedSubitemItem.projectCompanyId);
-      if (!linkedCompany) return null;
-      return {
-        vinculoTipo: 'company' as SubitemLinkType,
-        personId: '',
-        organizationId: linkedCompany.companyId,
-      };
-    }
-
-    return null;
-  }, [projectCompaniesByLinkId, projectPeopleByLinkId, selectedSubitemItem]);
-
-  useEffect(() => {
-    if (!isSubitemModalOpen || subitemModalEditingContext || !lockedBeneficiaryConfig) return;
-
-    setSubitemModalForm((current) => ({
-      ...current,
-      vinculoTipo: lockedBeneficiaryConfig.vinculoTipo,
-      personId: lockedBeneficiaryConfig.personId,
-      organizationId: lockedBeneficiaryConfig.organizationId,
-    }));
-  }, [isSubitemModalOpen, lockedBeneficiaryConfig, subitemModalEditingContext]);
   const linkableBasePeople = useMemo(
     () =>
       basePeople
@@ -727,36 +715,25 @@ export default function PagamentosPlanilhaPage() {
         }),
     [baseCompanies, projectCompaniesById]
   );
+  const projectPartnerIdSet = useMemo(
+    () => new Set(projectPartners.map((p) => p.partnerId)),
+    [projectPartners]
+  );
+  const linkableBasePartners = useMemo(
+    () =>
+      basePartners
+        .filter((partner) => partner.isActive && !projectPartnerIdSet.has(String(partner.id)))
+        .sort((a, b) => {
+          const nameA = a.tradeName?.trim() || a.name;
+          const nameB = b.tradeName?.trim() || b.name;
+          return nameA.localeCompare(nameB, 'pt-BR');
+        }),
+    [basePartners, projectPartnerIdSet]
+  );
 
   const getDefaultSubitemFormForItem = useCallback(
-    (item: ItemRubrica): NewSubitemFormState => {
-      if (item.beneficiaryType === 'person' && item.projectPeopleId) {
-        const linkedPerson = projectPeopleByLinkId.get(item.projectPeopleId);
-        if (linkedPerson) {
-          return {
-            nome: linkedPerson.fullName,
-            vinculoTipo: 'person',
-            personId: linkedPerson.personId,
-            organizationId: '',
-          };
-        }
-      }
-
-      if (item.beneficiaryType === 'company' && item.projectCompanyId) {
-        const linkedCompany = projectCompaniesByLinkId.get(item.projectCompanyId);
-        if (linkedCompany) {
-          return {
-            nome: linkedCompany.name,
-            vinculoTipo: 'company',
-            personId: '',
-            organizationId: linkedCompany.companyId,
-          };
-        }
-      }
-
-      return DEFAULT_NEW_SUBITEM_FORM;
-    },
-    [projectCompaniesByLinkId, projectPeopleByLinkId]
+    (_item: ItemRubrica): NewSubitemFormState => DEFAULT_NEW_SUBITEM_FORM,
+    []
   );
 
   const closeSubitemModal = ({
@@ -809,9 +786,14 @@ export default function PagamentosPlanilhaPage() {
         }`;
       }
 
+      if (subitem.vinculoTipo === 'partner') {
+        const linkedPartner = projectPartnersByLinkId.get(subitem.partnerId ?? '');
+        return `IF/Fundação: ${linkedPartner?.name ?? 'Parceiro vinculado ao projeto'}`;
+      }
+
       return 'Sem vínculo';
     },
-    [projectCompaniesById, projectPeopleById]
+    [projectCompaniesById, projectPartnersByLinkId, projectPeopleById]
   );
 
   const loadProjectLinks = useCallback(async () => {
@@ -826,12 +808,15 @@ export default function PagamentosPlanilhaPage() {
     setProjectLinksError(null);
 
     try {
-      const [peopleLinks, companyLinks] = await Promise.all([
+      const [peopleLinks, companyLinks, partnerLinks] = await Promise.all([
         fetchAllPages<ProjectPeopleDetailedResponseDTO>((query) =>
           listProjectPeopleDetailed({ ...query, projectId })
         ),
         fetchAllPages<ProjectCompanyDetailedResponseDTO>((query) =>
           listProjectCompaniesDetailed({ ...query, projectId })
+        ),
+        fetchAllPages<ProjectPartnerLinkResponseDTO>((query) =>
+          listProjectPartnerLinks(projectId, query)
         ),
       ]);
 
@@ -857,33 +842,42 @@ export default function PagamentosPlanilhaPage() {
             link.companyTradeName?.trim() || link.companyName?.trim() || `Empresa ${link.companyId}`;
           const cnpj = formatCnpj(link.companyCnpj);
           const statusLabel = getContractingStatusLabel(link.status ?? null);
-          const balanceLabel =
-            typeof link.availableBalance === 'number' && Number.isFinite(link.availableBalance)
-              ? `Saldo ${formatCurrency(link.availableBalance)}`
-              : null;
-
           return {
             projectLinkId: String(link.id),
             companyId: String(link.companyId),
             name,
             cnpj: link.companyCnpj ?? null,
             status: link.status ?? null,
-            availableBalance:
-              typeof link.availableBalance === 'number' ? link.availableBalance : null,
-            label: [name, cnpj ? `CNPJ ${cnpj}` : null, statusLabel, balanceLabel]
+            label: [name, cnpj ? `CNPJ ${cnpj}` : null, statusLabel]
               .filter(Boolean)
               .join(' • '),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
+      const mappedPartners = partnerLinks
+        .filter((link) => link.partnerId != null)
+        .map<ProjectLinkedPartner>((link) => {
+          const name = link.partnerTradeName?.trim() || link.partnerName?.trim() || `Parceiro ${link.partnerId}`;
+          const typeLabel = link.partnerType === 'IF' ? 'IF' : link.partnerType === 'FUNDACAO' ? 'Fundação' : null;
+          return {
+            projectLinkId: String(link.id),
+            partnerId: String(link.partnerId),
+            name,
+            label: typeLabel ? `${name} • ${typeLabel}` : name,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
       setProjectPeople(mappedPeople);
       setProjectCompanies(mappedCompanies);
+      setProjectPartners(mappedPartners);
     } catch (error) {
       setProjectPeople([]);
       setProjectCompanies([]);
+      setProjectPartners([]);
       setProjectLinksError(
-        toErrorMessage(error, 'Não foi possível carregar as pessoas e empresas vinculadas ao projeto.')
+        toErrorMessage(error, 'Não foi possível carregar as pessoas, empresas e parceiros vinculados ao projeto.')
       );
     } finally {
       setIsLoadingProjectLinks(false);
@@ -909,6 +903,19 @@ export default function PagamentosPlanilhaPage() {
       setBaseCompanies(companies);
     } finally {
       setIsLoadingBaseCompanies(false);
+    }
+  }, []);
+
+  const loadBasePartners = useCallback(async () => {
+    setIsLoadingBasePartners(true);
+
+    try {
+      const partners = await fetchAllPages<PartnerResponseDTO>((query) =>
+        listPartners({ page: query.page, size: query.size })
+      );
+      setBasePartners(partners);
+    } finally {
+      setIsLoadingBasePartners(false);
     }
   }, []);
 
@@ -1001,7 +1008,6 @@ export default function PagamentosPlanilhaPage() {
           valorBaseOrcado,
           remanejamentoDebito: transferBalance.debito,
           remanejamentoCredito: transferBalance.credito,
-          beneficiaryType: item.beneficiaryType ?? null,
           projectPeopleId: item.projectPeopleId != null ? String(item.projectPeopleId) : undefined,
           projectCompanyId:
             item.projectCompanyId != null ? String(item.projectCompanyId) : undefined,
@@ -1032,7 +1038,7 @@ export default function PagamentosPlanilhaPage() {
           mappedCompanyId ?? (expense.organizationId != null ? String(expense.organizationId) : undefined);
 
         const description = expense.description?.trim() || `Lançamento ${expense.id}`;
-        const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${description.toLowerCase()}`;
+        const baseKey = `${expense.personId ?? '0'}|${projectLinkedCompanyId ?? expense.organizationId ?? '0'}|${expense.projectPartnerId ?? '0'}|${description.toLowerCase()}`;
 
         if (!subitemsByItem.has(expense.budgetItemId)) {
           subitemsByItem.set(expense.budgetItemId, new Map());
@@ -1045,14 +1051,16 @@ export default function PagamentosPlanilhaPage() {
             id: `sub-${expense.budgetItemId}-${subitemMap.size + 1}`,
             empresaRh: description,
             lancamentos: [],
-            vinculoTipo: expense.organizationId
-              || expense.projectCompanyId
-              ? 'company'
-              : expense.personId
-                ? 'person'
-                : 'none',
+            vinculoTipo: expense.projectPartnerId != null
+              ? 'partner'
+              : expense.organizationId || expense.projectCompanyId
+                ? 'company'
+                : expense.personId
+                  ? 'person'
+                  : 'none',
             personId: expense.personId != null ? String(expense.personId) : undefined,
             organizationId: organizationIdForUi,
+            partnerId: expense.projectPartnerId != null ? String(expense.projectPartnerId) : undefined,
           };
           subitemMap.set(baseKey, subitem);
           item.subitens = [...(item.subitens ?? []), subitem];
@@ -1465,7 +1473,7 @@ export default function PagamentosPlanilhaPage() {
   const updateSubitemDraftState = (
     itemId: ID,
     subitemId: ID,
-    patch: Pick<Subitem, 'empresaRh' | 'vinculoTipo' | 'personId' | 'organizationId'>
+    patch: Pick<Subitem, 'empresaRh' | 'vinculoTipo' | 'personId' | 'organizationId' | 'partnerId'>
   ) => {
     setRubricas((previous) =>
       previous.map((rubrica) => ({
@@ -1482,6 +1490,7 @@ export default function PagamentosPlanilhaPage() {
                     vinculoTipo: patch.vinculoTipo,
                     personId: patch.personId,
                     organizationId: patch.organizationId,
+                    partnerId: patch.partnerId,
                   }
                 : subitem
             ),
@@ -1733,18 +1742,10 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
-      setSubitemModalError(
-        projectLinksError ??
-          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
-      );
-      return;
-    }
-
-    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
-    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
-    const effectiveOrganizationId =
-      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+    const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
+    const effectivePersonId = subitemModalForm.personId;
+    const effectiveOrganizationId = subitemModalForm.organizationId;
+    const effectivePartnerId = subitemModalForm.partnerId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -1756,6 +1757,16 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
+    if (effectiveVinculoTipo === 'none') {
+      setSubitemModalError('Selecione o tipo de vínculo do pagamento (pessoa, empresa ou parceiro).');
+      return;
+    }
+
+    if (effectiveVinculoTipo === 'partner' && !effectivePartnerId) {
+      setSubitemModalError('Selecione um parceiro (IF/Fundação) vinculado ao projeto.');
+      return;
+    }
+
     const subitem: Subitem = {
       id: createDraftId('sub'),
       empresaRh: nome,
@@ -1763,6 +1774,7 @@ export default function PagamentosPlanilhaPage() {
       vinculoTipo: effectiveVinculoTipo,
       personId: effectiveVinculoTipo === 'person' ? effectivePersonId : undefined,
       organizationId: effectiveVinculoTipo === 'company' ? effectiveOrganizationId : undefined,
+      partnerId: effectiveVinculoTipo === 'partner' ? effectivePartnerId : undefined,
     };
 
     setRubricas((previous) =>
@@ -1866,6 +1878,7 @@ export default function PagamentosPlanilhaPage() {
       vinculoTipo: selected.subitem.vinculoTipo,
       personId: selected.subitem.personId ?? '',
       organizationId: selected.subitem.organizationId ?? '',
+      partnerId: selected.subitem.partnerId ?? '',
     });
     setIsSubitemModalOpen(true);
   };
@@ -1918,6 +1931,7 @@ export default function PagamentosPlanilhaPage() {
     await createProjectPeople({
       projectId,
       personId,
+      status: DEFAULT_PROJECT_PERSON_STATUS,
     });
     await loadProjectLinks();
 
@@ -1971,6 +1985,7 @@ export default function PagamentosPlanilhaPage() {
     await createProjectPeople({
       projectId,
       personId: createdPerson.id,
+      status: DEFAULT_PROJECT_PERSON_STATUS,
     });
     await loadProjectLinks();
 
@@ -2012,6 +2027,85 @@ export default function PagamentosPlanilhaPage() {
     showSavedMessage('Empresa vinculada ao projeto com sucesso.');
   };
 
+  const handleOpenLinkExistingPartnerModal = async () => {
+    if (!ensureCanManageChildren()) return;
+
+    setSubitemModalError(null);
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      personId: '',
+      organizationId: '',
+    }));
+
+    try {
+      await loadBasePartners();
+      setIsLinkExistingPartnerModalOpen(true);
+    } catch (error) {
+      setSubitemModalError(
+        toErrorMessage(error, 'Não foi possível carregar os parceiros cadastrados.')
+      );
+    }
+  };
+
+  const handleLinkExistingPartner = async (partnerId: number) => {
+    if (!Number.isFinite(projectId)) {
+      throw new Error('ID do contrato inválido para vincular o parceiro.');
+    }
+
+    const linkResponse = await createProjectPartner(projectId, {
+      projectId,
+      partnerId,
+      status: 'EM_EXECUCAO',
+    });
+    await loadProjectLinks();
+
+    const linkedPartner = basePartners.find((p) => p.id === partnerId);
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      partnerId: String(linkResponse.id),
+      personId: '',
+      organizationId: '',
+      nome: current.nome.trim()
+        ? current.nome
+        : (linkedPartner?.tradeName?.trim() || linkedPartner?.name) ?? current.nome,
+    }));
+    setIsLinkExistingPartnerModalOpen(false);
+    setSubitemModalError(null);
+    showSavedMessage('Parceiro vinculado ao projeto com sucesso.');
+  };
+
+  const handleCreateAndLinkPartner = async (
+    parceiro: Omit<Parceiro, 'id' | 'createdAt' | 'totalContratos' | 'contratosAtivos' | 'valorTotalContratos'>
+  ) => {
+    if (!Number.isFinite(projectId)) {
+      throw new Error('ID do contrato inválido para vincular o parceiro.');
+    }
+
+    const createdPartner = await createPartner(mapParceiroFormToPartnerRequestDTO(parceiro));
+    const linkResponse = await createProjectPartner(projectId, {
+      projectId,
+      partnerId: createdPartner.id,
+      status: 'EM_EXECUCAO',
+    });
+    await loadProjectLinks();
+
+    setSubitemModalForm((current) => ({
+      ...current,
+      vinculoTipo: 'partner',
+      partnerId: String(linkResponse.id),
+      personId: '',
+      organizationId: '',
+      nome: current.nome.trim()
+        ? current.nome
+        : createdPartner.tradeName?.trim() || createdPartner.name,
+    }));
+    setSubitemModalError(null);
+    setIsCreatePartnerModalOpen(false);
+    showSavedMessage('Parceiro criado e vinculado ao projeto com sucesso.');
+  };
+
   const handleSaveSubitemModal = async () => {
     setSubitemModalFieldErrors({});
     const itemId = subitemModalItemId;
@@ -2026,18 +2120,10 @@ export default function PagamentosPlanilhaPage() {
       return;
     }
 
-    if (isBeneficiaryLockedByRubrica && !lockedBeneficiaryConfig) {
-      setSubitemModalError(
-        projectLinksError ??
-          'Não foi possível carregar o beneficiário da rubrica. Tente novamente em instantes.'
-      );
-      return;
-    }
-
-    const effectiveVinculoTipo = lockedBeneficiaryConfig?.vinculoTipo ?? subitemModalForm.vinculoTipo;
-    const effectivePersonId = lockedBeneficiaryConfig?.personId ?? subitemModalForm.personId;
-    const effectiveOrganizationId =
-      lockedBeneficiaryConfig?.organizationId ?? subitemModalForm.organizationId;
+    const effectiveVinculoTipo = subitemModalForm.vinculoTipo;
+    const effectivePersonId = subitemModalForm.personId;
+    const effectiveOrganizationId = subitemModalForm.organizationId;
+    const effectivePartnerId = subitemModalForm.partnerId;
 
     if (effectiveVinculoTipo === 'person' && !effectivePersonId) {
       setSubitemModalError('Selecione uma pessoa vinculada ao projeto.');
@@ -2046,6 +2132,16 @@ export default function PagamentosPlanilhaPage() {
 
     if (effectiveVinculoTipo === 'company' && !effectiveOrganizationId) {
       setSubitemModalError('Selecione uma empresa vinculada ao projeto.');
+      return;
+    }
+
+    if (effectiveVinculoTipo === 'none') {
+      setSubitemModalError('Selecione o tipo de vínculo do pagamento (pessoa, empresa ou parceiro).');
+      return;
+    }
+
+    if (effectiveVinculoTipo === 'partner' && !effectivePartnerId) {
+      setSubitemModalError('Selecione um parceiro (IF/Fundação) vinculado ao projeto.');
       return;
     }
 
@@ -2068,12 +2164,14 @@ export default function PagamentosPlanilhaPage() {
       effectiveVinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(nextOrganizationId)
         : null;
+    const nextPartnerId = effectiveVinculoTipo === 'partner' ? effectivePartnerId || undefined : undefined;
 
     updateSubitemDraftState(itemId, subitemId, {
       empresaRh: nome,
       vinculoTipo: effectiveVinculoTipo,
       personId: nextPersonId,
       organizationId: nextOrganizationId,
+      partnerId: nextPartnerId,
     });
 
     const expenseIds = (selected.subitem.lancamentos ?? [])
@@ -2089,6 +2187,8 @@ export default function PagamentosPlanilhaPage() {
       setSubitemModalError('Não foi possível resolver o vínculo da empresa no projeto.');
       return;
     }
+
+    const nextProjectPartnerId = nextPartnerId ? Number.parseInt(nextPartnerId, 10) : undefined;
 
     const budgetItemId = parsePersistedId(selected.item.id);
     if (budgetItemId == null) {
@@ -2122,6 +2222,7 @@ export default function PagamentosPlanilhaPage() {
               ? Number.parseInt(nextOrganizationId, 10)
               : undefined,
           projectCompanyId: nextProjectCompanyId ?? undefined,
+          projectPartnerId: nextProjectPartnerId,
           description: nome,
           invoiceNumber: currentExpense.invoiceNumber ?? undefined,
           invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2234,6 +2335,66 @@ export default function PagamentosPlanilhaPage() {
                 ? { ...subitem, lancamentos: [...(subitem.lancamentos ?? []), createDraftLancamento()] }
                 : subitem
             ),
+          };
+        }),
+      }))
+    );
+  };
+
+  const handleDuplicateLancamento = (itemId: ID, subitemId: ID, lancamentoId: ID) => {
+    if (!ensureCanManageChildren()) return;
+
+    const selected = findItemAndSubitem(itemId, subitemId);
+    const itemSelecionado = selected?.item;
+    const subitemSelecionado = selected?.subitem;
+    const lancamentoSelecionado = subitemSelecionado?.lancamentos.find(
+      (lancamento) => lancamento.id === lancamentoId
+    );
+
+    if (!itemSelecionado || !subitemSelecionado || !lancamentoSelecionado) return;
+
+    const subitemKey = createSubitemKey(itemId, subitemId);
+    if (editingSubitemSession?.subitemKey && editingSubitemSession.subitemKey !== subitemKey) {
+      setActionError('Salve ou cancele o subitem em edição antes de editar outro.');
+      return;
+    }
+
+    if (!beginEditingSubitem(itemId, subitemId)) {
+      return;
+    }
+
+    const duplicateLancamento: Lancamento = {
+      ...lancamentoSelecionado,
+      id: createDraftId('lanc'),
+      dataPag: '',
+      expenseId: undefined,
+    };
+
+    const lancamentos = subitemSelecionado.lancamentos ?? [];
+    const launchIndex = lancamentos.findIndex((lancamento) => lancamento.id === lancamentoId);
+    const insertIndex = launchIndex >= 0 ? launchIndex + 1 : lancamentos.length;
+
+    setActionError(null);
+    setExpandedSubitemKey(subitemKey);
+    setEditingLancamentosSubitemKey(subitemKey);
+    setRubricas((previous) =>
+      previous.map((rubrica) => ({
+        ...rubrica,
+        itens: rubrica.itens.map((item) => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            subitens: (item.subitens ?? []).map((subitem) => {
+              if (subitem.id !== subitemId) return subitem;
+
+              const nextLancamentos = [...(subitem.lancamentos ?? [])];
+              nextLancamentos.splice(insertIndex, 0, duplicateLancamento);
+
+              return {
+                ...subitem,
+                lancamentos: nextLancamentos,
+              };
+            }),
           };
         }),
       }))
@@ -2395,6 +2556,7 @@ export default function PagamentosPlanilhaPage() {
       subitem.vinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(subitem.organizationId)
         : null;
+    const partnerId = subitem.vinculoTipo === 'partner' ? parsePersistedId(subitem.partnerId) : null;
 
     const payload: ExpenseUpdateDTO = {
       projectId,
@@ -2409,6 +2571,7 @@ export default function PagamentosPlanilhaPage() {
       organizationId:
         subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
       projectCompanyId: projectCompanyId ?? undefined,
+      projectPartnerId: partnerId ?? undefined,
       description: description || currentExpense.description || undefined,
       invoiceNumber: currentExpense.invoiceNumber ?? undefined,
       invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2548,6 +2711,7 @@ export default function PagamentosPlanilhaPage() {
       subitem.vinculoTipo === 'company'
         ? resolveProjectCompanyLinkId(subitem.organizationId)
         : null;
+    const partnerId = subitem.vinculoTipo === 'partner' ? parsePersistedId(subitem.partnerId) : null;
 
     const currentExpenseById = new Map(backendExpenses.map((expense) => [expense.id, expense]));
     const keepExpenseIds = new Set<number>();
@@ -2579,6 +2743,11 @@ export default function PagamentosPlanilhaPage() {
         return;
       }
 
+      if (subitem.vinculoTipo === 'none') {
+        setActionError(`Selecione o tipo de vínculo para o subitem "${description}" (pessoa, empresa ou parceiro).`);
+        return;
+      }
+
       if (subitem.vinculoTipo === 'person' && !personId) {
         setActionError(`Selecione uma pessoa vinculada ao projeto para o subitem "${description}".`);
         return;
@@ -2592,6 +2761,10 @@ export default function PagamentosPlanilhaPage() {
         setActionError(
           `Não foi possível resolver o vínculo da empresa no projeto para o subitem "${description}".`
         );
+        return;
+      }
+      if (subitem.vinculoTipo === 'partner' && !partnerId) {
+        setActionError(`Selecione um parceiro (IF/Fundação) vinculado ao projeto para o subitem "${description}".`);
         return;
       }
 
@@ -2613,6 +2786,7 @@ export default function PagamentosPlanilhaPage() {
             organizationId:
               subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
             projectCompanyId: projectCompanyId ?? undefined,
+            projectPartnerId: partnerId ?? undefined,
             description,
           });
           continue;
@@ -2632,6 +2806,7 @@ export default function PagamentosPlanilhaPage() {
             organizationId:
               subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
             projectCompanyId: projectCompanyId ?? undefined,
+            projectPartnerId: partnerId ?? undefined,
             description,
             invoiceNumber: currentExpense.invoiceNumber ?? undefined,
             invoiceDate: currentExpense.invoiceDate ?? undefined,
@@ -2650,6 +2825,7 @@ export default function PagamentosPlanilhaPage() {
             (currentExpense.personId ?? null) !== (payload.personId ?? null) ||
             (currentExpense.organizationId ?? null) !== (payload.organizationId ?? null) ||
             (currentExpense.projectCompanyId ?? null) !== (payload.projectCompanyId ?? null) ||
+            (currentExpense.projectPartnerId ?? null) !== (payload.projectPartnerId ?? null) ||
             (currentExpense.description || '') !== (payload.description || '');
 
           if (shouldUpdate) {
@@ -2670,6 +2846,7 @@ export default function PagamentosPlanilhaPage() {
           organizationId:
             subitem.vinculoTipo === 'company' ? undefined : organizationId ?? undefined,
           projectCompanyId: projectCompanyId ?? undefined,
+          projectPartnerId: partnerId ?? undefined,
           description,
         });
       }
@@ -3249,6 +3426,7 @@ export default function PagamentosPlanilhaPage() {
         onRemoveLaunch={handleRemoveLancamento}
         onMarkLaunchPaid={handleMarkLancamentoAsPaid}
         onStartReclassifyLaunch={handleStartReclassifyLaunch}
+        onDuplicateLaunch={handleDuplicateLancamento}
       />
 
       <BudgetItemPickerModal
@@ -3493,7 +3671,8 @@ export default function PagamentosPlanilhaPage() {
         isLoadingLinks={isLoadingProjectLinks}
         projectPeople={projectPeople}
         projectCompanies={projectCompanies}
-        lockBeneficiary={isBeneficiaryLockedByRubrica}
+        projectPartners={projectPartners}
+        lockBeneficiary={false}
         isPersisting={isPersisting}
         onChange={(patch) => {
           setSubitemModalError(null);
@@ -3508,6 +3687,7 @@ export default function PagamentosPlanilhaPage() {
             ...current,
             vinculoTipo: 'person',
             organizationId: '',
+            partnerId: '',
           }));
           setIsCreatePersonModalOpen(true);
         }}
@@ -3518,6 +3698,7 @@ export default function PagamentosPlanilhaPage() {
             ...current,
             vinculoTipo: 'company',
             personId: '',
+            partnerId: '',
           }));
           setIsCreateCompanyModalOpen(true);
         }}
@@ -3526,6 +3707,20 @@ export default function PagamentosPlanilhaPage() {
         }}
         onOpenLinkExistingCompany={() => {
           void handleOpenLinkExistingCompanyModal();
+        }}
+        onOpenCreatePartner={() => {
+          setSubitemModalError(null);
+          setSubitemModalFieldErrors({});
+          setSubitemModalForm((current) => ({
+            ...current,
+            vinculoTipo: 'partner',
+            personId: '',
+            organizationId: '',
+          }));
+          setIsCreatePartnerModalOpen(true);
+        }}
+        onOpenLinkExistingPartner={() => {
+          void handleOpenLinkExistingPartnerModal();
         }}
         onSubmit={() => {
           setSubitemModalFieldErrors({});
@@ -3565,6 +3760,21 @@ export default function PagamentosPlanilhaPage() {
         onClose={() => setIsLinkExistingCompanyModalOpen(false)}
         onSave={handleLinkExistingCompany}
       />
+
+      <NovoParceiroModal
+        isOpen={isCreatePartnerModalOpen}
+        onClose={() => setIsCreatePartnerModalOpen(false)}
+        onSubmit={handleCreateAndLinkPartner}
+        zIndexClassName="z-[60]"
+      />
+
+      <LinkExistingPartnerModal
+        isOpen={isLinkExistingPartnerModalOpen}
+        partners={linkableBasePartners}
+        isLoading={isLoadingBasePartners}
+        onClose={() => setIsLinkExistingPartnerModalOpen(false)}
+        onSave={handleLinkExistingPartner}
+      />
     </div>
   );
 }
@@ -3588,6 +3798,7 @@ type SharedPaymentPresentationHandlers = {
   onRemoveLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
   onMarkLaunchPaid: (itemId: ID, paymentId: ID, launchId: ID) => Promise<void>;
   onStartReclassifyLaunch: (itemId: ID, launch: Lancamento) => void;
+  onDuplicateLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
 };
 
 const INCOME_STATUS_OPTIONS: Array<{ value: IncomeStatusEnum; label: string }> = [
@@ -3620,7 +3831,14 @@ type PaymentCardProps = Omit<SharedPaymentPresentationHandlers, 'onStartAddPayme
 
 type PaymentLaunchListProps = Pick<
   SharedPaymentPresentationHandlers,
-  'canManageChildren' | 'isPersisting' | 'onAddLaunch' | 'onUpdateLaunch' | 'onRemoveLaunch' | 'onMarkLaunchPaid' | 'onStartReclassifyLaunch'
+  | 'canManageChildren'
+  | 'isPersisting'
+  | 'onAddLaunch'
+  | 'onUpdateLaunch'
+  | 'onRemoveLaunch'
+  | 'onMarkLaunchPaid'
+  | 'onStartReclassifyLaunch'
+  | 'onDuplicateLaunch'
 > & {
   view: PaymentViewModel;
 };
@@ -3633,7 +3851,9 @@ type LaunchRowProps = Pick<
   paymentId: ID;
   launch: Lancamento;
   index: number;
+  isLast: boolean;
   isEditing: boolean;
+  onDuplicateLaunch: (itemId: ID, paymentId: ID, launchId: ID) => void;
 };
 
 function SummaryMetricCard({
@@ -4223,6 +4443,7 @@ function PaymentCard({
             onRemoveLaunch={handlers.onRemoveLaunch}
             onMarkLaunchPaid={handlers.onMarkLaunchPaid}
             onStartReclassifyLaunch={handlers.onStartReclassifyLaunch}
+            onDuplicateLaunch={handlers.onDuplicateLaunch}
           />
         ) : null}
       </div>
@@ -4239,6 +4460,7 @@ function PaymentLaunchList({
   onRemoveLaunch,
   onMarkLaunchPaid,
   onStartReclassifyLaunch,
+  onDuplicateLaunch,
 }: PaymentLaunchListProps) {
   return (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -4281,6 +4503,7 @@ function PaymentLaunchList({
               paymentId={view.payment.id}
               launch={launch}
               index={index}
+              isLast={index === view.lancamentosParaExibir.length - 1}
               isEditing={view.isEditingLancamentos}
               canManageChildren={canManageChildren}
               isPersisting={isPersisting}
@@ -4288,6 +4511,7 @@ function PaymentLaunchList({
               onRemoveLaunch={onRemoveLaunch}
               onMarkLaunchPaid={onMarkLaunchPaid}
               onStartReclassifyLaunch={onStartReclassifyLaunch}
+              onDuplicateLaunch={onDuplicateLaunch}
             />
           ))
         )}
@@ -4301,6 +4525,7 @@ function LaunchRow({
   paymentId,
   launch,
   index,
+  isLast,
   isEditing,
   canManageChildren,
   isPersisting,
@@ -4308,6 +4533,7 @@ function LaunchRow({
   onRemoveLaunch,
   onMarkLaunchPaid,
   onStartReclassifyLaunch,
+  onDuplicateLaunch,
 }: LaunchRowProps) {
   if (canManageChildren && isEditing) {
     return (
@@ -4359,7 +4585,7 @@ function LaunchRow({
             }
             placeholder="Selecionar data"
             disabled={isPersisting}
-            className="h-10 min-w-[220px] rounded-xl border-slate-300 bg-white px-2 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
+            className="h-10 min-w-[220px] rounded-xl border-slate-300 bg-white px-1 py-1 text-sm [&_input]:text-center [&_input]:font-medium [&_input]:tabular-nums"
           />
           <div className="flex items-center justify-end gap-2">
             <button
@@ -4374,6 +4600,20 @@ function LaunchRow({
             </button>
           </div>
         </div>
+        {isLast && isEditing ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => onDuplicateLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Duplicar último lançamento"
+              title="Duplicar último lançamento"
+            >
+              <CopyPlus className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -4394,6 +4634,20 @@ function LaunchRow({
             {formatDate(launch.dataPag)}
           </span>
         </div>
+        {isLast && isEditing ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => onDuplicateLaunch(itemId, paymentId, launch.id)}
+              disabled={isPersisting}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Duplicar último lançamento"
+              title="Duplicar último lançamento"
+            >
+              <CopyPlus className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
 
         {canManageChildren ? (
           <div className="flex items-center gap-2 self-end lg:self-auto">
@@ -4594,14 +4848,17 @@ function SubitemModal({
   isLoadingLinks,
   projectPeople,
   projectCompanies,
+  projectPartners,
   lockBeneficiary,
   isPersisting,
   onChange,
   onClose,
   onOpenCreatePerson,
   onOpenCreateCompany,
+  onOpenCreatePartner,
   onOpenLinkExistingPerson,
   onOpenLinkExistingCompany,
+  onOpenLinkExistingPartner,
   onSubmit,
 }: {
   isOpen: boolean;
@@ -4615,14 +4872,17 @@ function SubitemModal({
   isLoadingLinks: boolean;
   projectPeople: ProjectLinkedPerson[];
   projectCompanies: ProjectLinkedCompany[];
+  projectPartners: ProjectLinkedPartner[];
   lockBeneficiary: boolean;
   isPersisting: boolean;
   onChange: (patch: Partial<NewSubitemFormState>) => void;
   onClose: () => void;
   onOpenCreatePerson: () => void;
   onOpenCreateCompany: () => void;
+  onOpenCreatePartner: () => void;
   onOpenLinkExistingPerson: () => void;
   onOpenLinkExistingCompany: () => void;
+  onOpenLinkExistingPartner: () => void;
   onSubmit: () => void;
 }) {
   const personFieldRef = useRef<HTMLDivElement | null>(null);
@@ -4633,7 +4893,8 @@ function SubitemModal({
     form.nome.trim().length > 0 ||
     form.vinculoTipo !== 'none' ||
     form.personId.length > 0 ||
-    form.organizationId.length > 0;
+    form.organizationId.length > 0 ||
+    form.partnerId.length > 0;
   const { requestClose, discardConfirmProps } = useModalCloseGuard({
     isOpen,
     shouldConfirm: hasFilledData,
@@ -4643,7 +4904,10 @@ function SubitemModal({
 
   const showPersonSelector = form.vinculoTipo === 'person';
   const showCompanySelector = form.vinculoTipo === 'company';
-  const showLinksError = Boolean(linksError) && (lockBeneficiary || showPersonSelector || showCompanySelector);
+  const showPartnerSelector = form.vinculoTipo === 'partner';
+  const showLinksError =
+    Boolean(linksError) &&
+    (lockBeneficiary || showPersonSelector || showCompanySelector || showPartnerSelector);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -4717,6 +4981,10 @@ function SubitemModal({
                 value: 'company',
                 label: 'Empresa vinculada ao projeto',
               },
+              {
+                value: 'partner',
+                label: 'IF / Fundação (parceiro)',
+              },
             ]}
             value={form.vinculoTipo}
             onChange={(value) => {
@@ -4727,6 +4995,7 @@ function SubitemModal({
                 vinculoTipo: nextType,
                 personId: nextType === 'person' ? form.personId : '',
                 organizationId: nextType === 'company' ? form.organizationId : '',
+                partnerId: nextType === 'partner' ? form.partnerId : '',
               });
             }}
             placeholder="Selecione..."
@@ -4904,6 +5173,72 @@ function SubitemModal({
             {fieldErrors.projectCompanyId ? (
               <p className="text-sm text-red-700">{fieldErrors.projectCompanyId}</p>
             ) : null}
+          </div>
+        ) : null}
+
+        {showPartnerSelector ? (
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900">IF / Fundação vinculada</h3>
+                <p className="text-xs text-gray-500">
+                  Selecione um parceiro já vinculado ao projeto ou cadastre um novo.
+                </p>
+              </div>
+              <div className="flex flex-nowrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={onOpenLinkExistingPartner}
+                  disabled={isPersisting || lockBeneficiary}
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <Check className="h-4 w-4" />
+                  Vincular existente
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenCreatePartner}
+                  disabled={isPersisting || lockBeneficiary}
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-[#004225] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo parceiro
+                </button>
+              </div>
+            </div>
+            {isLoadingLinks ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
+                Carregando parceiros vinculados...
+              </div>
+            ) : projectPartners.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-3 py-4 text-sm text-gray-500">
+                Nenhum parceiro vinculado ao projeto.
+              </div>
+            ) : (
+              <Dropdown
+                options={projectPartners.map((partner) => ({
+                  value: partner.projectLinkId,
+                  label: partner.label,
+                }))}
+                value={form.partnerId}
+                onChange={(value) => {
+                  const nextPartnerId = value || '';
+                  const selectedPartner = projectPartners.find(
+                    (partner) => partner.projectLinkId === nextPartnerId
+                  );
+
+                  onChange({
+                    partnerId: nextPartnerId,
+                    personId: '',
+                    organizationId: '',
+                    nome: form.nome.trim() ? form.nome : selectedPartner?.name ?? form.nome,
+                  });
+                }}
+                placeholder="Selecione um parceiro"
+                disabled={isPersisting || lockBeneficiary}
+                className="w-full"
+              />
+            )}
           </div>
         ) : null}
 
@@ -5596,6 +5931,124 @@ function LinkExistingCompanyModal({
     </ModalShell>
   );
 }
+
+function LinkExistingPartnerModal({
+  isOpen,
+  partners,
+  isLoading,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  partners: PartnerResponseDTO[];
+  isLoading: boolean;
+  onClose: () => void;
+  onSave: (partnerId: number) => Promise<void>;
+}) {
+  const [selectedId, setSelectedId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedId('');
+    setError(null);
+    setIsSaving(false);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    if (!selectedId) {
+      setError('Selecione um parceiro cadastrado para vincular.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await onSave(Number(selectedId));
+    } catch (saveError) {
+      setError(toErrorMessage(saveError, 'Não foi possível vincular o parceiro existente.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell
+      title="Vincular parceiro existente"
+      subtitle="Escolha um IF ou Fundação já cadastrado na base para vinculá-lo ao projeto."
+      onClose={onClose}
+      maxWidthClassName="max-w-xl"
+      zIndexClassName="z-[60]"
+    >
+      <div className="space-y-4 p-6">
+        {isLoading ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+            Carregando parceiros cadastrados...
+          </div>
+        ) : partners.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+            Todos os parceiros cadastrados já estão vinculados a este projeto.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              Parceiro cadastrado <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedId}
+              onChange={(event) => setSelectedId(event.target.value)}
+              disabled={isSaving}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
+            >
+              <option value="">Selecione um parceiro</option>
+              {partners.map((partner) => {
+                const displayName = partner.tradeName?.trim() || partner.name;
+                const typeLabel = partner.partnersType === 'IF' ? 'IF' : 'Fundação';
+                return (
+                  <option key={partner.id} value={String(partner.id)}>
+                    {displayName} • {typeLabel}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+
+        {error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSaving || isLoading || partners.length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#004225] px-4 py-2 text-sm font-medium text-white hover:bg-[#003319] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" />
+            {isSaving ? 'Vinculando...' : 'Vincular ao projeto'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 function Field({
   label,
   required,

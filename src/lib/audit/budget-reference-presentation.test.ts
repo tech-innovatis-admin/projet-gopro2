@@ -4,7 +4,7 @@ import {
   buildBudgetItemReferenceLabel,
   buildBudgetItemReferencePresentation,
   resolveBudgetReferenceEntityLabel,
-} from "./budget-reference-presentation.ts";
+} from "./budget-reference-presentation";
 import type { AuditLogResponseDTO } from "../api/types";
 
 function createLog(overrides: Partial<AuditLogResponseDTO> = {}): AuditLogResponseDTO {

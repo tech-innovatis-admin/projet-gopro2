@@ -1,258 +1,681 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Save, X, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-import { getPartnerById, updatePartner } from "@/src/lib/api/endpoints";
-import { Parceiro } from "../../types";
 import {
-  getFriendlyApiError,
-  mapParceiroFormToPartnerRequestDTO,
+  Save,
+  X,
+  Users,
+  Building,
+  GraduationCap,
+  MapPin,
+  Mail,
+  Phone,
+  Globe,
+  FileText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ConfirmDiscardModal } from "@/components/ui/confirm-discard-modal";
+import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
+import { cn } from "@/lib/utils";
+import { useFormApiErrors } from "@/src/hooks/useFormApiErrors";
+import { useModalCloseGuard } from "@/src/hooks/useModalCloseGuard";
+import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
+import { fetchCitiesByState as fetchCitiesByStateLookup } from "@/src/lib/ibge";
+import { getPartnerById, updatePartner } from "@/src/lib/api/endpoints";
+import {
+  type ParceiroTipo,
+  type ParceiroStatus,
+  UF_LIST,
+} from "../../types";
+import {
   mapPartnerToParceiro,
+  mapParceiroFormToPartnerRequestDTO,
 } from "../../mappers";
+
+// ---------------------------------------------------------------------------
+// Helpers (idênticos ao NovoParceiroModal)
+// ---------------------------------------------------------------------------
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function formatZipCode(value: string): string {
+  const digits = onlyDigits(value).slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function formatCnpj(value: string): string {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8)
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12)
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+type ViaCepResponse = {
+  erro?: boolean;
+  logradouro?: string;
+  localidade?: string;
+  uf?: string;
+};
+
+async function fetchViaCep(zipCode: string): Promise<ViaCepResponse> {
+  const normalized = onlyDigits(zipCode);
+  if (normalized.length !== 8) throw new Error("CEP deve ter 8 dígitos.");
+  const res = await fetch(`https://viacep.com.br/ws/${normalized}/json/`);
+  if (!res.ok) throw new Error("Falha ao consultar CEP.");
+  const data = (await res.json()) as ViaCepResponse;
+  if (data.erro) throw new Error("CEP não encontrado.");
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Form type
+// ---------------------------------------------------------------------------
+
+type FormData = {
+  nome: string;
+  sigla: string;
+  tipo: ParceiroTipo | "";
+  cnpj: string;
+  email: string;
+  telefone: string;
+  site: string;
+  cep: string;
+  uf: string;
+  municipio: string;
+  endereco: string;
+  status: ParceiroStatus;
+  observacoes: string;
+};
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function EditarParceiroPage() {
   const params = useParams();
   const router = useRouter();
   const parceiroId = params.parceiroId as string;
 
-  const [formData, setFormData] = useState<Partial<Parceiro>>({});
-  const [originalData, setOriginalData] = useState<Parceiro | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState<FormData | null>(null);
+  const [originalForm, setOriginalForm] = useState<FormData | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isZipCodeLoading, setIsZipCodeLoading] = useState(false);
+  const [zipCodeLookupError, setZipCodeLookupError] = useState<string | null>(null);
+  const [municipioOptions, setMunicipioOptions] = useState<DropdownOption[]>([]);
+  const [isMunicipioLoading, setIsMunicipioLoading] = useState(false);
+  const [municipioLookupError, setMunicipioLookupError] = useState<string | null>(null);
+  const [allowManualMunicipioEntry, setAllowManualMunicipioEntry] = useState(false);
 
-  // 🔥 Carrega parceiro REAL (igual tela de detalhe)
+  const {
+    fieldErrors: apiFieldErrors,
+    globalError: submitError,
+    clearErrors,
+    handleSubmitError,
+  } = useFormApiErrors<keyof FormData>({
+    fieldMap: {
+      name: "nome",
+      acronym: "sigla",
+      cnpj: "cnpj",
+      email: "email",
+      phone: "telefone",
+      site: "site",
+      address: "endereco",
+      city: "municipio",
+      state: "uf",
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // Load
+  // -------------------------------------------------------------------------
+
   useEffect(() => {
     async function load() {
       try {
         const response = await getPartnerById(parceiroId);
-
         const parceiro = mapPartnerToParceiro(response, []);
-
-        setOriginalData(parceiro);
-        setFormData(parceiro);
+        const initial: FormData = {
+          nome: parceiro.nome ?? "",
+          sigla: parceiro.sigla ?? "",
+          tipo: parceiro.tipo ?? "",
+          cnpj: parceiro.cnpj ?? "",
+          email: parceiro.email ?? "",
+          telefone: formatPhone(parceiro.telefone ?? ""),
+          site: parceiro.site ?? "",
+          cep: "",
+          uf: parceiro.uf ?? "",
+          municipio: parceiro.municipio ?? "",
+          endereco: parceiro.endereco ?? "",
+          status: parceiro.status ?? "ATIVO",
+          observacoes: parceiro.observacoes ?? "",
+        };
+        setForm(initial);
+        setOriginalForm(initial);
       } catch {
-        alert("Erro ao carregar parceiro");
-        router.push("/parceiros");
-      } finally {
-        setLoading(false);
+        setLoadError(true);
       }
     }
-
-    load();
+    void load();
   }, [parceiroId]);
 
-  // Detecta alterações
+  // -------------------------------------------------------------------------
+  // Change detection & close guard
+  // -------------------------------------------------------------------------
+
+  const hasChanges = useMemo(() => {
+    if (!form || !originalForm) return false;
+    return JSON.stringify(form) !== JSON.stringify(originalForm);
+  }, [form, originalForm]);
+
+  const navigateBack = useCallback(() => {
+    router.push(`/parceiros/${parceiroId}`);
+  }, [parceiroId, router]);
+
+  const { requestClose, discardConfirmProps } = useModalCloseGuard({
+    isOpen: true,
+    shouldConfirm: hasChanges,
+    closeDisabled: isSaving,
+    closeOnEscape: false,
+    onClose: navigateBack,
+  });
+
+  // -------------------------------------------------------------------------
+  // Field helpers
+  // -------------------------------------------------------------------------
+
+  const handleChange = useCallback((field: keyof FormData, value: string) => {
+    setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // IBGE — municípios por UF
+  // -------------------------------------------------------------------------
+
   useEffect(() => {
-    if (!originalData) return;
-    setHasChanges(JSON.stringify(formData) !== JSON.stringify(originalData));
-  }, [formData, originalData]);
+    if (!form) return;
+    const selectedUf = form.uf.trim().toUpperCase();
 
-  // Validação
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
+    setMunicipioLookupError(null);
+    setAllowManualMunicipioEntry(false);
 
-    if (!formData.nome?.trim()) {
-      newErrors.nome = "Nome é obrigatório";
+    if (!selectedUf) {
+      setMunicipioOptions([]);
+      setIsMunicipioLoading(false);
+      return;
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setIsMunicipioLoading(true);
+
+    void fetchCitiesByStateLookup(selectedUf)
+      .then((lookup) => {
+        setMunicipioOptions(lookup.options);
+        setAllowManualMunicipioEntry(lookup.allowManualEntry);
+        setMunicipioLookupError(lookup.message ?? null);
+      })
+      .catch((error) => {
+        setMunicipioOptions([]);
+        setAllowManualMunicipioEntry(true);
+        setMunicipioLookupError(
+          getUserErrorMessage(error, "Não foi possível carregar os municípios da UF selecionada.")
+        );
+      })
+      .finally(() => setIsMunicipioLoading(false));
+  }, [form?.uf]);
+
+  // -------------------------------------------------------------------------
+  // CEP — ViaCep
+  // -------------------------------------------------------------------------
+
+  const handleZipCodeChange = useCallback(async (rawValue: string) => {
+    const formatted = formatZipCode(rawValue);
+    const normalized = onlyDigits(formatted);
+
+    setForm((prev) => (prev ? { ...prev, cep: formatted } : prev));
+
+    if (normalized.length !== 8) {
+      setZipCodeLookupError(null);
+      setIsZipCodeLoading(false);
+      return;
+    }
+
+    setIsZipCodeLoading(true);
+    setZipCodeLookupError(null);
+
+    try {
+      const data = await fetchViaCep(normalized);
+      setForm((prev) => {
+        if (!prev || onlyDigits(prev.cep) !== normalized) return prev;
+        return {
+          ...prev,
+          cep: formatZipCode(normalized),
+          uf: data.uf?.trim().toUpperCase() || prev.uf,
+          municipio: data.localidade?.trim() || prev.municipio,
+          endereco: data.logradouro?.trim() || prev.endereco,
+        };
+      });
+    } catch (err) {
+      setZipCodeLookupError(
+        err instanceof Error ? err.message : "Não foi possível consultar o CEP."
+      );
+    } finally {
+      setIsZipCodeLoading(false);
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Validation
+  // -------------------------------------------------------------------------
+
+  const validate = (): boolean => {
+    if (!form) return false;
+    const errors: Partial<Record<keyof FormData, string>> = {};
+    if (!form.nome.trim()) errors.nome = "Nome é obrigatório";
+    if (!form.tipo) errors.tipo = "Selecione o tipo";
+    if (!form.cnpj.trim()) errors.cnpj = "CNPJ é obrigatório";
+    if (!form.municipio.trim()) errors.municipio = "Município é obrigatório";
+    if (!form.uf.trim()) errors.uf = "UF é obrigatória";
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  // 🔥 PUT no backend
+  // -------------------------------------------------------------------------
+  // Submit
+  // -------------------------------------------------------------------------
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validate()) return;
+    if (!form || !validate()) return;
 
     setIsSaving(true);
+    clearErrors();
 
     try {
       const payload = mapParceiroFormToPartnerRequestDTO({
-        nome: formData.nome?.trim() ?? "",
-        sigla: formData.sigla?.trim() || undefined,
-        tipo: formData.tipo ?? "FUNDACAO",
-        cnpj: formData.cnpj ?? "",
-        email: formData.email?.trim() || undefined,
-        telefone: formData.telefone?.trim() || undefined,
-        site: formData.site?.trim() || undefined,
-        cep: formData.cep?.trim() || undefined,
-        uf: formData.uf?.trim() ?? "",
-        municipio: formData.municipio?.trim() ?? "",
-        endereco: formData.endereco?.trim() || undefined,
-        status: formData.status ?? "ATIVO",
+        nome: form.nome.trim(),
+        sigla: form.sigla.trim(),
+        tipo: form.tipo as ParceiroTipo,
+        cnpj: form.cnpj.trim(),
+        email: form.email.trim(),
+        telefone: form.telefone.trim(),
+        site: form.site.trim(),
+        cep: onlyDigits(form.cep),
+        uf: form.uf.trim(),
+        municipio: form.municipio.trim(),
+        endereco: form.endereco.trim(),
+        status: form.status,
+        observacoes: form.observacoes.trim(),
       });
 
       await updatePartner(parceiroId, payload);
-
-      alert("Parceiro atualizado com sucesso!");
       router.push(`/parceiros/${parceiroId}`);
-    } catch (error) {
-      alert(getFriendlyApiError(error));
+    } catch (submitFailure) {
+      const fallback = getUserErrorMessage(
+        submitFailure,
+        "Não foi possível atualizar o parceiro."
+      );
+      handleSubmitError(submitFailure, fallback);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) {
-    return <p className="p-6">Carregando...</p>;
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center py-20 text-center">
+        <p className="text-sm text-red-600">Não foi possível carregar os dados do parceiro.</p>
+      </div>
+    );
   }
 
-  return (
-    <div className="max-w-3xl mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-8">
+  if (!form) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-sm text-gray-500">Carregando...</p>
+      </div>
+    );
+  }
 
-        {/* Aviso */}
-        {hasChanges && (
-          <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <AlertCircle className="h-5 w-5 text-amber-600" />
-            <p className="text-sm text-amber-700">
-              Você tem alterações não salvas.
-            </p>
+  const municipioDropdownOptions = municipioOptions;
+
+  return (
+    <>
+      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto py-6 space-y-6">
+
+        {/* Tipo */}
+        <div className="bg-white p-6 rounded-xl border space-y-4">
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Users className="h-4 w-4 text-gray-400" />
+            Tipo de Parceiro <span className="text-red-500">*</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleChange("tipo", "IFES")}
+              className={cn(
+                "flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all",
+                form.tipo === "IFES"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                  : "border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50"
+              )}
+            >
+              <GraduationCap className="h-5 w-5" />
+              <span className="font-medium">Instituto Federal</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChange("tipo", "FUNDACAO")}
+              className={cn(
+                "flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all",
+                form.tipo === "FUNDACAO"
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
+              )}
+            >
+              <Building className="h-5 w-5" />
+              <span className="font-medium">Fundação</span>
+            </button>
           </div>
-        )}
+          {formErrors.tipo && <p className="text-xs text-red-600">{formErrors.tipo}</p>}
+        </div>
 
         {/* Dados básicos */}
         <div className="bg-white p-6 rounded-xl border space-y-4">
-          <h3 className="text-lg font-semibold">Dados Básicos</h3>
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-gray-400" />
+            Dados Básicos
+          </h3>
 
-          <input
-            type="text"
-            value={formData.nome || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, nome: e.target.value })
-            }
-            placeholder="Nome"
-            className={cn("w-full border p-2 rounded", errors.nome && "border-red-500")}
-          />
-          {errors.nome && <p className="text-xs text-red-500">{errors.nome}</p>}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Nome Completo <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.nome}
+                onChange={(e) => handleChange("nome", e.target.value)}
+                placeholder="Ex.: Instituto Federal do Maranhão"
+                className={cn(
+                  "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                  formErrors.nome || apiFieldErrors.nome ? "border-red-300" : "border-gray-200"
+                )}
+              />
+              {(formErrors.nome || apiFieldErrors.nome) && (
+                <p className="text-xs text-red-600">{formErrors.nome || apiFieldErrors.nome}</p>
+              )}
+            </div>
 
-          <input
-            type="text"
-            value={formData.sigla || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, sigla: e.target.value })
-            }
-            placeholder="Sigla"
-            className="w-full border p-2 rounded"
-          />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Sigla</label>
+              <input
+                type="text"
+                value={form.sigla}
+                onChange={(e) => handleChange("sigla", e.target.value.toUpperCase())}
+                placeholder="Ex.: IFMA"
+                maxLength={10}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+              />
+            </div>
+          </div>
 
-          <input
-            type="text"
-            value={formData.cnpj || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, cnpj: e.target.value })
-            }
-            placeholder="CNPJ"
-            className="w-full border p-2 rounded"
-          />
-        </div>
-
-        {/* Contato */}
-        <div className="bg-white p-6 rounded-xl border space-y-4">
-          <h3 className="text-lg font-semibold">Contato</h3>
-
-          <input
-            type="email"
-            value={formData.email || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
-            placeholder="Email"
-            className="w-full border p-2 rounded"
-          />
-
-          <input
-            type="text"
-            value={formData.telefone || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, telefone: e.target.value })
-            }
-            placeholder="Telefone"
-            className="w-full border p-2 rounded"
-          />
-
-          <input
-            type="text"
-            value={formData.site || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, site: e.target.value })
-            }
-            placeholder="Site"
-            className="w-full border p-2 rounded"
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              CNPJ <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.cnpj}
+              onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
+              placeholder="00.000.000/0001-00"
+              maxLength={18}
+              className={cn(
+                "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                formErrors.cnpj || apiFieldErrors.cnpj ? "border-red-300" : "border-gray-200"
+              )}
+            />
+            {(formErrors.cnpj ?? apiFieldErrors.cnpj) && (
+              <p className="text-xs text-red-600">{formErrors.cnpj ?? apiFieldErrors.cnpj}</p>
+            )}
+          </div>
         </div>
 
         {/* Endereço */}
         <div className="bg-white p-6 rounded-xl border space-y-4">
-          <h3 className="text-lg font-semibold">Endereço</h3>
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-gray-400" />
+            Endereço
+          </h3>
 
-          <input
-            type="text"
-            value={formData.endereco || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, endereco: e.target.value })
-            }
-            placeholder="Endereço"
-            className="w-full border p-2 rounded"
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">CEP</label>
+              <input
+                type="text"
+                value={form.cep}
+                onChange={(e) => { void handleZipCodeChange(e.target.value); }}
+                placeholder="00000-000"
+                maxLength={9}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+              />
+              {isZipCodeLoading && (
+                <p className="text-xs text-gray-500">Consultando CEP...</p>
+              )}
+              {zipCodeLookupError && (
+                <p className="text-xs text-red-600">{zipCodeLookupError}</p>
+              )}
+            </div>
 
-          <input
-            type="text"
-            value={formData.municipio || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, municipio: e.target.value })
-            }
-            placeholder="Município"
-            className="w-full border p-2 rounded"
-          />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                UF <span className="text-red-500">*</span>
+              </label>
+              <Dropdown
+                options={UF_LIST.map((uf) => ({ label: uf, value: uf }))}
+                value={form.uf}
+                onChange={(value) => {
+                  setForm((prev) =>
+                    prev ? { ...prev, uf: (value ?? "").toUpperCase(), municipio: "" } : prev
+                  );
+                  setMunicipioLookupError(null);
+                  setAllowManualMunicipioEntry(false);
+                  setFormErrors((prev) => ({ ...prev, uf: undefined }));
+                }}
+                placeholder="Selecione"
+                className={cn(
+                  "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors bg-white",
+                  formErrors.uf || apiFieldErrors.uf ? "border-red-300" : "border-gray-200"
+                )}
+              />
+              {(formErrors.uf || apiFieldErrors.uf) && (
+                <p className="text-xs text-red-600">{formErrors.uf || apiFieldErrors.uf}</p>
+              )}
+            </div>
 
-          <input
-            type="text"
-            value={formData.uf || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, uf: e.target.value })
-            }
-            placeholder="UF"
-            className="w-full border p-2 rounded"
-          />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Município <span className="text-red-500">*</span>
+              </label>
+              {allowManualMunicipioEntry && form.uf ? (
+                <input
+                  type="text"
+                  value={form.municipio}
+                  onChange={(e) => handleChange("municipio", e.target.value)}
+                  placeholder="Digite o município"
+                  className={cn(
+                    "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                    formErrors.municipio ? "border-red-300" : "border-gray-200"
+                  )}
+                />
+              ) : (
+                <Dropdown
+                  options={municipioDropdownOptions}
+                  value={form.municipio || undefined}
+                  onChange={(value) => {
+                    handleChange("municipio", value ?? "");
+                    setFormErrors((prev) => ({ ...prev, municipio: undefined }));
+                  }}
+                  placeholder={
+                    !form.uf
+                      ? "Selecione a UF primeiro"
+                      : isMunicipioLoading
+                        ? "Carregando municípios..."
+                        : "Selecione o município"
+                  }
+                  disabled={!form.uf || isMunicipioLoading || municipioDropdownOptions.length === 0}
+                  searchable
+                  className={cn(
+                    "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors bg-white",
+                    formErrors.municipio || apiFieldErrors.municipio ? "border-red-300" : "border-gray-200"
+                  )}
+                />
+              )}
+              {municipioLookupError && (
+                <p className="text-xs text-amber-600">{municipioLookupError}</p>
+              )}
+              {(formErrors.municipio || apiFieldErrors.municipio) && (
+                <p className="text-xs text-red-600">
+                  {formErrors.municipio || apiFieldErrors.municipio}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Endereço Completo</label>
+              <input
+                type="text"
+                value={form.endereco}
+                onChange={(e) => handleChange("endereco", e.target.value)}
+                placeholder="Ex.: Av. Getúlio Vargas, 04"
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Contato */}
+        <div className="bg-white p-6 rounded-xl border space-y-4">
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Mail className="h-4 w-4 text-gray-400" />
+            Contato
+          </h3>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">E-mail</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => handleChange("email", e.target.value)}
+                placeholder="contato@parceiro.edu.br"
+                className={cn(
+                  "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                  formErrors.email || apiFieldErrors.email ? "border-red-300" : "border-gray-200"
+                )}
+              />
+              {(formErrors.email || apiFieldErrors.email) && (
+                <p className="text-xs text-red-600">{formErrors.email || apiFieldErrors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Phone className="h-4 w-4 text-gray-400" />
+                Telefone
+              </label>
+              <input
+                type="tel"
+                value={form.telefone}
+                onChange={(e) => handleChange("telefone", formatPhone(e.target.value))}
+                placeholder="(00) 00000-0000"
+                maxLength={15}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <Globe className="h-4 w-4 text-gray-400" />
+              Website
+            </label>
+            <input
+              type="url"
+              value={form.site}
+              onChange={(e) => handleChange("site", e.target.value)}
+              placeholder="https://www.parceiro.edu.br"
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+            />
+          </div>
         </div>
 
         {/* Observações */}
-        <div className="bg-white p-6 rounded-xl border">
+        <div className="bg-white p-6 rounded-xl border space-y-2">
+          <label className="text-sm font-medium text-gray-700">Observações</label>
           <textarea
-            value={formData.observacoes || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, observacoes: e.target.value })
-            }
-            placeholder="Observações"
-            className="w-full border p-2 rounded"
+            value={form.observacoes}
+            onChange={(e) => handleChange("observacoes", e.target.value)}
+            placeholder="Informações adicionais sobre o parceiro..."
+            rows={3}
+            className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors resize-none"
           />
         </div>
 
+        {/* Erro global da API */}
+        {submitError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
+
         {/* Ações */}
-        <div className="flex justify-end gap-4">
+        <div className="flex justify-end gap-3">
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push(`/parceiros/${parceiroId}`)}
+            onClick={requestClose}
+            disabled={isSaving}
+            className="px-5"
           >
             <X className="h-4 w-4 mr-2" />
             Cancelar
           </Button>
-
-          <Button type="submit" disabled={isSaving}>
+          <Button
+            type="submit"
+            disabled={isSaving}
+            className="px-5 bg-[#004225] hover:bg-[#003319]"
+          >
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? "Salvando..." : "Salvar Alterações"}
           </Button>
         </div>
       </form>
-    </div>
+
+      <ConfirmDiscardModal {...discardConfirmProps} />
+    </>
   );
 }

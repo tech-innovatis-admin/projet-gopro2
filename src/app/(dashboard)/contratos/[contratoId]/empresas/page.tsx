@@ -13,8 +13,6 @@ import {
 } from "../_components/CompanyFormModal";
 import { ContractLinkedItemsLoadingSkeleton } from "../_components/ContractLoadingSkeleton";
 import {
-  listBudgetItems,
-  listBudgetTransfers,
   listExpenses,
   createCompany,
   createProjectCompany,
@@ -30,8 +28,6 @@ import {
   requireCurrentUserId,
 } from "@/src/lib/auth/session";
 import {
-  type BudgetItemResponseDTO,
-  type BudgetTransferResponseDTO,
   type CompanyResponseDTO,
   type ExpenseResponseDTO,
   type PageResponseDTO,
@@ -78,14 +74,8 @@ type EmpresaProjeto = {
   dataInicio?: string;
   dataFim?: string;
   observacao?: string;
-  availableBalance?: number;
-  executionPercentage?: number;
-};
-
-type BeneficiaryFinancialSummary = {
-  finalBudgetAmount: number;
-  paidAmount: number;
-  pendingAmount: number;
+  totalPago?: number;
+  totalReservado?: number;
 };
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -132,16 +122,6 @@ function toSafeNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getDisplayedCompanyTotal(
-  empresa: EmpresaProjeto,
-  financialSummary?: BeneficiaryFinancialSummary,
-) {
-  if (financialSummary) {
-    return financialSummary.finalBudgetAmount;
-  }
-
-  return typeof empresa.valorContrato === "number" ? empresa.valorContrato : undefined;
-}
 
 async function fetchAllPages<T>(
   fetchPage: (query: { page: number; size: number }) => Promise<PageResponseDTO<T>>,
@@ -203,6 +183,7 @@ export default function EmpresasPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -213,12 +194,7 @@ export default function EmpresasPage() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | "">("");
   const [isLinking, setIsLinking] = useState(false);
-  const [financialSummaryByProjectCompanyId, setFinancialSummaryByProjectCompanyId] = useState<
-    Map<number, BeneficiaryFinancialSummary>
-  >(new Map());
-  const [rubricaUsageCountByProjectCompanyId, setRubricaUsageCountByProjectCompanyId] = useState<
-    Map<number, number>
-  >(new Map());
+  const [expenseCountByProjectCompanyId, setExpenseCountByProjectCompanyId] = useState<Map<number, number>>(new Map());
 
   const linkedCompanyIds = useMemo(
     () => new Set(empresas.map((e) => e.companyId).filter((id): id is number => typeof id === "number")),
@@ -243,10 +219,7 @@ export default function EmpresasPage() {
   );
 
   const totalValor = empresas.reduce((acc, empresa) => {
-    const financialSummary = empresa.projectCompanyId
-      ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
-      : undefined;
-    return acc + toSafeNumber(getDisplayedCompanyTotal(empresa, financialSummary));
+    return acc + toSafeNumber(empresa.valorContrato);
   }, 0);
 
   useEffect(() => {
@@ -293,24 +266,12 @@ export default function EmpresasPage() {
       setLoadError(null);
       setActionError(null);
 
-      const [linksPage, budgetItems, budgetTransfers, expenses] = await Promise.all([
+      const [linksPage, expenses] = await Promise.all([
         listProjectCompaniesDetailed({
           page: 0,
           size: DEFAULT_PAGE_SIZE,
           projectId,
         }),
-        fetchAllPages<BudgetItemResponseDTO>((query) =>
-          listBudgetItems({
-            ...query,
-            projectId,
-          }),
-        ),
-        fetchAllPages<BudgetTransferResponseDTO>((query) =>
-          listBudgetTransfers({
-            ...query,
-            projectId,
-          }),
-        ),
         fetchAllPages<ExpenseResponseDTO>((query) =>
           listExpenses({
             ...query,
@@ -352,75 +313,25 @@ export default function EmpresasPage() {
           dataInicio: link.startDate || undefined,
           dataFim: link.endDate || undefined,
           observacao: link.notes || undefined,
-          availableBalance: typeof link.availableBalance === "number" ? link.availableBalance : undefined,
-          executionPercentage:
-            typeof link.executionPercentage === "number" ? link.executionPercentage : undefined,
+          totalPago: typeof link.totalPago === "number" ? link.totalPago : undefined,
+          totalReservado: typeof link.totalReservado === "number" ? link.totalReservado : undefined,
         };
       });
 
-      const activeTransfers = budgetTransfers.filter((transfer) => transfer.isActive);
-      const transferBalanceByItemId = new Map<number, number>();
-      for (const transfer of activeTransfers) {
-        transferBalanceByItemId.set(
-          transfer.toItemId,
-          toSafeNumber(transferBalanceByItemId.get(transfer.toItemId)) + toSafeNumber(transfer.amount),
-        );
-        transferBalanceByItemId.set(
-          transfer.fromItemId,
-          toSafeNumber(transferBalanceByItemId.get(transfer.fromItemId)) - toSafeNumber(transfer.amount),
-        );
-      }
-
-      const paidByBudgetItemId = new Map<number, number>();
+      const countByProjectCompanyId = new Map<number, number>();
       for (const expense of expenses) {
-        if (!expense.isActive || expense.paymentStatus !== "PAGO") continue;
-        paidByBudgetItemId.set(
-          expense.budgetItemId,
-          toSafeNumber(paidByBudgetItemId.get(expense.budgetItemId)) + toSafeNumber(expense.amount),
+        if (!expense.isActive || !expense.projectCompanyId) continue;
+        countByProjectCompanyId.set(
+          expense.projectCompanyId,
+          toSafeNumber(countByProjectCompanyId.get(expense.projectCompanyId)) + 1,
         );
       }
-
-      const summaryByProjectCompanyId = new Map<number, BeneficiaryFinancialSummary>();
-      const usageCountByProjectCompanyId = new Map<number, number>();
-      for (const item of budgetItems) {
-        if (!item.isActive) continue;
-        const isCompanyLinkedItem =
-          item.projectCompanyId != null &&
-          (item.beneficiaryType === "company" || item.beneficiaryType == null);
-        if (!isCompanyLinkedItem) continue;
-
-        const finalBudgetAmount =
-          toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
-        const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
-
-        const projectCompanyId = item.projectCompanyId as number;
-        const current = summaryByProjectCompanyId.get(projectCompanyId) ?? {
-          finalBudgetAmount: 0,
-          paidAmount: 0,
-          pendingAmount: 0,
-        };
-
-        const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
-        const nextPaidAmount = current.paidAmount + paidAmount;
-        summaryByProjectCompanyId.set(projectCompanyId, {
-          finalBudgetAmount: nextFinalBudgetAmount,
-          paidAmount: nextPaidAmount,
-          pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
-        });
-        usageCountByProjectCompanyId.set(
-          projectCompanyId,
-          toSafeNumber(usageCountByProjectCompanyId.get(projectCompanyId)) + 1,
-        );
-      }
-
-      setFinancialSummaryByProjectCompanyId(summaryByProjectCompanyId);
-      setRubricaUsageCountByProjectCompanyId(usageCountByProjectCompanyId);
+      setExpenseCountByProjectCompanyId(countByProjectCompanyId);
       setEmpresas(mapped);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar empresas do projeto."));
       setEmpresas([]);
-      setFinancialSummaryByProjectCompanyId(new Map());
-      setRubricaUsageCountByProjectCompanyId(new Map());
+      setExpenseCountByProjectCompanyId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -436,6 +347,7 @@ export default function EmpresasPage() {
     setActionError(null);
     setEditingEmpresa(null);
     setFormData({
+      tipoEmpresa: undefined,
       razaoSocial: "",
       nomeFantasia: "",
       cnpj: "",
@@ -447,11 +359,13 @@ export default function EmpresasPage() {
       uf: "",
       responsavelPersonId: "",
       responsavel: undefined,
+      responsavelDesconhecido: false,
       tipoServico: "",
       valorContrato: undefined,
       dataInicio: "",
       dataFim: "",
       observacao: "",
+      status: "CONTRATADA",
     });
     setIsFormModalOpen(true);
   };
@@ -460,7 +374,7 @@ export default function EmpresasPage() {
     if (!ensureCanManageChildren()) return;
     setActionError(null);
     setEditingEmpresa(empresa);
-    setFormData({ ...empresa });
+    setFormData({ ...empresa, responsavelDesconhecido: !empresa.responsavelPersonId });
     setIsFormModalOpen(true);
   };
 
@@ -491,19 +405,20 @@ export default function EmpresasPage() {
       return;
     }
     if (!hasRequiredSharedCompanyFields(formData)) {
-      setActionError("Preencha os campos obrigatórios: razão social, nome fantasia, CNPJ, e-mail, telefone, endereço, cidade e UF.");
+      setModalError("Preencha os campos obrigatórios: tipo de empresa, razão social, nome fantasia, CNPJ e responsável.");
       return;
     }
 
     const cnpjDigits = onlyDigitsShared(formData.cnpj);
     if (cnpjDigits.length !== 14) {
-      setActionError("Informe um CNPJ válido com 14 dígitos.");
+      setModalError("Informe um CNPJ válido com 14 dígitos.");
       return;
     }
 
     try {
       setIsSaving(true);
       setActionError(null);
+      setModalError(null);
       const actorUserId = await requireCurrentUserId();
 
       const companyPayload = {
@@ -555,7 +470,7 @@ export default function EmpresasPage() {
       setSavedMessage(true);
       setTimeout(() => setSavedMessage(false), 3000);
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível salvar a empresa."));
+      setModalError(getErrorMessage(error, "Não foi possível salvar a empresa."));
     } finally {
       setIsSaving(false);
     }
@@ -563,17 +478,14 @@ export default function EmpresasPage() {
 
   const removeEmpresa = async (empresaId: string) => {
     if (!ensureCanManageChildren()) return;
-    if (!confirm("Deseja realmente excluir este vínculo da empresa com o projeto?")) return;
     try {
       setActionError(null);
       const empresa = empresas.find((item) => item.id === empresaId);
       if (!empresa?.projectCompanyId) throw new Error("Vínculo da empresa não encontrado.");
-      const linkedItemsCount = toSafeNumber(
-        rubricaUsageCountByProjectCompanyId.get(empresa.projectCompanyId),
-      );
+      const linkedItemsCount = toSafeNumber(expenseCountByProjectCompanyId.get(empresa.projectCompanyId));
       if (linkedItemsCount > 0) {
         setActionError(
-          `Não é possível desvincular a empresa. Existem ${linkedItemsCount} item(ns) de rubrica ativo(s) vinculados a ela neste contrato.`,
+          `Não é possível desvincular a empresa. Existem ${linkedItemsCount} pagamento(s) registrado(s) para ela neste contrato.`,
         );
         return;
       }
@@ -602,6 +514,7 @@ export default function EmpresasPage() {
       await createProjectCompany({
         projectId,
         companyId: selectedCompanyId,
+        status: "CONTRATADA",
         isIncubated: false,
         createdBy: actorUserId,
       });
@@ -671,16 +584,7 @@ export default function EmpresasPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {empresas.map((empresa) => {
-            const financialSummary = empresa.projectCompanyId
-              ? financialSummaryByProjectCompanyId.get(empresa.projectCompanyId)
-              : undefined;
-            const displayedCompanyTotal = getDisplayedCompanyTotal(empresa, financialSummary);
-            const executionPercentage =
-              typeof empresa.executionPercentage === "number"
-                ? empresa.executionPercentage
-                : financialSummary && financialSummary.finalBudgetAmount > 0
-                  ? (financialSummary.paidAmount / financialSummary.finalBudgetAmount) * 100
-                  : 0;
+            const hasTotals = typeof empresa.totalPago === "number" || typeof empresa.totalReservado === "number";
             return (
               <div key={empresa.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
@@ -734,35 +638,21 @@ export default function EmpresasPage() {
                     </div>
                   </div>
                 </div>
-                {financialSummary && (
+                {hasTotals && (
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 space-y-1.5">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
-                      Financeiro na rubrica
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      Valor final:{" "}
-                      <strong className="text-gray-900">
-                        {formatCurrency(financialSummary.finalBudgetAmount)}
-                      </strong>
+                      Financeiro em pagamentos
                     </p>
                     <p className="text-sm text-gray-700">
                       Pago:{" "}
                       <strong className="text-emerald-700">
-                        {formatCurrency(financialSummary.paidAmount)}
+                        {formatCurrency(empresa.totalPago ?? 0)}
                       </strong>
                     </p>
                     <p className="text-sm text-gray-700">
-                      Falta pagar:{" "}
+                      Reservado:{" "}
                       <strong className="text-amber-700">
-                        {formatCurrency(financialSummary.pendingAmount)}
-                      </strong>
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      Percentual executado:{" "}
-                      <strong className="text-blue-700">
-                        {Number.isFinite(executionPercentage)
-                          ? `${executionPercentage.toFixed(2).replace(".", ",")}%`
-                          : "0,00%"}
+                        {formatCurrency(empresa.totalReservado ?? 0)}
                       </strong>
                     </p>
                   </div>
@@ -787,7 +677,7 @@ export default function EmpresasPage() {
                     </span>
                   )}
                 </div>
-                <span className="font-semibold text-[#004225]">{formatCurrency(displayedCompanyTotal)}</span>
+                <span className="font-semibold text-[#004225]">{formatCurrency(empresa.valorContrato)}</span>
               </div>
             </div>
             );
@@ -809,9 +699,10 @@ export default function EmpresasPage() {
           setFormData={setFormData}
           isSaving={isSaving}
           isEditingItem={!!editingEmpresa}
-          onClose={() => { setIsFormModalOpen(false); setEditingEmpresa(null); setFormData({}); }}
+          onClose={() => { setIsFormModalOpen(false); setEditingEmpresa(null); setFormData({}); setModalError(null); }}
           onSave={() => { void saveEmpresa(); }}
           onDelete={editingEmpresa ? () => { void removeEmpresa(editingEmpresa.id); } : undefined}
+          errorMessage={modalError}
         />
       )}
 

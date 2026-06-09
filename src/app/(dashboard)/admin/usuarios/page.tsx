@@ -199,9 +199,7 @@ export default function AdminUsuariosPage() {
         </header>
 
         {loadingAccess && (
-          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-zinc-600">Validando permissao...</p>
-          </section>
+          <AdminUsuariosLoadingSkeleton />
         )}
 
         {!loadingAccess && !canManage && (
@@ -270,7 +268,9 @@ export default function AdminUsuariosPage() {
 
         {!loadingAccess && canManage && (
           <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-          {users.length === 0 ? (
+          {loadingUsers ? (
+            <AdminUsuariosTableLoadingSkeleton />
+          ) : users.length === 0 ? (
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
               {emptyMessage}
             </div>
@@ -355,6 +355,48 @@ export default function AdminUsuariosPage() {
           </section>
         )}
       </main>
+    </div>
+  );
+}
+
+function AdminUsuariosLoadingSkeleton() {
+  return (
+    <section className="animate-pulse rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-2">
+          <div className="h-4 w-36 rounded bg-zinc-200" />
+          <div className="h-10 w-full rounded bg-zinc-200" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 w-36 rounded bg-zinc-200" />
+          <div className="h-10 w-full rounded bg-zinc-200" />
+        </div>
+        <div className="flex items-end">
+          <div className="h-10 w-32 rounded bg-zinc-200" />
+        </div>
+      </div>
+      <div className="mt-6 space-y-3">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div key={`admin-users-loading-row-${index}`} className="h-12 rounded bg-zinc-200" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdminUsuariosTableLoadingSkeleton() {
+  return (
+    <div className="animate-pulse space-y-3">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div key={`admin-users-table-loading-row-${index}`} className="grid grid-cols-6 gap-3 rounded border border-zinc-100 p-3">
+          <div className="h-4 rounded bg-zinc-200" />
+          <div className="h-4 rounded bg-zinc-200" />
+          <div className="h-4 rounded bg-zinc-200" />
+          <div className="h-4 rounded bg-zinc-200" />
+          <div className="h-4 rounded bg-zinc-200" />
+          <div className="h-4 rounded bg-zinc-200" />
+        </div>
+      ))}
     </div>
   );
 }

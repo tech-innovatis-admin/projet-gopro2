@@ -161,6 +161,7 @@ type NovoContratoForm = {
   dataFimEfetivo: string;
   uf: string;
   cidade: string;
+  contaBancariaProjeto: string;
   scope: string;
   contract_value: string;
   metas: Meta[];
@@ -309,6 +310,7 @@ const initialFormState: NovoContratoForm = {
   dataFimEfetivo: "",
   uf: "",
   cidade: "",
+  contaBancariaProjeto: "",
   scope: "",
   contract_value: "",
   metas: [],
@@ -490,6 +492,7 @@ function mapProjectToForm(project: ProjectResponseDTO): NovoContratoForm {
     dataFimEfetivo: project.closingDate ?? "",
     uf: (project.state ?? fallbackLocation.state ?? "").toUpperCase(),
     cidade: project.city ?? fallbackLocation.city ?? "",
+    contaBancariaProjeto: project.projectBankAccount ?? "",
     scope: project.object ?? "",
     contract_value: formatCurrencyInputValue(project.contractValue),
   };
@@ -635,6 +638,7 @@ function NovoContratoPageContent() {
       projectGovIf: "govIf",
       projectType: "tipo",
       contractValue: "contract_value",
+      projectBankAccount: "contaBancariaProjeto",
       endDate: "dataFim",
       startDate: "dataInicio",
       state: "uf",
@@ -1129,6 +1133,11 @@ function NovoContratoPageContent() {
         return "";
       case "cidade":
         if (typeof value !== "string" || !value.trim()) return "Selecione ou informe a cidade";
+        return "";
+      case "contaBancariaProjeto":
+        if (typeof value !== "string" || !value.trim()) return "";
+        if (!/^\d+$/.test(value.trim())) return "Informe apenas numeros da conta";
+        if (value.trim().length > 30) return "Numero da conta deve ter no maximo 30 digitos";
         return "";
       case "scope":
         if (typeof value !== "string" || !value.trim()) return "O objeto do contrato é obrigatório";
@@ -2046,7 +2055,7 @@ function NovoContratoPageContent() {
       const parcelaBase = {
         dataPrevista: newParcela.dataPrevista!,
         valorPrevisto: normalizeCurrencyNumber(newParcela.valorPrevisto),
-        status: newParcela.status ?? "PREVISTO",
+        status: "PREVISTO" as StatusDesembolso,
         observacao: newParcela.observacao || "",
       };
 
@@ -2146,6 +2155,7 @@ function NovoContratoPageContent() {
       city,
       state,
       executionLocation,
+      projectBankAccount: normalizeOptionalText(formData.contaBancariaProjeto),
       executedByInnovatis: formData.executedByInnovatis,
     };
   };
@@ -2280,7 +2290,7 @@ function NovoContratoPageContent() {
     numero: parcela.numero,
     expectedMonth: parcela.dataPrevista,
     expectedAmount: parcela.valorPrevisto,
-    status: parcela.status,
+    status: "PREVISTO",
     notes: normalizeOptionalText(parcela.observacao),
   });
 
@@ -3056,6 +3066,29 @@ function NovoContratoPageContent() {
                 </FormField>
               </div>
 
+              <FormField
+                label="Numero da conta do projeto"
+                error={errors.contaBancariaProjeto}
+                icon={<Building2 className="h-4 w-4" />}
+              >
+                <input
+                  type="text"
+                  value={form.contaBancariaProjeto}
+                  onChange={(e) =>
+                    handleChange("contaBancariaProjeto", e.target.value.replace(/\D/g, ""))
+                  }
+                  onBlur={() => handleBlur("contaBancariaProjeto")}
+                  inputMode="numeric"
+                  maxLength={30}
+                  placeholder="Ex.: 1234567890"
+                  className={`w-full px-4 py-3 text-sm border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#004225]/20 ${
+                    errors.contaBancariaProjeto
+                      ? "border-red-300 focus:border-red-500"
+                      : "border-gray-300 focus:border-[#004225]"
+                  }`}
+                />
+              </FormField>
+
               {/* Objeto do Contrato (Scope) */}
               <FormField
                 label="Objeto do Contrato"
@@ -3250,8 +3283,8 @@ function NovoContratoPageContent() {
                             </h4>
                             <p className="text-xs text-gray-600 mt-0.5">
                               {isEditingParcela
-                                ? "Atualize data, valor previsto, status e observacao"
-                                : "Informe data, valor previsto e status"}
+                                ? "Atualize data, valor previsto e observacao"
+                                : "Informe data e valor previsto"}
                             </p>
                           </div>
                           <button
@@ -3263,7 +3296,7 @@ function NovoContratoPageContent() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Data prevista <span className="text-red-500">*</span>
@@ -3296,18 +3329,6 @@ function NovoContratoPageContent() {
                                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
                               />
                             </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Status <span className="text-red-500">*</span>
-                            </label>
-                            <Dropdown
-                              options={statusDesembolsoOptions}
-                              value={newParcela.status || undefined}
-                              onChange={(value) => setNewParcela({ ...newParcela, status: value as StatusDesembolso })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
                           </div>
 
                           <div>

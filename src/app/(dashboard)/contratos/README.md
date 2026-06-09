@@ -34,6 +34,8 @@ No cadastro de item de rubrica, o front agora permite vincular beneficiario no m
 - acao para vincular pessoa/empresa existente no sistema (criando `project-people`/`project-companies`);
 - acao para cadastro rapido de pessoa/empresa e vinculo automatico ao projeto;
 - apos criar o `budget-item`, o front chama `PUT /api/backend/budget-item/:id/beneficiary` com `contractedAmount` igual ao valor planejado do item.
+- valor do item precisa ser maior que zero; a API rejeita `0`, nulo ou negativo em `plannedAmount` e `contractedAmount`.
+- os modais dessa tela exibem erro e destaque vermelho dentro do proprio modal; a aba principal nao recebe a mensagem quando o modal esta aberto.
 
 ### Contrato consumido
 

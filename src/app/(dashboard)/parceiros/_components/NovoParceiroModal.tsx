@@ -28,6 +28,7 @@ interface NovoParceiroModalProps {
   onSubmit: (
     parceiro: Omit<Parceiro, "id" | "createdAt" | "totalContratos" | "contratosAtivos" | "valorTotalContratos">
   ) => Promise<void> | void;
+  zIndexClassName?: string;
 }
 
 type ViaCepResponse = {
@@ -118,6 +119,7 @@ export function NovoParceiroModal({
   isOpen,
   onClose,
   onSubmit,
+  zIndexClassName = 'z-50',
 }: NovoParceiroModalProps) {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -291,14 +293,8 @@ export function NovoParceiroModal({
     if (!form.tipo) {
       newErrors.tipo = "Selecione o tipo";
     }
-    if (!form.uf) {
-      newErrors.uf = "Selecione o UF";
-    }
-    if (!form.municipio.trim()) {
-      newErrors.municipio = "Município é obrigatório";
-    }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "E-mail inválido";
+    if (!form.cnpj.trim()) {
+      newErrors.cnpj = "CNPJ é obrigatório";
     }
 
     setErrors(newErrors);
@@ -317,18 +313,18 @@ export function NovoParceiroModal({
     try {
       await onSubmit({
         nome: form.nome.trim(),
-        sigla: form.sigla.trim() || undefined,
+        sigla: form.sigla.trim(),
         tipo: form.tipo as ParceiroTipo,
-        cnpj: form.cnpj.trim() || undefined,
-        email: form.email.trim() || undefined,
-        telefone: form.telefone.trim() || undefined,
-        site: form.site.trim() || undefined,
-        cep: onlyDigits(form.cep) || undefined,
+        cnpj: form.cnpj.trim(),
+        email: form.email.trim(),
+        telefone: form.telefone.trim(),
+        site: form.site.trim(),
+        cep: onlyDigits(form.cep),
         uf: form.uf,
         municipio: form.municipio.trim(),
-        endereco: form.endereco.trim() || undefined,
+        endereco: form.endereco.trim(),
         status: form.status,
-        observacoes: form.observacoes.trim() || undefined,
+        observacoes: form.observacoes.trim(),
       });
 
       resetFormState();
@@ -347,12 +343,12 @@ export function NovoParceiroModal({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+        className={`fixed inset-0 ${zIndexClassName} bg-black/50 backdrop-blur-sm animate-in fade-in duration-200`}
         // onClick={() => !isSubmitting && onClose()}
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      <div className={`fixed inset-0 ${zIndexClassName} flex items-center justify-center p-4 pointer-events-none`}>
         <div
           ref={modalRef}
           className="pointer-events-auto w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200"
@@ -382,8 +378,8 @@ export function NovoParceiroModal({
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-140px)]">
-            <div className="p-6 space-y-5">
+          <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden max-h-[calc(90vh-140px)]">
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
               {/* Tipo (destaque) */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -463,7 +459,7 @@ export function NovoParceiroModal({
               {/* CNPJ */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  CNPJ
+                  CNPJ <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -471,8 +467,14 @@ export function NovoParceiroModal({
                   onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
                   placeholder="00.000.000/0001-00"
                   maxLength={18}
-                  className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors"
+                  className={cn(
+                    "w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#004225]/20 focus:border-[#004225] transition-colors",
+                    errors.cnpj || apiFieldErrors.cnpj ? "border-red-300" : "border-gray-200"
+                  )}
                 />
+                {(errors.cnpj ?? apiFieldErrors.cnpj) && (
+                  <p className="text-xs text-red-600">{errors.cnpj ?? apiFieldErrors.cnpj}</p>
+                )}
               </div>
 
               {/* Localização */}
@@ -501,7 +503,7 @@ export function NovoParceiroModal({
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <MapPin className="h-4 w-4 text-gray-400" />
-                    UF <span className="text-red-500">*</span>
+                    UF <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <Dropdown
                     options={UF_LIST.map((uf) => ({ label: uf, value: uf }))}
@@ -527,7 +529,7 @@ export function NovoParceiroModal({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Município <span className="text-red-500">*</span>
+                    Município <span className="text-gray-400 font-normal">(opcional)</span>
                   </label>
                   {allowManualMunicipioEntry && form.uf ? (
                     <input
@@ -648,14 +650,16 @@ export function NovoParceiroModal({
               </div>
             </div>
 
-            {submitError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {submitError}
-              </div>
-            )}
-
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50">
+              {submitError && (
+                <div className="px-6 pt-3">
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                    {submitError}
+                  </div>
+                </div>
+              )}
+            <div className="flex items-center justify-end gap-3 px-6 py-4">
               <Button
                 type="button"
                 variant="outline"
@@ -672,6 +676,7 @@ export function NovoParceiroModal({
               >
                 {isSubmitting ? "Salvando..." : "Cadastrar Parceiro"}
               </Button>
+            </div>
             </div>
           </form>
         </div>

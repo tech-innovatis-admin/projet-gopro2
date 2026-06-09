@@ -16,8 +16,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  listBudgetItems,
-  listBudgetTransfers,
   listExpenses,
   createPeople,
   createProjectPeople,
@@ -40,8 +38,6 @@ import { ContractLinkedItemsLoadingSkeleton } from "../_components/ContractLoadi
 import {
   type ContractTypeEnum,
   HttpError,
-  type BudgetItemResponseDTO,
-  type BudgetTransferResponseDTO,
   type ExpenseResponseDTO,
   type PageResponseDTO,
   type PeopleResponseDTO,
@@ -103,12 +99,8 @@ type MembroProjeto = {
   startDate?: string;
   endDate?: string;
   baseAmount?: number;
-};
-
-type BeneficiaryFinancialSummary = {
-  finalBudgetAmount: number;
-  paidAmount: number;
-  pendingAmount: number;
+  totalPago?: number;
+  totalReservado?: number;
 };
 
 type MembroFormData = {
@@ -132,6 +124,7 @@ type MembroFormData = {
 };
 
 const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_PROJECT_PERSON_STATUS: StatusProjectPeopleEnum = "ATIVO";
 
 function parseProjectId(rawId: string) {
   const parsed = Number(rawId);
@@ -171,9 +164,7 @@ function isBlank(value?: string) {
 function hasRequiredMemberFields(formData: MembroFormData) {
   return (
     !isBlank(formData.nome) &&
-    !isBlank(formData.papel) &&
-    !isBlank(formData.city) &&
-    !isBlank(formData.state)
+    !isBlank(formData.status)
   );
 }
 
@@ -272,6 +263,7 @@ export default function EquipeTecnicaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -288,12 +280,7 @@ export default function EquipeTecnicaPage() {
   const [linkVinculo, setLinkVinculo] = useState("");
   const [linkCargaHoraria, setLinkCargaHoraria] = useState<number | "">("");
   const [isLinking, setIsLinking] = useState(false);
-  const [financialSummaryByProjectPeopleId, setFinancialSummaryByProjectPeopleId] = useState<
-    Map<number, BeneficiaryFinancialSummary>
-  >(new Map());
-  const [rubricaUsageCountByProjectPeopleId, setRubricaUsageCountByProjectPeopleId] = useState<
-    Map<number, number>
-  >(new Map());
+  const [expenseCountByPersonId, setExpenseCountByPersonId] = useState<Map<number, number>>(new Map());
 
   const linkedPersonIds = useMemo(
     () =>
@@ -355,6 +342,7 @@ export default function EquipeTecnicaPage() {
     setAvatarFile(null);
     setCpfError("");
     setPhoneError("");
+    setModalError(null);
   };
 
   const closeMemberFormModal = () => {
@@ -400,24 +388,12 @@ export default function EquipeTecnicaPage() {
       setLoadError(null);
       setActionError(null);
 
-      const [projectPeoplePage, budgetItems, budgetTransfers, expenses] = await Promise.all([
+      const [projectPeoplePage, expenses] = await Promise.all([
         listProjectPeopleDetailed({
           page: 0,
           size: DEFAULT_PAGE_SIZE,
           projectId,
         }),
-        fetchAllPages<BudgetItemResponseDTO>((query) =>
-          listBudgetItems({
-            ...query,
-            projectId,
-          }),
-        ),
-        fetchAllPages<BudgetTransferResponseDTO>((query) =>
-          listBudgetTransfers({
-            ...query,
-            projectId,
-          }),
-        ),
         fetchAllPages<ExpenseResponseDTO>((query) =>
           listExpenses({
             ...query,
@@ -521,72 +497,22 @@ export default function EquipeTecnicaPage() {
           endDate: link.endDate ?? undefined,
           baseAmount:
             typeof link.baseAmount === "number" ? Number(link.baseAmount) : undefined,
+          totalPago: typeof link.totalPago === "number" ? link.totalPago : undefined,
+          totalReservado: typeof link.totalReservado === "number" ? link.totalReservado : undefined,
         };
       });
 
-      const activeTransfers = budgetTransfers.filter((transfer) => transfer.isActive);
-      const transferBalanceByItemId = new Map<number, number>();
-      for (const transfer of activeTransfers) {
-        transferBalanceByItemId.set(
-          transfer.toItemId,
-          toSafeNumber(transferBalanceByItemId.get(transfer.toItemId)) + toSafeNumber(transfer.amount),
-        );
-        transferBalanceByItemId.set(
-          transfer.fromItemId,
-          toSafeNumber(transferBalanceByItemId.get(transfer.fromItemId)) - toSafeNumber(transfer.amount),
-        );
-      }
-
-      const paidByBudgetItemId = new Map<number, number>();
+      const countByPersonId = new Map<number, number>();
       for (const expense of expenses) {
-        if (!expense.isActive || expense.paymentStatus !== "PAGO") continue;
-        paidByBudgetItemId.set(
-          expense.budgetItemId,
-          toSafeNumber(paidByBudgetItemId.get(expense.budgetItemId)) + toSafeNumber(expense.amount),
-        );
+        if (!expense.isActive || !expense.personId) continue;
+        countByPersonId.set(expense.personId, toSafeNumber(countByPersonId.get(expense.personId)) + 1);
       }
-
-      const summaryByProjectPeopleId = new Map<number, BeneficiaryFinancialSummary>();
-      const usageCountByProjectPeopleId = new Map<number, number>();
-      for (const item of budgetItems) {
-        if (!item.isActive) continue;
-        const isPersonLinkedItem =
-          item.projectPeopleId != null &&
-          (item.beneficiaryType === "person" || item.beneficiaryType == null);
-        if (!isPersonLinkedItem) continue;
-
-        const finalBudgetAmount =
-          toSafeNumber(item.plannedAmount) + toSafeNumber(transferBalanceByItemId.get(item.id));
-        const paidAmount = toSafeNumber(paidByBudgetItemId.get(item.id));
-
-        const projectPeopleId = item.projectPeopleId as number;
-        const current = summaryByProjectPeopleId.get(projectPeopleId) ?? {
-          finalBudgetAmount: 0,
-          paidAmount: 0,
-          pendingAmount: 0,
-        };
-
-        const nextFinalBudgetAmount = current.finalBudgetAmount + finalBudgetAmount;
-        const nextPaidAmount = current.paidAmount + paidAmount;
-        summaryByProjectPeopleId.set(projectPeopleId, {
-          finalBudgetAmount: nextFinalBudgetAmount,
-          paidAmount: nextPaidAmount,
-          pendingAmount: nextFinalBudgetAmount - nextPaidAmount,
-        });
-        usageCountByProjectPeopleId.set(
-          projectPeopleId,
-          toSafeNumber(usageCountByProjectPeopleId.get(projectPeopleId)) + 1,
-        );
-      }
-
-      setFinancialSummaryByProjectPeopleId(summaryByProjectPeopleId);
-      setRubricaUsageCountByProjectPeopleId(usageCountByProjectPeopleId);
+      setExpenseCountByPersonId(countByPersonId);
       setMembros(nextMembers);
     } catch (error) {
       setLoadError(getErrorMessage(error, "Falha ao carregar membros do projeto."));
       setMembros([]);
-      setFinancialSummaryByProjectPeopleId(new Map());
-      setRubricaUsageCountByProjectPeopleId(new Map());
+      setExpenseCountByPersonId(new Map());
     } finally {
       setIsLoading(false);
     }
@@ -667,9 +593,7 @@ export default function EquipeTecnicaPage() {
       return;
     }
     if (!hasRequiredMemberFields(formData)) {
-      setActionError(
-        "Preencha os campos obrigatórios: nome, papel, cidade e estado.",
-      );
+      setModalError("Preencha os campos obrigatórios: nome completo e status.");
       return;
     }
 
@@ -697,6 +621,7 @@ export default function EquipeTecnicaPage() {
     try {
       setIsSaving(true);
       setActionError(null);
+      setModalError(null);
       const actorUserId = await requireCurrentUserId();
 
       let personId = editingMembro?.personId;
@@ -750,8 +675,6 @@ export default function EquipeTecnicaPage() {
           startDate: toOptional(formData.startDate),
           endDate: toOptional(formData.endDate),
           status: formData.status || undefined,
-          baseAmount:
-            typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
           notes: toOptional(formData.notes),
           updatedBy: actorUserId,
         });
@@ -772,9 +695,7 @@ export default function EquipeTecnicaPage() {
               contractType: formData.contractType || undefined,
               startDate: toOptional(formData.startDate),
               endDate: toOptional(formData.endDate),
-              status: formData.status || undefined,
-              baseAmount:
-                typeof formData.baseAmount === "number" ? formData.baseAmount : undefined,
+              status: formData.status as StatusProjectPeopleEnum,
               notes: toOptional(formData.notes),
               createdBy: actorUserId,
             },
@@ -821,7 +742,7 @@ export default function EquipeTecnicaPage() {
         setActionError(warnings.join(" "));
       }
     } catch (error) {
-      setActionError(getErrorMessage(error, "Não foi possível salvar o membro."));
+      setModalError(getErrorMessage(error, "Não foi possível salvar o membro."));
     } finally {
       setIsSaving(false);
     }
@@ -848,6 +769,7 @@ export default function EquipeTecnicaPage() {
           projectId,
           personId: selectedPersonId,
           role: papelToRole(linkPapel),
+          status: DEFAULT_PROJECT_PERSON_STATUS,
           institutionalLink: toOptional(linkVinculo),
           workloadHours:
             typeof linkCargaHoraria === "number" ? linkCargaHoraria : undefined,
@@ -880,12 +802,10 @@ export default function EquipeTecnicaPage() {
 
     try {
       setActionError(null);
-      const linkedItemsCount = toSafeNumber(
-        rubricaUsageCountByProjectPeopleId.get(membro.projectPeopleId),
-      );
+      const linkedItemsCount = toSafeNumber(expenseCountByPersonId.get(membro.personId));
       if (linkedItemsCount > 0) {
         setActionError(
-          `Não é possível desvincular a pessoa. Existem ${linkedItemsCount} item(ns) de rubrica ativo(s) vinculados a ela neste contrato.`,
+          `Não é possível desvincular a pessoa. Existem ${linkedItemsCount} pagamento(s) registrado(s) para ela neste contrato.`,
         );
         return;
       }
@@ -989,7 +909,7 @@ export default function EquipeTecnicaPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {membros.map((membro) => {
-            const financialSummary = financialSummaryByProjectPeopleId.get(membro.projectPeopleId);
+            const hasTotals = typeof membro.totalPago === "number" || typeof membro.totalReservado === "number";
             return (
               <div
                 key={membro.id}
@@ -1098,27 +1018,21 @@ export default function EquipeTecnicaPage() {
                   </div>
                 )}
 
-                {financialSummary && (
+                {hasTotals && (
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 space-y-1.5">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
-                      Financeiro na rubrica
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      Valor final:{" "}
-                      <strong className="text-gray-900">
-                        {formatCurrency(financialSummary.finalBudgetAmount)}
-                      </strong>
+                      Financeiro em pagamentos
                     </p>
                     <p className="text-sm text-gray-700">
                       Pago:{" "}
                       <strong className="text-emerald-700">
-                        {formatCurrency(financialSummary.paidAmount)}
+                        {formatCurrency(membro.totalPago ?? 0)}
                       </strong>
                     </p>
                     <p className="text-sm text-gray-700">
-                      Falta pagar:{" "}
+                      Reservado:{" "}
                       <strong className="text-amber-700">
-                        {formatCurrency(financialSummary.pendingAmount)}
+                        {formatCurrency(membro.totalReservado ?? 0)}
                       </strong>
                     </p>
                   </div>
@@ -1188,6 +1102,7 @@ export default function EquipeTecnicaPage() {
           setCpfError={setCpfError}
           phoneError={phoneError}
           setPhoneError={setPhoneError}
+          errorMessage={modalError}
         />
       )}
 

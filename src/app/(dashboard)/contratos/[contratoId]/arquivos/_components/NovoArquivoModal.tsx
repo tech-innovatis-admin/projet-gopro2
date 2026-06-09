@@ -38,6 +38,7 @@ const CATEGORY_LABELS: Record<ContractDocumentCategory, string> = {
   NOTA_FISCAL: "Nota Fiscal",
   TED: "TED",
   COMPROVANTES: "Comprovantes",
+  TERMO_REMANEJAMENTO: "Termo de Remanejamento",
   OUTRO: "Outros",
 };
 

@@ -9,6 +9,25 @@ type BackendAuthMeResponse = {
   avatarUrl?: string | null;
 };
 
+function buildUnauthorizedResponse() {
+  const response = NextResponse.json(
+    { isAuthenticated: false, error: 'Não autenticado' },
+    { status: 401 }
+  );
+
+  for (const cookieName of ['access_token', 'refresh_token', 'token']) {
+    response.cookies.set(cookieName, '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    });
+  }
+
+  return response;
+}
+
 function isUuid(value?: string | null): boolean {
   if (!value) {
     return false;
@@ -79,7 +98,7 @@ export async function GET() {
     const accessToken = cookieStore.get('access_token')?.value;
 
     if (!accessToken) {
-      return NextResponse.json({ isAuthenticated: false }, { status: 200 });
+      return buildUnauthorizedResponse();
     }
 
     const backendBaseUrl = resolveBackendBaseUrl();
@@ -92,8 +111,15 @@ export async function GET() {
       cache: 'no-store',
     });
 
+    if (backendResponse.status === 401 || backendResponse.status === 403) {
+      return buildUnauthorizedResponse();
+    }
+
     if (!backendResponse.ok) {
-      return NextResponse.json({ isAuthenticated: false }, { status: 200 });
+      return NextResponse.json(
+        { isAuthenticated: false, error: 'Erro ao consultar sessão' },
+        { status: 502 }
+      );
     }
 
     const user = (await backendResponse.json()) as BackendAuthMeResponse;
