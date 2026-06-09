@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { BarChart3, CheckCircle2, Clock3, ListChecks, PauseCircle, PlayCircle, type LucideIcon } from "lucide-react";
 import { NavBar } from "@/components/ui/NavBar";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
-import { getProjectDashboard } from "@/src/lib/api/endpoints";
-import { type ProjectDashboardResponseDTO, type ProjectGovIfEnum, type ProjectStatusEnum } from "@/src/lib/api/types";
+import { getProjectDashboard, listProjects } from "@/src/lib/api/endpoints";
+import { type ProjectDashboardResponseDTO, type ProjectGovIfEnum, type ProjectResponseDTO, type ProjectStatusEnum } from "@/src/lib/api/types";
 import { getUserErrorMessage } from "@/src/lib/feedback/user-messages";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
 import { ContractsLineChart } from "./_components/ContractsLineChart";
 import { ContractsMap } from "./_components/ContractsMap";
 import { ExpiringContractsCard } from "./_components/ExpiringContractsCard";
+import { FinanceiroGlobalCard } from "./_components/FinanceiroGlobalCard";
 import { PartnerBarChart } from "./_components/PartnerBarChart";
 
 type SummaryCard = {
@@ -123,6 +124,8 @@ export default function HomePage() {
   const [selectedGovIf, setSelectedGovIf] = useState<ProjectGovIfEnum | null>(null);
   const [selectedExecution, setSelectedExecution] = useState<boolean | null>(null);
   const [yearOptions, setYearOptions] = useState<number[]>([]);
+  const [projects, setProjects] = useState<ProjectResponseDTO[] | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -172,6 +175,22 @@ export default function HomePage() {
   useEffect(() => {
     void loadExpiringContracts();
   }, [loadExpiringContracts]);
+
+  const loadProjects = useCallback(async () => {
+    setProjectsLoading(true);
+    try {
+      const response = await listProjects({ page: 0, size: 200 });
+      setProjects(response.content);
+    } catch {
+      setProjects(null);
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProjects();
+  }, [loadProjects]);
 
   const statusMetricMap = useMemo(() => {
     const byStatus = dashboard?.byStatus ?? [];
@@ -468,6 +487,7 @@ export default function HomePage() {
               data={expiringContracts}
               isLoading={expiringLoading}
             />
+            <FinanceiroGlobalCard projects={projects} isLoading={projectsLoading} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
