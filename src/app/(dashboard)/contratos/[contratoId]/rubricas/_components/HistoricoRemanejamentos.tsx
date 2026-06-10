@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ArrowRight, Calendar, FileText, RotateCcw, Search, User } from 'lucide-react';
+import { Dropdown } from '@/components/ui/dropdown';
 import { AppModalShell } from '@/components/ui/app-modal-shell';
 import { ComebackConfirmationModal } from '@/src/components/budget-transfers/ComebackConfirmationModal';
 import { parseBudgetTransferComeback } from '@/src/lib/budget-transfers/comeback';
@@ -191,18 +192,14 @@ export function HistoricoRemanejamentos({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <select
-                value={filterRubrica}
-                onChange={(event) => setFilterRubrica(event.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]/20"
-              >
-                <option value="">Todas as rubricas</option>
-                {rubricaOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                value={filterRubrica || undefined}
+                onChange={(value) => setFilterRubrica(value ?? '')}
+                placeholder="Todas as rubricas"
+                searchable
+                options={rubricaOptions}
+                className="w-full"
+              />
             </div>
           </div>
 
