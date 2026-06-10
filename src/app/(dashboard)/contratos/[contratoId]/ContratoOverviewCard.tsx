@@ -26,6 +26,8 @@ type DashboardMetrics = {
   saldoDisponivel: number;
   percentualExecutado: number;
   percentualRecebido: number;
+  faltaReceber: number;
+  percentualFaltaReceber: number;
   status: string;
   executionMode: string;
 };
@@ -103,6 +105,8 @@ function calculateMetrics(state: DashboardState): DashboardMetrics {
   const saldoDisponivel = state.totals?.saldo ?? toSafeNumber(state.project?.saldo);
   const percentualExecutado = valorContrato > 0 ? (custosProjeto / valorContrato) * 100 : 0;
   const percentualRecebido = valorContrato > 0 ? (entradasRecebidas / valorContrato) * 100 : 0;
+  const faltaReceber = Math.max(0, valorContrato - entradasRecebidas);
+  const percentualFaltaReceber = valorContrato > 0 ? (faltaReceber / valorContrato) * 100 : 0;
 
   return {
     valorContrato,
@@ -111,6 +115,8 @@ function calculateMetrics(state: DashboardState): DashboardMetrics {
     saldoDisponivel,
     percentualExecutado,
     percentualRecebido,
+    faltaReceber,
+    percentualFaltaReceber,
     status: getStatusLabel(state.project?.projectStatus),
     executionMode:
       state.project?.executedByInnovatis == null
@@ -364,6 +370,14 @@ export function ContratoOverviewCard() {
           accentClass="border-violet-200 bg-gradient-to-br from-violet-50 to-white"
           icon={<CircleDollarSign className="h-5 w-5 text-violet-700" />}
           valueClassName="text-violet-800"
+        />
+        <SummaryCard
+          title="Falta receber"
+          value={formatCurrency(metrics.faltaReceber)}
+          subtitle={`${formatPercent(metrics.percentualFaltaReceber)} do valor contratado`}
+          accentClass="border-orange-200 bg-gradient-to-br from-orange-50 to-white"
+          icon={<CircleDollarSign className="h-5 w-5 text-orange-700" />}
+          valueClassName="text-orange-800"
         />
       </div>
 
