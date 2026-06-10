@@ -4145,17 +4145,35 @@ function RubricaCard({
 }: RubricaCardProps) {
   const canShowManageActions = canManageChildren && !loadingAccess;
 
+  const isExpanded = view.rubrica.expanded;
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-white p-4">
+    <section
+      className={`overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 ${
+        isExpanded
+          ? 'border-emerald-200 bg-emerald-50/40 shadow-lg shadow-emerald-100/60'
+          : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div
+        className={`border-b p-4 transition-colors duration-200 ${
+          isExpanded
+            ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-white'
+            : 'border-slate-200 bg-gradient-to-r from-slate-50 via-white to-white'
+        }`}
+      >
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <button
             type="button"
             onClick={() => onToggleRubrica(view.rubrica.id)}
             className="flex flex-1 items-start gap-3 text-left"
           >
-            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
-              {view.rubrica.expanded ? (
+            <span
+              className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-white transition-colors duration-200 ${
+                isExpanded ? 'border-emerald-200 text-emerald-700' : 'border-slate-200 text-slate-500'
+              }`}
+            >
+              {isExpanded ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
                 <ChevronRight className="h-4 w-4" />
@@ -4163,14 +4181,26 @@ function RubricaCard({
             </span>
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-semibold text-slate-900">{view.rubrica.nome}</h3>
+                <h3 className={`text-lg font-semibold ${isExpanded ? 'text-emerald-950' : 'text-slate-900'}`}>
+                  {view.rubrica.nome}
+                </h3>
                 {view.rubrica.codigo ? (
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-200 ${
+                      isExpanded
+                        ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                        : 'border-slate-200 bg-slate-100 text-slate-600'
+                    }`}
+                  >
                     {view.rubrica.codigo}
                   </span>
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+              <div
+                className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm ${
+                  isExpanded ? 'text-emerald-900/70' : 'text-slate-500'
+                }`}
+              >
                 <span>{view.totalPagamentosRubrica} pagamentos</span>
                 <MetaBullet />
                 <span>{view.totalLancamentosRubrica} lançamentos</span>
@@ -4209,8 +4239,8 @@ function RubricaCard({
         </div>
       </div>
 
-      {view.rubrica.expanded ? (
-        <div className="space-y-4 p-4">
+      {isExpanded ? (
+        <div className="space-y-4 border-t border-emerald-100 bg-emerald-50/30 p-4">
           {view.itemViews.length === 0 ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
               <AlertCircle className="h-5 w-5" />
@@ -5144,11 +5174,11 @@ function SubitemModal({
                 Nenhuma empresa vinculada ao projeto.
               </div>
             ) : (
-              <select
-                value={form.organizationId}
-                onChange={(event) => {
+              <Dropdown
+                value={form.organizationId || undefined}
+                onChange={(value) => {
                   if (lockBeneficiary) return;
-                  const nextOrganizationId = event.target.value;
+                  const nextOrganizationId = value ?? '';
                   const selectedCompany = projectCompanies.find(
                     (company) => company.companyId === nextOrganizationId
                   );
@@ -5160,15 +5190,15 @@ function SubitemModal({
                   });
                 }}
                 disabled={isPersisting || lockBeneficiary}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-              >
-                <option value="">Selecione uma empresa</option>
-                {projectCompanies.map((company) => (
-                  <option key={company.projectLinkId} value={company.companyId}>
-                    {company.label}
-                  </option>
-                ))}
-              </select>
+                loading={isLoadingLinks}
+                searchable
+                placeholder="Selecione uma empresa"
+                options={projectCompanies.map((company) => ({
+                  value: company.companyId,
+                  label: company.label,
+                }))}
+                className="w-full"
+              />
             )}
             {fieldErrors.projectCompanyId ? (
               <p className="text-sm text-red-700">{fieldErrors.projectCompanyId}</p>
@@ -5760,24 +5790,24 @@ function LinkExistingPersonModal({
             <label className="block text-sm font-medium text-gray-700">
               Pessoa cadastrada <span className="text-red-500">*</span>
             </label>
-            <select
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
+            <Dropdown
+              value={selectedId || undefined}
+              onChange={(value) => setSelectedId(value ?? '')}
               disabled={isSaving}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-            >
-              <option value="">Selecione uma pessoa</option>
-              {people.map((person) => {
+              loading={isLoading}
+              searchable
+              placeholder="Selecione uma pessoa"
+              options={people.map((person) => {
                 const cpf = onlyDigits(person.cpf ?? '');
                 const label = cpf ? `${person.fullName} • CPF ${cpf}` : person.fullName;
 
-                return (
-                  <option key={person.id} value={String(person.id)}>
-                    {label}
-                  </option>
-                );
+                return {
+                  value: String(person.id),
+                  label,
+                };
               })}
-            </select>
+              className="w-full"
+            />
           </div>
         )}
 
@@ -5878,26 +5908,26 @@ function LinkExistingCompanyModal({
             <label className="block text-sm font-medium text-gray-700">
               Empresa cadastrada <span className="text-red-500">*</span>
             </label>
-            <select
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
+            <Dropdown
+              value={selectedId || undefined}
+              onChange={(value) => setSelectedId(value ?? '')}
               disabled={isSaving}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-            >
-              <option value="">Selecione uma empresa</option>
-              {companies.map((company) => {
+              loading={isLoading}
+              searchable
+              placeholder="Selecione uma empresa"
+              options={companies.map((company) => {
                 const cnpj = onlyDigits(company.cnpj ?? '');
                 const label = cnpj
                   ? `${companyNameLabel(company)} • CNPJ ${cnpj}`
                   : companyNameLabel(company);
 
-                return (
-                  <option key={company.id} value={String(company.id)}>
-                    {label}
-                  </option>
-                );
+                return {
+                  value: String(company.id),
+                  label,
+                };
               })}
-            </select>
+              className="w-full"
+            />
           </div>
         )}
 
@@ -5998,23 +6028,23 @@ function LinkExistingPartnerModal({
             <label className="block text-sm font-medium text-gray-700">
               Parceiro cadastrado <span className="text-red-500">*</span>
             </label>
-            <select
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
+            <Dropdown
+              value={selectedId || undefined}
+              onChange={(value) => setSelectedId(value ?? '')}
               disabled={isSaving}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-[#004225] focus:outline-none focus:ring-2 focus:ring-[#004225]"
-            >
-              <option value="">Selecione um parceiro</option>
-              {partners.map((partner) => {
+              loading={isLoading}
+              searchable
+              placeholder="Selecione um parceiro"
+              options={partners.map((partner) => {
                 const displayName = partner.tradeName?.trim() || partner.name;
                 const typeLabel = partner.partnersType === 'IF' ? 'IF' : 'Fundação';
-                return (
-                  <option key={partner.id} value={String(partner.id)}>
-                    {displayName} • {typeLabel}
-                  </option>
-                );
+                return {
+                  value: String(partner.id),
+                  label: `${displayName} • ${typeLabel}`,
+                };
               })}
-            </select>
+              className="w-full"
+            />
           </div>
         )}
 

@@ -232,9 +232,9 @@ export function Dropdown({
               )}
 
               {filteredOptions.length > 0 ? (
-                filteredOptions.map((option) => (
+                filteredOptions.map((option, index) => (
                   <button
-                    key={option.value}
+                    key={`${String(option.value)}-${index}`}
                     type="button"
                     onClick={() => selectOption(option.value)}
                     className={cn(
